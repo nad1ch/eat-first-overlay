@@ -15,9 +15,12 @@ function slotNum(slot) {
   return s.replace(/^p/i, '') || s
 }
 
-const raised = computed(() =>
-  props.playerSlots.filter((s) => props.gameRoom?.hands?.[s] === true),
-)
+const raised = computed(() => {
+  const slots = props.playerSlots.filter((s) => props.gameRoom?.hands?.[s] === true)
+  return [...slots].sort((a, b) =>
+    String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' }),
+  )
+})
 </script>
 
 <template>

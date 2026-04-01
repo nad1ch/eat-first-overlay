@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 const props = defineProps({
   gameRoom: { type: Object, default: () => ({}) },
@@ -22,13 +22,17 @@ function applySetRound() {
   const n = Math.floor(Number(draft.value) || 1)
   emit('set-round', n)
 }
+
+const roundNow = computed(() =>
+  Math.min(8, Math.max(1, Math.floor(Number(props.gameRoom?.round) || 1))),
+)
 </script>
 
 <template>
   <section class="rp">
     <h2 class="rp-title">РАУНД</h2>
     <p class="rp-now">
-      Зараз: <strong>{{ Math.min(8, Math.max(1, Math.floor(Number(gameRoom.round) || 1))) }}</strong>
+      <span class="rp-now__big">ROUND {{ roundNow }} / 8</span>
     </p>
     <div class="rp-row">
       <button type="button" class="rp-btn rp-btn--next" @click="emit('next-round')">➕ Next round</button>
@@ -78,9 +82,13 @@ function applySetRound() {
   color: rgba(226, 232, 240, 0.85);
 }
 
-.rp-now strong {
+.rp-now__big {
+  display: block;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.05rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
   color: #e9d5ff;
-  font-size: 1.05em;
 }
 
 .rp-row {

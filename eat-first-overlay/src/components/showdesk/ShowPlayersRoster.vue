@@ -1,6 +1,10 @@
 <script setup>
+import { computed } from 'vue'
+
 const props = defineProps({
   players: { type: Array, default: () => [] },
+  /** games/{id}.hands — підняті руки йдуть першими в сітці */
+  handsMap: { type: Object, default: () => ({}) },
   currentPlayerId: { type: String, default: '' },
   spotlightPlayerId: { type: String, default: '' },
   speakerId: { type: String, default: '' },
@@ -27,6 +31,21 @@ function statusLine(p) {
   if (String(p.id) === String(props.spotlightPlayerId || '').trim()) return 'Spotlight'
   return '—'
 }
+
+function handUp(p) {
+  return props.handsMap?.[String(p.id)] === true
+}
+
+const playersSorted = computed(() => {
+  const list = [...props.players]
+  list.sort((a, b) => {
+    const ah = handUp(a) ? 1 : 0
+    const bh = handUp(b) ? 1 : 0
+    if (bh !== ah) return bh - ah
+    return String(a.id).localeCompare(String(b.id), undefined, { numeric: true, sensitivity: 'base' })
+  })
+  return list
+})
 </script>
 
 <template>
@@ -35,7 +54,7 @@ function statusLine(p) {
     <p class="roster-hint">Клік — редактор. Спікер / таймер / spotlight — у Control Center.</p>
     <div class="roster-grid">
       <button
-        v-for="p in players"
+        v-for="p in playersSorted"
         :key="p.id"
         type="button"
         class="pcard"
@@ -44,6 +63,7 @@ function statusLine(p) {
           elim: p.eliminated === true,
           speak: String(speakerId || '').trim() === p.id,
           spot: String(spotlightPlayerId || '').trim() === p.id,
+          'pcard--hand': handUp(p),
         }"
         @click="emit('select', p.id)"
       >
@@ -116,6 +136,11 @@ function statusLine(p) {
 .pcard.on {
   border-color: rgba(168, 85, 247, 0.65);
   box-shadow: 0 0 18px rgba(168, 85, 247, 0.25);
+}
+
+.pcard--hand:not(.elim) {
+  border-color: rgba(251, 191, 36, 0.35);
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.12);
 }
 
 .pcard.speak:not(.elim) {

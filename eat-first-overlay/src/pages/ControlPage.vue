@@ -214,6 +214,17 @@ const votesLiveRound = computed(() =>
   votes.value.filter((v) => Number(v.round) === roomRoundLive.value),
 )
 
+const allPlayersVoted = computed(
+  () =>
+    Boolean(gameRoom.value?.voting?.active) &&
+    aliveCount.value > 0 &&
+    votesLiveRound.value.length === aliveCount.value,
+)
+
+const nominatedPlayerActive = computed(() =>
+  Boolean(String(gameRoom.value?.nominatedPlayer ?? '').trim()),
+)
+
 watch(
   () => gameRoom.value?.activeScenario,
   (a) => {
@@ -889,10 +900,15 @@ function rerollActiveCardOnly() {
         </div>
       </section>
 
-      <section class="admin-zone admin-zone--players" aria-label="Гравці">
+      <section
+        class="admin-zone admin-zone--players"
+        :class="{ 'admin-zone--nominated-active': nominatedPlayerActive }"
+        aria-label="Гравці"
+      >
         <h2 class="zone-kicker">ГРАВЦІ</h2>
         <ShowPlayersRoster
           :players="allPlayers"
+          :hands-map="gameRoom.hands || {}"
           :current-player-id="playerId"
           :spotlight-player-id="String(gameRoom.activePlayer || '')"
           :speaker-id="String(gameRoom.currentSpeaker || '')"
@@ -921,6 +937,7 @@ function rerollActiveCardOnly() {
           :game-room="gameRoom"
           :player-slots="PLAYER_SLOTS"
           :votes-live="votesLiveRound"
+          :all-players-voted="allPlayersVoted"
           @nominate="hostNominate"
           @voting-target="hostVotingTarget"
           @voting-toggle="hostVotingToggle"
@@ -1154,15 +1171,25 @@ function rerollActiveCardOnly() {
 .admin-zone--voting.admin-zone--glow {
   border-radius: 16px;
   padding: 0.15rem;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  box-shadow: 0 0 28px rgba(56, 189, 248, 0.14);
   background: linear-gradient(
     135deg,
-    rgba(56, 189, 248, 0.08) 0%,
-    rgba(168, 85, 247, 0.06) 100%
+    rgba(56, 189, 248, 0.1) 0%,
+    rgba(168, 85, 247, 0.07) 100%
   );
 }
 
 .admin-zone--round {
   margin-bottom: 1.25rem;
+}
+
+.admin-zone--nominated-active {
+  border-radius: 16px;
+  padding: 0.65rem 0.5rem 0.85rem;
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  box-shadow: 0 0 22px rgba(220, 38, 38, 0.12);
+  background: rgba(40, 10, 14, 0.2);
 }
 
 .zone-kicker {

@@ -250,6 +250,38 @@ const personalIsVoteTarget = computed(
     votingTargetId.value === personalPlayerId.value,
 )
 
+const votesThisRoundCount = computed(
+  () => votes.value.filter((v) => Number(v.round) === roomRound.value).length,
+)
+
+const showAllVotedBanner = computed(() => {
+  if (!votingActive.value) return false
+  if (isPersonal.value) {
+    return aliveForCinema.value > 0 && votesThisRoundCount.value === aliveForCinema.value
+  }
+  return aliveInGame.value > 0 && votesThisRoundCount.value === aliveInGame.value
+})
+
+const handsRaisedAliveCount = computed(() => {
+  if (isPersonal.value) return 0
+  return players.value.filter((p) => p.eliminated !== true && isHandRaised(p)).length
+})
+
+const handsClusterMode = computed(() => handsRaisedAliveCount.value > 3)
+const handsClusterExtra = computed(() => Math.max(0, handsRaisedAliveCount.value - 3))
+
+const overlayRoundPulse = ref(false)
+let overlayRoundTimer = null
+
+watch(roomRound, (r, prev) => {
+  if (prev === undefined || prev === r) return
+  overlayRoundPulse.value = true
+  if (overlayRoundTimer) clearTimeout(overlayRoundTimer)
+  overlayRoundTimer = setTimeout(() => {
+    overlayRoundPulse.value = false
+  }, 220)
+})
+
 function handsMap() {
   const h = gameRoom.value?.hands
   return h && typeof h === 'object' ? h : {}
@@ -287,6 +319,7 @@ onUnmounted(() => {
   cleanupPlayerSub()
   cleanupGameRoom()
   cleanupVotesSub()
+  if (overlayRoundTimer) clearTimeout(overlayRoundTimer)
   if (tickId != null) {
     window.clearInterval(tickId)
     tickId = null
@@ -303,8 +336,23 @@ onUnmounted(() => {
       'overlay-root--global': !isPersonal,
       'overlay-root--drama': overlayDrama,
       'overlay-root--paused': overlayPaused,
+      'overlay-root--round-pulse': overlayRoundPulse,
     }"
   >
+    <p
+      v-if="showAllVotedBanner"
+      class="overlay-edge-hint overlay-edge-hint--all-voted"
+      role="status"
+    >
+      ВСІ ПРОГОЛОСУВАЛИ
+    </p>
+    <p
+      v-if="handsClusterMode && !isPersonal"
+      class="overlay-edge-hint overlay-edge-hint--hands"
+      aria-hidden="true"
+    >
+      ✋ +{{ handsClusterExtra }}
+    </p>
     <header
       v-if="!isPersonal"
       class="board-head"
@@ -364,6 +412,7 @@ onUnmounted(() => {
         :has-voted-this-round="false"
         :is-vote-target-self="false"
         :hand-raised="isHandRaised(p)"
+        :suppress-hand-badge="handsClusterMode"
         v-bind="cardTimerProps(p)"
       />
     </div>
@@ -387,6 +436,45 @@ onUnmounted(() => {
   min-height: 100vh;
   width: 100%;
   box-sizing: border-box;
+  position: relative;
+}
+
+.overlay-root--round-pulse {
+  animation: overlayRoundScene 0.2s ease both;
+}
+
+@keyframes overlayRoundScene {
+  from {
+    opacity: 0.74;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.overlay-edge-hint {
+  position: fixed;
+  z-index: 50;
+  margin: 0;
+  pointer-events: none;
+  font-family: Orbitron, sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.65);
+}
+
+.overlay-edge-hint--all-voted {
+  top: max(0.4rem, env(safe-area-inset-top, 0px));
+  left: max(0.5rem, env(safe-area-inset-left, 0px));
+  font-size: clamp(0.52rem, min(1.4vw, 1.5vh), 0.62rem);
+  color: rgba(187, 247, 208, 0.92);
+}
+
+.overlay-edge-hint--hands {
+  top: max(0.4rem, env(safe-area-inset-top, 0px));
+  right: max(0.5rem, env(safe-area-inset-right, 0px));
+  font-size: clamp(0.58rem, min(1.55vw, 1.65vh), 0.72rem);
+  color: rgba(254, 240, 138, 0.92);
 }
 
 .overlay-root--global {

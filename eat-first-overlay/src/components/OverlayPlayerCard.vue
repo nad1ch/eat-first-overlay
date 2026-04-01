@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { fieldConfig } from '../characterState'
 import { saveVote } from '../services/gameService'
 
@@ -37,6 +37,8 @@ const props = defineProps({
   handRaised: { type: Boolean, default: false },
   /** Персональний оверлей: немає спікера й немає голосування */
   idleWaiting: { type: Boolean, default: false },
+  /** Глобальна сітка: >3 рук у грі — не показувати ✋ на картці */
+  suppressHandBadge: { type: Boolean, default: false },
 })
 
 const labelByKey = computed(() =>
@@ -187,23 +189,55 @@ const nominatedByLabel = computed(() => {
   return playerIdDisplay({ id: n })
 })
 
-const showVoteTally = computed(
+const countFor = computed(
+  () => (Array.isArray(props.votesReceived) ? props.votesReceived : []).filter((v) => v.choice !== 'against').length,
+)
+
+const countAgainst = computed(
+  () => (Array.isArray(props.votesReceived) ? props.votesReceived : []).filter((v) => v.choice === 'against').length,
+)
+
+const showVoteScore = computed(() => {
+  if (!votingShown.value) return false
+  return countFor.value + countAgainst.value > 0
+})
+
+const showVoteDetail = computed(
   () =>
     votingShown.value &&
-    !props.voteInteractive &&
     Array.isArray(props.votesReceived) &&
     props.votesReceived.length > 0,
 )
 
 const voteAckText = computed(() => {
-  if (props.hasVotedThisRound) return 'Ти вже проголосував'
-  if (localVoteChoice.value) return 'Твій голос зараховано'
+  if (localVoteChoice.value && !props.hasVotedThisRound) return 'Твій голос зараховано'
   return ''
 })
 
 const voteButtonsLocked = computed(
   () => voteBusy.value || props.hasVotedThisRound || localVoteChoice.value != null,
 )
+
+/** Короткий flash рамки live-голосів (сітка + персональний перегляд цілі) */
+const voteFlash = ref(false)
+let voteFlashTimer = null
+
+watch(
+  () => (Array.isArray(props.votesReceived) ? props.votesReceived.length : 0),
+  (n, prev) => {
+    if (prev === undefined) return
+    if (n === prev || !votingShown.value) return
+    voteFlash.value = true
+    if (voteFlashTimer) clearTimeout(voteFlashTimer)
+    voteFlashTimer = setTimeout(() => {
+      voteFlash.value = false
+    }, 100)
+  },
+)
+
+onUnmounted(() => {
+  if (voteFlashTimer) clearTimeout(voteFlashTimer)
+})
 
 const voteBusy = ref(false)
 /** Локальний стан після успішного голосу (персональний оверлей) */
@@ -259,7 +293,11 @@ async function submitVote(choice) {
     </div>
 
     <template v-else>
-      <span v-if="handRaised" class="hand-badge hand-badge--grid" aria-hidden="true" title="Піднята рука"
+      <span
+        v-if="handRaised && !suppressHandBadge"
+        class="hand-badge hand-badge--grid"
+        aria-hidden="true"
+        title="Піднята рука"
         >✋</span
       >
       <div v-if="showSpeakerTimer" class="card-grid-timer" aria-hidden="true">
@@ -306,10 +344,19 @@ async function submitVote(choice) {
           </li>
         </ul>
       </div>
-      <div v-if="votingShown" class="vote-strip vote-strip--grid" aria-label="Голосування">
+      <div
+        v-if="votingShown"
+        class="vote-strip vote-strip--grid"
+        :class="{ 'vote-strip--flash': voteFlash }"
+        aria-label="Голосування"
+      >
         <p class="vote-strip__title">ГОЛОСУВАННЯ</p>
         <p class="vote-strip__target">{{ voteHintLine }}</p>
-        <p v-if="showVoteTally" class="vote-tally">
+        <p v-if="showVoteScore" class="vote-score">
+          <span class="vote-score__n">👍 {{ countFor }}</span>
+          <span class="vote-score__n">👎 {{ countAgainst }}</span>
+        </p>
+        <p v-if="showVoteDetail && !voteInteractive" class="vote-tally">
           <span
             v-for="v in votesReceived"
             :key="v.id"
@@ -321,7 +368,7 @@ async function submitVote(choice) {
             v-if="voteInteractive"
             type="button"
             class="vote-btn"
-            :class="{ 'vote-btn--picked': localVoteChoice === 'for' }"
+            :class="{ 'vote-btn--picked': localVoteChoice === 'for', 'vote-btn--locked': voteButtonsLocked }"
             :disabled="voteButtonsLocked"
             @click="submitVote('for')"
           >
@@ -332,7 +379,7 @@ async function submitVote(choice) {
             v-if="voteInteractive"
             type="button"
             class="vote-btn"
-            :class="{ 'vote-btn--picked': localVoteChoice === 'against' }"
+            :class="{ 'vote-btn--picked': localVoteChoice === 'against', 'vote-btn--locked': voteButtonsLocked }"
             :disabled="voteButtonsLocked"
             @click="submitVote('against')"
           >
@@ -409,6 +456,7 @@ async function submitVote(choice) {
           </span>
           <span v-if="isTimerTarget" class="hud-speak-badge">ГОВОРИШ</span>
         </div>
+        <p v-if="solo && isNominated" class="nominee-solo-kicker">ТИ НА ГОЛОСУВАННІ</p>
         <p v-if="solo && isNominated && nominatedByLabel" class="nominee-by nominee-by--hud">Виставив: {{ nominatedByLabel }}</p>
         <div v-if="showSpeakerTimer" class="hud-timer-stack">
           <div
@@ -466,45 +514,43 @@ async function submitVote(choice) {
       <div
         v-if="votingShown"
         class="vote-strip vote-strip--solo"
-        :class="{ 'vote-strip--interactive': voteInteractive }"
+        :class="{ 'vote-strip--interactive': voteInteractive, 'vote-strip--flash': voteFlash }"
         aria-label="Голосування"
       >
         <p class="vote-strip__title">ГОЛОСУВАННЯ</p>
         <p v-if="voteInteractive && isVoteTargetSelf" class="vote-strip__dramatic">ТЕБЕ ГОЛОСУЮТЬ</p>
         <p class="vote-strip__target">{{ voteHintLine }}</p>
-        <p
-          v-if="voteInteractive && votesReceived.length"
-          class="vote-tally vote-tally--solo"
-        >
+        <p v-if="showVoteScore" class="vote-score vote-score--solo">
+          <span class="vote-score__n">👍 {{ countFor }}</span>
+          <span class="vote-score__n">👎 {{ countAgainst }}</span>
+        </p>
+        <p v-if="voteInteractive && showVoteDetail" class="vote-tally vote-tally--solo">
           <span
             v-for="v in votesReceived"
             :key="v.id"
             class="vote-tally__it"
           >{{ playerIdDisplay({ id: v.id }) }}{{ v.choice === 'against' ? '👎' : '👍' }}</span>
         </p>
-        <div class="vote-strip__row">
+        <p v-if="voteInteractive && hasVotedThisRound" class="vote-strip__voted-only">Ти вже проголосував</p>
+        <div v-else-if="voteInteractive" class="vote-strip__row">
           <button
-            v-if="voteInteractive"
             type="button"
             class="vote-btn"
-            :class="{ 'vote-btn--picked': localVoteChoice === 'for' }"
+            :class="{ 'vote-btn--picked': localVoteChoice === 'for', 'vote-btn--locked': voteButtonsLocked }"
             :disabled="voteButtonsLocked"
             @click="submitVote('for')"
           >
             👍 <span class="vote-btn__lbl">за</span>
           </button>
-          <span v-else class="vote-fake">👍</span>
           <button
-            v-if="voteInteractive"
             type="button"
             class="vote-btn"
-            :class="{ 'vote-btn--picked': localVoteChoice === 'against' }"
+            :class="{ 'vote-btn--picked': localVoteChoice === 'against', 'vote-btn--locked': voteButtonsLocked }"
             :disabled="voteButtonsLocked"
             @click="submitVote('against')"
           >
             👎 <span class="vote-btn__lbl">проти</span>
           </button>
-          <span v-else class="vote-fake">👎</span>
         </div>
         <p v-if="voteInteractive && voteAckText" class="vote-strip__ack">{{ voteAckText }}</p>
       </div>
@@ -558,9 +604,23 @@ async function submitVote(choice) {
 
 .card-grid--nominated:not(.card-grid--eliminated) {
   border: 1px solid rgba(220, 38, 38, 0.52);
-  box-shadow:
-    0 0 0 1px rgba(127, 29, 29, 0.35),
-    0 0 22px rgba(220, 38, 38, 0.28);
+  animation: nominatedPulse 2.5s ease-in-out infinite;
+}
+
+@keyframes nominatedPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(127, 29, 29, 0.32),
+      0 0 16px rgba(220, 38, 38, 0.2);
+    border-color: rgba(220, 38, 38, 0.48);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(127, 29, 29, 0.38),
+      0 0 24px rgba(220, 38, 38, 0.3);
+    border-color: rgba(220, 38, 38, 0.58);
+  }
 }
 
 .card-grid--dimmed {
@@ -769,6 +829,51 @@ async function submitVote(choice) {
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.75);
 }
 
+.vote-strip--flash {
+  animation: voteStripPulse 0.1s ease-out;
+}
+
+/* brightness — не обрізається overflow:hidden на .card-grid */
+@keyframes voteStripPulse {
+  0% {
+    filter: brightness(1.35);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}
+
+.vote-score {
+  margin: 0 0 0.28rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.65rem 1rem;
+  font-family: Orbitron, sans-serif;
+  font-size: clamp(0.85rem, min(2.4vw, 2.6vh), 1.05rem);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: #f8fafc;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.75);
+}
+
+.vote-score--solo {
+  font-size: clamp(0.92rem, min(2.6vw, 2.8vh), 1.12rem);
+}
+
+.vote-score__n {
+  white-space: nowrap;
+}
+
+.vote-strip__voted-only {
+  margin: 0.35rem 0 0;
+  font-size: clamp(0.72rem, min(2vw, 2.2vh), 0.88rem);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: rgba(186, 230, 253, 0.92);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.65);
+}
+
 .vote-strip__dramatic {
   margin: 0 0 0.28rem;
   font-family: Orbitron, sans-serif;
@@ -818,6 +923,16 @@ async function submitVote(choice) {
   margin-left: auto;
 }
 
+.nominee-solo-kicker {
+  margin: 0.15rem 0 0;
+  text-align: right;
+  font-size: clamp(0.48rem, min(1.3vw, 1.4vh), 0.58rem);
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  color: rgba(254, 202, 202, 0.9);
+  text-shadow: 0 0 10px rgba(220, 38, 38, 0.35);
+}
+
 .vote-strip__ack {
   margin: 0.45rem 0 0;
   font-size: clamp(0.62rem, min(1.75vw, 1.9vh), 0.8rem);
@@ -860,6 +975,16 @@ async function submitVote(choice) {
 
 .vote-btn:disabled {
   opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.vote-btn:disabled:hover {
+  transform: none;
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.vote-btn--locked:disabled {
   cursor: not-allowed;
 }
 
@@ -1284,6 +1409,17 @@ async function submitVote(choice) {
 .hud-root--solo.hud-root--nominated:not(.hud-root--eliminated) {
   outline: 1px solid rgba(220, 38, 38, 0.45);
   outline-offset: 2px;
+  animation: nominatedPulseSolo 2.5s ease-in-out infinite;
+}
+
+@keyframes nominatedPulseSolo {
+  0%,
+  100% {
+    outline-color: rgba(220, 38, 38, 0.4);
+  }
+  50% {
+    outline-color: rgba(220, 38, 38, 0.62);
+  }
 }
 
 .hud-root--solo.hud-root--nominated:not(.hud-root--eliminated) .hud-block:not(.hud-tr) {

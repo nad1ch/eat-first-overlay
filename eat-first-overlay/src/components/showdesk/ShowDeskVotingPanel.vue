@@ -6,6 +6,7 @@ const props = defineProps({
   playerSlots: { type: Array, default: () => [] },
   /** Вже відфільтровані за поточним раундом */
   votesLive: { type: Array, default: () => [] },
+  allPlayersVoted: { type: Boolean, default: false },
 })
 
 const emit = defineEmits([
@@ -34,11 +35,26 @@ const lines = computed(() =>
     label: `${slotNum(v.id)} → ${slotNum(v.targetPlayer)} ${choiceGlyph(v.choice)}`,
   })),
 )
+
+const targetPlayerId = computed(() => String(props.gameRoom?.voting?.targetPlayer ?? '').trim())
+
+const countFor = computed(() => props.votesLive.filter((v) => v.choice !== 'against').length)
+
+const countAgainst = computed(() => props.votesLive.filter((v) => v.choice === 'against').length)
+
+const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
 </script>
 
 <template>
-  <section class="vp">
+  <section class="vp" :class="{ 'vp--active': gameRoom.voting?.active }">
     <h2 class="vp-title">ГОЛОСУВАННЯ</h2>
+
+    <p v-if="allPlayersVoted && gameRoom.voting?.active" class="vp-all-voted">ВСІ ПРОГОЛОСУВАЛИ</p>
+
+    <div class="vp-target" :class="{ 'vp-target--dim': !gameRoom.voting?.active }">
+      <span class="vp-target__lab">TARGET</span>
+      <span class="vp-target__val">{{ targetPlayerId || '—' }}</span>
+    </div>
 
     <div class="vp-block">
       <span class="vp-lab">Номінація</span>
@@ -63,7 +79,7 @@ const lines = computed(() =>
       <p class="vp-mini">
         {{ gameRoom.voting?.active ? 'активне' : 'вимкнено' }}
         ·
-        <strong>{{ String(gameRoom.voting?.targetPlayer || '').trim() || '—' }}</strong>
+        <strong>{{ targetPlayerId || '—' }}</strong>
       </p>
       <div class="vp-chips">
         <button
@@ -71,7 +87,7 @@ const lines = computed(() =>
           :key="'vt-' + slot"
           type="button"
           class="chip chip--vote"
-          :class="{ on: String(gameRoom.voting?.targetPlayer || '').trim() === slot }"
+          :class="{ on: targetPlayerId === slot }"
           @click="emit('voting-target', slot)"
         >
           {{ slotNum(slot) }}
@@ -87,6 +103,10 @@ const lines = computed(() =>
 
     <div class="vp-block vp-block--live" :class="{ glow: gameRoom.voting?.active }">
       <span class="vp-lab vp-lab--live">Голосування (live)</span>
+      <p v-if="showLiveScore" class="vp-score">
+        <span class="vp-score__n">👍 {{ countFor }}</span>
+        <span class="vp-score__n">👎 {{ countAgainst }}</span>
+      </p>
       <ul v-if="lines.length" class="vp-list">
         <li v-for="row in lines" :key="row.voterId" class="vp-li">
           <span class="vp-li-txt">{{ row.label }}</span>
@@ -108,7 +128,13 @@ const lines = computed(() =>
   margin-bottom: 1rem;
   transition:
     transform 0.15s ease,
-    box-shadow 0.2s ease;
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.vp--active {
+  border-color: rgba(56, 189, 248, 0.28);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.08);
 }
 
 .vp:hover {
@@ -121,13 +147,76 @@ const lines = computed(() =>
 }
 
 .vp-title {
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.5rem;
   font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: rgba(196, 181, 253, 0.5);
   font-family: 'Orbitron', sans-serif;
+}
+
+.vp-all-voted {
+  margin: 0 0 0.55rem;
+  padding: 0.28rem 0.45rem;
+  border-radius: 8px;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-align: center;
+  color: #bbf7d0;
+  background: rgba(22, 101, 52, 0.35);
+  border: 1px solid rgba(74, 222, 128, 0.35);
+  font-family: 'Orbitron', sans-serif;
+}
+
+.vp-target {
+  margin: 0 0 0.85rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 12px;
+  background: rgba(12, 74, 110, 0.45);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.12);
+}
+
+.vp-target--dim {
+  opacity: 0.55;
+  box-shadow: none;
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.vp-target__lab {
+  display: block;
+  margin-bottom: 0.2rem;
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.28em;
+  color: rgba(125, 211, 252, 0.75);
+  font-family: 'Orbitron', sans-serif;
+}
+
+.vp-target__val {
+  font-size: 1.35rem;
+  font-weight: 900;
+  font-family: 'Orbitron', sans-serif;
+  color: #e0f2fe;
+  letter-spacing: 0.06em;
+}
+
+.vp-score {
+  margin: 0 0 0.45rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 900;
+  color: #f1f5f9;
+}
+
+.vp-score__n {
+  white-space: nowrap;
 }
 
 .vp-block {
