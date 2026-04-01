@@ -34,10 +34,10 @@ function slotNum(slot) {
 </script>
 
 <template>
-  <section class="cc">
-    <h2 class="cc-title">Control Center</h2>
+  <section class="cc cc--compact">
+    <h2 class="cc-title">Live</h2>
 
-    <div class="cc-grid">
+    <div class="cc-grid cc-grid--compact">
       <div class="cc-block cc-block--actions">
         <span class="cc-lab">Шоу</span>
         <div class="cc-btns">
@@ -214,11 +214,38 @@ function slotNum(slot) {
   }
 }
 
+.cc--compact .cc-title {
+  margin-bottom: 0.55rem;
+  font-size: 0.68rem;
+}
+
+.cc-grid--compact {
+  gap: 0.5rem 0.65rem;
+}
+
+@media (min-width: 640px) {
+  .cc-grid--compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .cc-grid--compact {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 .cc-block--actions {
   grid-column: 1 / -1;
 }
 
-@media (min-width: 720px) {
+@media (min-width: 640px) {
+  .cc-block--actions {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 1100px) {
   .cc-block--actions {
     grid-column: span 1;
   }

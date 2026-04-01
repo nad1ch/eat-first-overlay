@@ -751,6 +751,42 @@ function rerollActiveCardOnly() {
           </div>
         </aside>
       </section>
+
+      <section class="admin-zone admin-zone--generate" aria-label="Генерація">
+        <h2 class="zone-kicker zone-kicker--soft">Генерація</h2>
+        <div class="gen-bar gen-bar--actions gen-bar--compact">
+          <button type="button" class="btn-neon btn-neon--compact" @click="generateRandomCharacter">
+            Generate Player
+          </button>
+          <button type="button" class="btn-neon btn-neon--soft btn-neon--compact" @click="generateCoreOnly">
+            Усі 6 карт
+          </button>
+          <button type="button" class="btn-neon btn-neon--wide btn-neon--compact" @click="regenerateAllPlayers">
+            Усі гравці
+          </button>
+        </div>
+        <p class="hint-sc hint-sc--tight hint-sc--muted">{{ getScenarioHint(selectedScenario) }}</p>
+        <div class="scenario-row">
+          <label class="field-label field-label--inline">Сценарій</label>
+          <select v-model="selectedScenario" class="input select select--compact" @change="persistScenarioChoice">
+            <option v-for="sid in scenarioIds" :key="sid" :value="sid">{{ getScenarioLabel(sid) }}</option>
+          </select>
+        </div>
+        <h3 class="sub-kicker sub-kicker--soft">Глобально всім</h3>
+        <div class="global-btns global-btns--compact">
+          <button type="button" class="gbtn" @click="globalRollField('profession')">Професія</button>
+          <button type="button" class="gbtn" @click="globalRollField('health')">Здоров’я</button>
+          <button type="button" class="gbtn" @click="globalRollField('phobia')">Фобія</button>
+          <button type="button" class="gbtn" @click="globalChaos">Chaos</button>
+        </div>
+        <div class="pick-row pick-row--compact">
+          <label class="field-label">Поле всім</label>
+          <select v-model="globalFieldPick" class="input select select--compact">
+            <option v-for="row in fieldConfig" :key="row.key" :value="row.key">{{ row.label }}</option>
+          </select>
+          <button type="button" class="btn-primary btn-primary--compact" @click="globalRollSelected">OK</button>
+        </div>
+      </section>
     </template>
 
     <div v-else class="player-hero">
@@ -918,35 +954,6 @@ function rerollActiveCardOnly() {
       </div>
     </section>
 
-    <section v-if="isAdmin" class="panel admin-zone admin-zone--actions" aria-label="Дії кімнати">
-      <h2 class="zone-kicker">Дії кімнати</h2>
-      <div class="gen-bar gen-bar--actions">
-        <button type="button" class="btn-neon" @click="generateRandomCharacter">🎲 Generate Player</button>
-        <button type="button" class="btn-neon btn-neon--soft" @click="generateCoreOnly">🎲 Generate All (6 карт)</button>
-      </div>
-      <div class="scenario-actions scenario-actions--top">
-        <button type="button" class="btn-neon btn-neon--wide" @click="regenerateAllPlayers">🎲 Generate All Players</button>
-      </div>
-      <p class="hint-sc hint-sc--tight">{{ getScenarioHint(selectedScenario) }}</p>
-      <select v-model="selectedScenario" class="input select" @change="persistScenarioChoice">
-        <option v-for="sid in scenarioIds" :key="sid" :value="sid">{{ getScenarioLabel(sid) }}</option>
-      </select>
-      <h3 class="sub-kicker">Глобально всім</h3>
-      <div class="global-btns">
-        <button type="button" class="gbtn" @click="globalRollField('profession')">Професія</button>
-        <button type="button" class="gbtn" @click="globalRollField('health')">Здоров’я</button>
-        <button type="button" class="gbtn" @click="globalRollField('phobia')">Фобія</button>
-        <button type="button" class="gbtn" @click="globalChaos">Chaos</button>
-      </div>
-      <div class="pick-row">
-        <label class="field-label">Поле всім</label>
-        <select v-model="globalFieldPick" class="input select">
-          <option v-for="row in fieldConfig" :key="row.key" :value="row.key">{{ row.label }}</option>
-        </select>
-        <button type="button" class="btn-primary" @click="globalRollSelected">OK</button>
-      </div>
-    </section>
-
     <Teleport to="body">
       <div v-if="toast" class="toast">{{ toast }}</div>
     </Teleport>
@@ -996,6 +1003,82 @@ function rerollActiveCardOnly() {
   text-transform: uppercase;
   color: rgba(196, 181, 253, 0.42);
   font-family: 'Orbitron', sans-serif;
+}
+
+.admin-zone--generate {
+  padding: 0.85rem 1rem 1rem;
+  border-radius: 14px;
+  background: rgba(4, 3, 14, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  margin-bottom: 1.2rem;
+}
+
+.zone-kicker--soft {
+  color: rgba(196, 181, 253, 0.3);
+  letter-spacing: 0.16em;
+}
+
+.gen-bar--compact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.35rem;
+}
+
+.gen-bar--compact .btn-neon--wide {
+  width: auto;
+  flex: 1 1 160px;
+}
+
+.btn-neon--compact {
+  padding: 0.4rem 0.7rem;
+  font-size: 0.7rem;
+}
+
+.hint-sc--muted {
+  color: rgba(186, 181, 200, 0.5);
+  font-size: 0.66rem;
+  line-height: 1.45;
+}
+
+.scenario-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.25rem 0 0.45rem;
+}
+
+.field-label--inline {
+  margin: 0;
+}
+
+.select--compact {
+  padding: 0.38rem 0.5rem;
+  font-size: 0.76rem;
+  flex: 1 1 12rem;
+  min-width: 10rem;
+  max-width: 22rem;
+}
+
+.sub-kicker--soft {
+  margin: 0.55rem 0 0.35rem;
+  color: rgba(196, 181, 253, 0.26);
+}
+
+.global-btns--compact .gbtn {
+  padding: 0.32rem 0.5rem;
+  font-size: 0.7rem;
+}
+
+.pick-row--compact {
+  margin-top: 0.45rem;
+  align-items: center;
+}
+
+.btn-primary--compact {
+  padding: 0.38rem 0.7rem;
+  font-size: 0.76rem;
 }
 
 .sub-kicker {

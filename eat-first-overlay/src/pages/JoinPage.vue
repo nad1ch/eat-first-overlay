@@ -99,6 +99,12 @@ const globalOverlayUrl = computed(() => {
       </p>
     </header>
 
+    <ol class="join-steps">
+      <li><span class="join-steps__n">1</span> Обери свою роль</li>
+      <li><span class="join-steps__n">2</span> Відкрий свій overlay</li>
+      <li><span class="join-steps__n">3</span> Встав у OBS / virtual camera</li>
+    </ol>
+
     <div class="game-bar">
       <label class="lbl" for="gid">Game id</label>
       <div class="game-row">
@@ -189,11 +195,55 @@ const globalOverlayUrl = computed(() => {
 }
 
 .join-hero,
+.join-steps,
 .game-bar,
 .roles,
 .cards-wrap {
   position: relative;
   z-index: 1;
+}
+
+.join-steps {
+  list-style: none;
+  margin: 0 auto 1.35rem;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  border: 1px solid rgba(168, 85, 247, 0.18);
+  background: rgba(10, 8, 22, 0.65);
+  max-width: 26rem;
+  box-sizing: border-box;
+}
+
+.join-steps li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0.35rem 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: rgba(226, 232, 240, 0.9);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.join-steps li:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.join-steps__n {
+  flex-shrink: 0;
+  width: 1.35rem;
+  height: 1.35rem;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 8px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  font-family: Orbitron, sans-serif;
+  color: #ede9fe;
+  background: rgba(88, 28, 135, 0.35);
+  border: 1px solid rgba(168, 85, 247, 0.35);
 }
 
 .roles {

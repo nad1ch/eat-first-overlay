@@ -162,12 +162,25 @@ const votingShown = computed(
   () => props.votingActive && votingTargetNorm.value.length > 0 && !isEliminated(props.player),
 )
 
+const voteTargetDisplay = computed(() => playerIdDisplay({ id: votingTargetNorm.value }))
+
+const voteHintLine = computed(() => `ГОЛОС ПРОТИ ${voteTargetDisplay.value}`)
+
 const isNominated = computed(() => {
   const n = String(props.nominatedPlayerId ?? '').trim()
   return Boolean(n && props.player?.id === n)
 })
 
 const voteBusy = ref(false)
+/** Локальний стан після успішного голосу (персональний оверлей) */
+const localVoteChoice = ref(null)
+
+watch(
+  () => [props.votingActive, votingTargetNorm.value, props.voteInteractive],
+  () => {
+    localVoteChoice.value = null
+  },
+)
 
 async function submitVote(choice) {
   if (!props.voteInteractive || voteBusy.value) return
@@ -178,6 +191,7 @@ async function submitVote(choice) {
   voteBusy.value = true
   try {
     await saveVote(gid, voter, target, choice)
+    localVoteChoice.value = choice === 'against' ? 'against' : 'for'
   } catch (e) {
     console.error('[saveVote]', e)
   } finally {
@@ -219,7 +233,10 @@ async function submitVote(choice) {
         </div>
       </div>
       <div class="card-grid-body">
-        <p class="card-grid-id">{{ playerIdDisplay(player) }}</p>
+        <div class="card-grid-id-row">
+          <p class="card-grid-id">{{ playerIdDisplay(player) }}</p>
+          <span v-if="isNominated" class="nominee-badge">НА ГОЛОСУВАННІ</span>
+        </div>
         <h2 class="card-grid-name">
           <span v-if="!identityRevealed(player)" class="placeholder">•••</span>
           <span v-else>{{ displayNameLine(player).text }}</span>
@@ -253,11 +270,13 @@ async function submitVote(choice) {
       </div>
       <div v-if="votingShown" class="vote-strip vote-strip--grid" aria-label="Голосування">
         <p class="vote-strip__title">ГОЛОСУВАННЯ</p>
+        <p class="vote-strip__target">{{ voteHintLine }}</p>
         <div class="vote-strip__row">
           <button
             v-if="voteInteractive"
             type="button"
             class="vote-btn"
+            :class="{ 'vote-btn--picked': localVoteChoice === 'for' }"
             :disabled="voteBusy"
             @click="submitVote('for')"
           >
@@ -268,6 +287,7 @@ async function submitVote(choice) {
             v-if="voteInteractive"
             type="button"
             class="vote-btn"
+            :class="{ 'vote-btn--picked': localVoteChoice === 'against' }"
             :disabled="voteBusy"
             @click="submitVote('against')"
           >
@@ -275,6 +295,7 @@ async function submitVote(choice) {
           </button>
           <span v-else class="vote-fake">👎</span>
         </div>
+        <p v-if="voteInteractive && localVoteChoice" class="vote-strip__ack">Твій голос зараховано</p>
       </div>
     </template>
   </article>
@@ -303,7 +324,6 @@ async function submitVote(choice) {
     </div>
 
     <template v-else>
-      <span v-if="handRaised" class="hand-badge hand-badge--solo" aria-hidden="true" title="Піднята рука">✋</span>
       <div
         v-if="solo && showActiveCardChip"
         class="ac-chip"
@@ -325,9 +345,22 @@ async function submitVote(choice) {
         </p>
       </div>
 
-      <div class="hud-block hud-tr">
+      <div
+        class="hud-block hud-tr"
+        :class="{
+          'hud-block--speaker-live': isTimerTarget && !isEliminated(player),
+          'hud-tr--urgent': timerUrgent,
+        }"
+      >
+        <div v-if="handRaised" class="hand-wait-hud" aria-hidden="true">
+          <span class="hand-wait-hud__ico">✋</span>
+          <span class="hand-wait-hud__txt">ЧЕКАЮ СЛОВА</span>
+        </div>
         <div class="hud-tr-top">
-          <span class="hud-slot">{{ playerIdDisplay(player) }}</span>
+          <span class="hud-slot-wrap">
+            <span class="hud-slot">{{ playerIdDisplay(player) }}</span>
+            <span v-if="isNominated" class="nominee-badge nominee-badge--hud">НА ГОЛОСУВАННІ</span>
+          </span>
           <span v-if="isTimerTarget" class="hud-speak-badge">ГОВОРИШ</span>
         </div>
         <div v-if="showSpeakerTimer" class="hud-timer-stack">
@@ -390,11 +423,13 @@ async function submitVote(choice) {
         aria-label="Голосування"
       >
         <p class="vote-strip__title">ГОЛОСУВАННЯ</p>
+        <p class="vote-strip__target">{{ voteHintLine }}</p>
         <div class="vote-strip__row">
           <button
             v-if="voteInteractive"
             type="button"
             class="vote-btn"
+            :class="{ 'vote-btn--picked': localVoteChoice === 'for' }"
             :disabled="voteBusy"
             @click="submitVote('for')"
           >
@@ -405,6 +440,7 @@ async function submitVote(choice) {
             v-if="voteInteractive"
             type="button"
             class="vote-btn"
+            :class="{ 'vote-btn--picked': localVoteChoice === 'against' }"
             :disabled="voteBusy"
             @click="submitVote('against')"
           >
@@ -412,6 +448,7 @@ async function submitVote(choice) {
           </button>
           <span v-else class="vote-fake">👎</span>
         </div>
+        <p v-if="voteInteractive && localVoteChoice" class="vote-strip__ack">Твій голос зараховано</p>
       </div>
     </template>
   </div>
@@ -569,6 +606,38 @@ async function submitVote(choice) {
   padding: var(--cg-pad-y) var(--cg-pad-x);
 }
 
+.card-grid-id-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  margin-bottom: 0.2rem;
+}
+
+.card-grid-id-row .card-grid-id {
+  margin: 0;
+}
+
+.nominee-badge {
+  display: inline-block;
+  padding: 0.12rem 0.35rem;
+  border-radius: 6px;
+  font-size: clamp(0.48rem, min(1.35vw, 1.5vh), 0.58rem);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: rgba(254, 202, 202, 0.95);
+  background: rgba(80, 20, 28, 0.55);
+  border: 1px solid rgba(220, 38, 38, 0.4);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.nominee-badge--hud {
+  margin-top: 0.2rem;
+  font-size: clamp(0.45rem, min(1.25vw, 1.4vh), 0.52rem);
+  letter-spacing: 0.06em;
+}
+
 .hand-badge {
   display: inline-grid;
   place-items: center;
@@ -588,19 +657,6 @@ async function submitVote(choice) {
   background: rgba(8, 6, 18, 0.88);
   border: 1px solid rgba(251, 191, 36, 0.35);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-}
-
-.hand-badge--solo {
-  position: fixed;
-  top: max(0.55rem, env(safe-area-inset-top, 0px));
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 6;
-  padding: 0.2rem 0.45rem;
-  border-radius: 999px;
-  background: rgba(8, 6, 18, 0.9);
-  border: 1px solid rgba(251, 191, 36, 0.38);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
 }
 
 .vote-strip {
@@ -634,13 +690,31 @@ async function submitVote(choice) {
 }
 
 .vote-strip__title {
-  margin: 0 0 0.28rem;
+  margin: 0 0 0.15rem;
   font-family: Orbitron, sans-serif;
   font-size: clamp(0.52rem, min(1.5vw, 1.65vh), 0.62rem);
   font-weight: 800;
   letter-spacing: 0.22em;
   color: rgba(226, 232, 240, 0.88);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
+}
+
+.vote-strip__target {
+  margin: 0 0 0.32rem;
+  font-size: clamp(0.62rem, min(1.75vw, 1.9vh), 0.78rem);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: rgba(250, 245, 255, 0.95);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.75);
+}
+
+.vote-strip__ack {
+  margin: 0.4rem 0 0;
+  font-size: clamp(0.58rem, min(1.6vw, 1.75vh), 0.72rem);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: rgba(187, 247, 208, 0.95);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 
 .vote-strip__row {
@@ -675,6 +749,12 @@ async function submitVote(choice) {
 .vote-btn:disabled {
   opacity: 0.55;
   cursor: wait;
+}
+
+.vote-btn--picked {
+  border-color: rgba(74, 222, 128, 0.65) !important;
+  background: rgba(22, 101, 52, 0.45) !important;
+  box-shadow: 0 0 16px rgba(74, 222, 128, 0.25);
 }
 
 .vote-btn__lbl {
@@ -750,20 +830,20 @@ async function submitVote(choice) {
 }
 
 .card-elim-screen__art {
-  width: min(56%, 140px);
+  width: min(52%, 128px);
   height: auto;
   margin: 0 0 0.5rem;
-  opacity: 0.9;
-  filter: drop-shadow(0 0 12px rgba(168, 85, 247, 0.25));
+  opacity: 0.52;
+  filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.12));
 }
 
 .card-elim-screen__title {
   margin: 0;
   font-family: Orbitron, sans-serif;
-  font-size: clamp(1.15rem, 4vw, 1.5rem);
+  font-size: clamp(1.45rem, 5vw, 2rem);
   font-weight: 900;
   letter-spacing: 0.22em;
-  color: #fca5a5;
+  color: #fecaca;
 }
 
 .card-elim-screen__hint {
@@ -778,10 +858,10 @@ async function submitVote(choice) {
 
 .card-elim-screen__slot {
   margin: 1rem 0 0;
-  font-size: clamp(1.5rem, 5vw, 2rem);
+  font-size: clamp(1.85rem, 6vw, 2.65rem);
   font-weight: 900;
   font-family: Orbitron, sans-serif;
-  color: rgba(248, 250, 252, 0.88);
+  color: rgba(248, 250, 252, 0.94);
   letter-spacing: 0.08em;
 }
 
@@ -1001,17 +1081,41 @@ async function submitVote(choice) {
   border-color: rgba(168, 85, 247, 0.26);
 }
 
-/* Спікер: тільки легкий outline по краю кадру — без градієнта в центрі */
-.hud-root--solo.hud-root--speaker:not(.hud-root--eliminated):not(.hud-root--nominated) {
-  outline: 1px solid rgba(168, 85, 247, 0.25);
-  outline-offset: 2px;
-}
-
-.hud-root--solo.hud-root--speaker:not(.hud-root--eliminated):not(.hud-root--nominated) .hud-block {
+/* Спікер: без outline на весь кадр — акцент лише на блоці з таймером (hud-tr) */
+.hud-root--solo.hud-root--speaker:not(.hud-root--eliminated):not(.hud-root--nominated) .hud-block:not(.hud-tr) {
   box-shadow:
     0 2px 14px rgba(0, 0, 0, 0.28),
-    0 0 0 1px rgba(168, 85, 247, 0.22),
-    0 0 14px rgba(168, 85, 247, 0.1);
+    0 0 0 1px rgba(168, 85, 247, 0.16),
+    0 0 10px rgba(168, 85, 247, 0.06);
+}
+
+.hud-block.hud-tr.hud-block--speaker-live {
+  border-radius: var(--hud-br);
+  animation: hudTrSpeakerGlow 2.1s ease-in-out infinite;
+}
+
+.hud-block.hud-tr.hud-block--speaker-live.hud-tr--urgent {
+  animation: none;
+  box-shadow:
+    0 2px 14px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(239, 68, 68, 0.35),
+    0 0 14px rgba(239, 68, 68, 0.15);
+}
+
+@keyframes hudTrSpeakerGlow {
+  0%,
+  100% {
+    box-shadow:
+      0 2px 14px rgba(0, 0, 0, 0.28),
+      0 0 0 1px rgba(168, 85, 247, 0.22),
+      0 0 12px rgba(168, 85, 247, 0.1);
+  }
+  50% {
+    box-shadow:
+      0 2px 16px rgba(0, 0, 0, 0.32),
+      0 0 0 1px rgba(196, 181, 253, 0.42),
+      0 0 20px rgba(168, 85, 247, 0.2);
+  }
 }
 
 .hud-root--solo.hud-root--nominated:not(.hud-root--eliminated) {
@@ -1019,11 +1123,48 @@ async function submitVote(choice) {
   outline-offset: 2px;
 }
 
-.hud-root--solo.hud-root--nominated:not(.hud-root--eliminated) .hud-block {
+.hud-root--solo.hud-root--nominated:not(.hud-root--eliminated) .hud-block:not(.hud-tr) {
   border-color: rgba(220, 38, 38, 0.35);
   box-shadow:
     0 2px 14px rgba(0, 0, 0, 0.28),
     0 0 0 1px rgba(220, 38, 38, 0.12);
+}
+
+.hud-root--solo.hud-root--nominated:not(.hud-root--eliminated) .hud-block.hud-tr:not(.hud-block--speaker-live) {
+  border-color: rgba(220, 38, 38, 0.32);
+}
+
+.hand-wait-hud {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(8, 6, 18, 0.88);
+  border: 1px solid rgba(251, 191, 36, 0.32);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+}
+
+.hand-wait-hud__ico {
+  font-size: clamp(0.78rem, min(2.2vw, 2.4vh), 1rem);
+  line-height: 1;
+}
+
+.hand-wait-hud__txt {
+  font-size: clamp(0.48rem, min(1.4vw, 1.55vh), 0.62rem);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: rgba(254, 243, 199, 0.92);
+  white-space: nowrap;
+}
+
+.hud-slot-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.22rem;
 }
 
 .hud-tr-top {
@@ -1159,11 +1300,11 @@ async function submitVote(choice) {
   top: 26%;
   transform: translate(-50%, -50%);
   z-index: 1;
-  width: min(48vw, 220px);
+  width: min(42vw, 200px);
   height: auto;
-  opacity: 0.88;
+  opacity: 0.48;
   pointer-events: none;
-  filter: drop-shadow(0 0 20px rgba(168, 85, 247, 0.2));
+  filter: drop-shadow(0 0 10px rgba(168, 85, 247, 0.1));
 }
 
 .elim-solo-screen__content {
@@ -1199,7 +1340,7 @@ async function submitVote(choice) {
 .elim-solo-screen__title {
   margin: 0;
   font-family: 'Orbitron', sans-serif;
-  font-size: clamp(2.25rem, 10vw, 3.75rem);
+  font-size: clamp(2.65rem, 11vw, 4.25rem);
   font-weight: 900;
   letter-spacing: 0.14em;
   line-height: 1.05;
@@ -1217,11 +1358,11 @@ async function submitVote(choice) {
 
 .elim-solo-screen__slot {
   margin: 1.35rem 0 0;
-  font-size: clamp(1.35rem, 5vw, 2rem);
+  font-size: clamp(1.75rem, 6.5vw, 2.75rem);
   font-weight: 900;
   font-family: 'Orbitron', sans-serif;
   letter-spacing: 0.1em;
-  color: rgba(248, 250, 252, 0.9);
+  color: rgba(248, 250, 252, 0.95);
 }
 
 .hud-root--solo .ac-chip {
