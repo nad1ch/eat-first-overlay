@@ -63,7 +63,7 @@ function openPersonalOverlay(pid) {
   router.push({ path: '/overlay', query: { game: gameId.value, player: String(pid).trim() } })
 }
 
-function goObsGlobal() {
+function goGlobalOverlay() {
   router.push({ path: '/overlay', query: { game: gameId.value } })
 }
 
@@ -78,6 +78,12 @@ function goAdmin() {
 function applyGameFromInput() {
   router.replace({ path: '/join', query: { game: gameId.value } })
 }
+
+const globalOverlayUrl = computed(() => {
+  const h = router.resolve({ path: '/overlay', query: { game: gameId.value } }).href
+  if (typeof window === 'undefined') return h
+  return new URL(h, window.location.origin).href
+})
 </script>
 
 <template>
@@ -87,7 +93,10 @@ function applyGameFromInput() {
     <header class="join-hero">
       <p class="eyebrow">Live show</p>
       <h1 class="title">Кого ми з’їмо першим</h1>
-      <p class="lead">Лобі кімнати · підключи OBS, зайди як гравець або відкрий пульт ведучого.</p>
+      <p class="lead">
+        Лобі кімнати: персональні камери глядачі бачать через оверлей кожного стрімера — глобальна сітка лише
+        допоміжна.
+      </p>
     </header>
 
     <div class="game-bar">
@@ -99,22 +108,36 @@ function applyGameFromInput() {
     </div>
 
     <div class="cta-grid">
-      <button type="button" class="cta cta--obs" @click="goObsGlobal">
-        <span class="cta-ico">🎥</span>
-        <span class="cta-t">OBS overlay</span>
-        <span class="cta-d">Загальний екран для всіх гравців</span>
+      <button type="button" class="cta cta--obs" @click="goGlobalOverlay">
+        <span class="cta-ico">🌐</span>
+        <span class="cta-t">Глобальний оверлей</span>
+        <span class="cta-d">Сітка всіх гравців у одному джерелі браузера</span>
       </button>
       <button type="button" class="cta cta--play" @click="goPlayerControl">
         <span class="cta-ico">🎮</span>
         <span class="cta-t">Увійти в гру</span>
-        <span class="cta-d">Панель гравця · картки та карта</span>
+        <span class="cta-d">Панель гравця · картки та активна карта</span>
       </button>
       <button type="button" class="cta cta--host" @click="goAdmin">
-        <span class="cta-ico">🔐</span>
-        <span class="cta-t">Ведучий</span>
-        <span class="cta-d">Пульт з ключем доступу</span>
+        <span class="cta-ico">🎛️</span>
+        <span class="cta-t">Admin / ведучий</span>
+        <span class="cta-d">Пульт шоу (потрібен ключ доступу)</span>
       </button>
     </div>
+
+    <section class="obs-hint" aria-labelledby="obs-hint-title">
+      <h2 id="obs-hint-title" class="obs-hint__title">OBS · швидкий старт</h2>
+      <ol class="obs-hint__list">
+        <li>Джерело: <strong>Browser</strong> (або Browser Source).</li>
+        <li>Встав URL персонального оверлею (знизу, по слоту) або глобального — залежно від сцени.</li>
+        <li>Розмір: на весь кадр джерела; у властивостях увімкни прозорість фону, якщо є.</li>
+        <li>Оновлення: за потреби ввімкни «Refresh browser when scene becomes active».</li>
+      </ol>
+      <p class="obs-hint__url">
+        <span class="obs-hint__url-label">Приклад глобального URL</span>
+        <code class="obs-hint__code">{{ globalOverlayUrl }}</code>
+      </p>
+    </section>
 
     <section class="cards-wrap">
       <h2 class="sec-title">Персональні оверлеї</h2>
@@ -143,8 +166,8 @@ function applyGameFromInput() {
   position: relative;
   min-height: 100vh;
   box-sizing: border-box;
-  padding: 1.75rem 1.25rem 3rem;
-  max-width: 720px;
+  padding: clamp(1.5rem, 4vw, 2.5rem) clamp(1rem, 3vw, 1.75rem) 3.5rem;
+  max-width: min(52rem, 100%);
   margin: 0 auto;
   font-family: Inter, system-ui, sans-serif;
   color: #e2e8f0;
@@ -250,10 +273,73 @@ function applyGameFromInput() {
 }
 
 .cta-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15.5rem, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.75rem;
+}
+
+.obs-hint {
+  position: relative;
+  z-index: 1;
   margin-bottom: 2rem;
+  padding: 1.1rem 1.2rem 1.2rem;
+  border-radius: 16px;
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  background: rgba(8, 12, 28, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.obs-hint__title {
+  margin: 0 0 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(125, 211, 252, 0.75);
+  font-family: Orbitron, sans-serif;
+}
+
+.obs-hint__list {
+  margin: 0;
+  padding-left: 1.15rem;
+  font-size: 0.84rem;
+  line-height: 1.55;
+  color: rgba(203, 213, 225, 0.88);
+}
+
+.obs-hint__list li {
+  margin-bottom: 0.35rem;
+}
+
+.obs-hint__list strong {
+  color: #e0f2fe;
+  font-weight: 600;
+}
+
+.obs-hint__url {
+  margin: 1rem 0 0;
+}
+
+.obs-hint__url-label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.65);
+}
+
+.obs-hint__code {
+  display: block;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  word-break: break-all;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
 }
 
 .cta {
@@ -270,15 +356,15 @@ function applyGameFromInput() {
   color: inherit;
   cursor: pointer;
   transition:
-    transform 0.18s ease,
-    border-color 0.18s,
-    box-shadow 0.18s;
+    transform 0.22s ease,
+    border-color 0.22s ease,
+    box-shadow 0.22s ease;
 }
 
 .cta:hover {
-  transform: scale(1.02);
-  border-color: rgba(168, 85, 247, 0.45);
-  box-shadow: 0 0 28px rgba(168, 85, 247, 0.22);
+  transform: translateY(-2px);
+  border-color: rgba(168, 85, 247, 0.42);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
 }
 
 .cta--obs:hover {

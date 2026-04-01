@@ -129,14 +129,28 @@ watch(
   { immediate: true },
 )
 
-onUnmounted(() => {
-  cleanupPlayerSub()
-  cleanupGameRoom()
-  if (tickId != null) {
-    window.clearInterval(tickId)
-    tickId = null
-  }
-})
+/** Короткий банер при переході фази на discussion (ритм шоу) */
+const roundBannerVisible = ref(false)
+const roundBannerIndex = ref(0)
+let roundBannerTimer = null
+const lastSeenPhase = ref('')
+
+watch(
+  () => String(gameRoom.value?.gamePhase ?? 'intro'),
+  (ph) => {
+    const prev = lastSeenPhase.value
+    lastSeenPhase.value = ph
+    if (ph !== 'discussion' || prev === ph) return
+    if (prev === '') return
+    roundBannerIndex.value += 1
+    if (roundBannerTimer) clearTimeout(roundBannerTimer)
+    roundBannerVisible.value = true
+    roundBannerTimer = setTimeout(() => {
+      roundBannerVisible.value = false
+    }, 1000)
+  },
+  { immediate: true, flush: 'post' },
+)
 
 const speakerTimeLeft = computed(() => {
   const gr = gameRoom.value
@@ -184,6 +198,16 @@ function cardTimerProps(p) {
     speakerTimerTotal: speakerTimerTotal.value,
   }
 }
+
+onUnmounted(() => {
+  cleanupPlayerSub()
+  cleanupGameRoom()
+  if (tickId != null) {
+    window.clearInterval(tickId)
+    tickId = null
+  }
+  if (roundBannerTimer) clearTimeout(roundBannerTimer)
+})
 </script>
 
 <template>
@@ -234,6 +258,18 @@ function cardTimerProps(p) {
         v-bind="cardTimerProps(p)"
       />
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="roundBannerVisible"
+        class="round-banner"
+        role="status"
+        aria-live="polite"
+      >
+        <p class="round-banner__n">РАУНД {{ roundBannerIndex }}</p>
+        <p class="round-banner__t">ВІДКРИВАЄМО КАРТУ</p>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -392,6 +428,55 @@ function cardTimerProps(p) {
 @media (max-width: 520px) {
   .grid {
     grid-template-columns: 1fr;
+  }
+}
+</style>
+
+<style>
+.round-banner {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  pointer-events: none;
+  background: rgba(5, 3, 8, 0.72);
+  animation: roundBannerFade 1s ease forwards;
+}
+
+.round-banner__n {
+  margin: 0;
+  font-family: Orbitron, system-ui, sans-serif;
+  font-size: clamp(1.25rem, 4vw, 1.85rem);
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  color: #a855f7;
+  text-shadow: 0 0 24px rgba(168, 85, 247, 0.45);
+}
+
+.round-banner__t {
+  margin: 0;
+  font-size: clamp(0.72rem, 2vw, 0.95rem);
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  color: rgba(248, 250, 252, 0.88);
+}
+
+@keyframes roundBannerFade {
+  0% {
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  78% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
   }
 }
 </style>

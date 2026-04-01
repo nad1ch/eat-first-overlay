@@ -6,6 +6,9 @@ import {
   rollFieldValue,
   rollKeysIntoCharacter,
   rollRandomIntoCharacter,
+  ages,
+  genders,
+  pickNameForGender,
 } from '../data/randomPools.js'
 import { scenarioIds, getScenarioLabel, getScenarioHint } from '../data/scenarios.js'
 import {
@@ -86,7 +89,6 @@ const selectedScenario = ref('classic_crash')
 const timerSpeakerSlot = ref('p1')
 const speakingDuration = ref(30)
 const globalFieldPick = ref('profession')
-const adminTab = ref('live')
 
 const gameRoom = ref({})
 const allPlayers = ref([])
@@ -360,26 +362,23 @@ async function setRoomSpeaker(slot) {
   }
 }
 
-async function onRosterPick(id, opts = {}) {
-  const sid = String(id ?? '').trim()
-  if (!sid) return
-  try {
-    loadError.value = null
-    if (opts.shiftKey) {
-      await setSpotlightPlayer(sid)
-      goToPlayer(sid)
-      showToast('Spotlight')
-      return
-    }
-    timerSpeakerSlot.value = sid
-    await saveGameRoom(gameId.value, { currentSpeaker: sid })
-    const sec = Number(speakingDuration.value) || 30
-    await startSpeakingTimer(gameId.value, sid, sec)
-    goToPlayer(sid)
-    showToast(`${sid} · ${sec}s`)
-  } catch (e) {
-    loadError.value = e instanceof Error ? e.message : String(e)
-  }
+function rerollSingleTrait(fieldKey) {
+  if (!isAdmin.value) return
+  characterState[fieldKey].value = rollFieldValue(fieldKey, scenarioForRolls.value)
+}
+
+function toggleRevealAdmin(fieldKey) {
+  if (!isAdmin.value) return
+  characterState[fieldKey].revealed = !characterState[fieldKey].revealed
+}
+
+function rerollIdentity() {
+  if (!isAdmin.value) return
+  const g = genders[Math.floor(Math.random() * genders.length)]
+  characterState.gender = g
+  characterState.name = pickNameForGender(g)
+  characterState.age = ages[Math.floor(Math.random() * ages.length)]
+  characterState.identityRevealed = false
 }
 
 function generateRandomCharacter() {
@@ -599,70 +598,51 @@ function rerollActiveCardOnly() {
     </div>
 
     <template v-if="isAdmin">
-      <ShowDeskHeader
-        :game-title="GAME_TITLE"
-        :game-id="gameId"
-        :game-phase="String(gameRoom.gamePhase || 'intro')"
-        :scenario-label="getScenarioLabel(selectedScenario)"
-        :alive-count="aliveCount"
-        :personal-url="personalUrlAbsolute"
-        :global-url="globalUrlAbsolute"
-        @copy-personal="copyPersonal"
-        @copy-global="copyGlobal"
-      />
+      <section class="admin-zone admin-zone--live" aria-label="Live">
+        <div class="desk-sticky-bar">
+          <ShowDeskHostTools
+            :game-room="gameRoom"
+            :player-slots="PLAYER_SLOTS"
+            v-model:speaking-duration="speakingDuration"
+            :phase-options="PHASE_OPTIONS"
+            @start-round="controlStartRound"
+            @pause-show="controlPauseShow"
+            @reset-room="controlReset"
+            @set-phase="setPhase"
+            @set-speaker="setRoomSpeaker"
+            @start-timer="adminStartSpeakingTimer"
+            @pause-timer="adminPauseTimerOnly"
+            @resume-timer="adminResumeTimer"
+            @clear-timer="adminClearTimer"
+            @spotlight="setSpotlightPlayer"
+            @spotlight-clear="setSpotlightPlayer('')"
+          />
+        </div>
+        <ShowDeskHeader
+          class="admin-zone__header"
+          :game-title="GAME_TITLE"
+          :game-id="gameId"
+          :game-phase="String(gameRoom.gamePhase || 'intro')"
+          :scenario-label="getScenarioLabel(selectedScenario)"
+          :alive-count="aliveCount"
+          :personal-url="personalUrlAbsolute"
+          :global-url="globalUrlAbsolute"
+          @copy-personal="copyPersonal"
+          @copy-global="copyGlobal"
+        />
+      </section>
 
-      <nav class="admin-tabs" aria-label="Режим пульта">
-        <button
-          type="button"
-          class="admin-tab"
-          :class="{ on: adminTab === 'live' }"
-          @click="adminTab = 'live'"
-        >
-          LIVE
-        </button>
-        <button
-          type="button"
-          class="admin-tab"
-          :class="{ on: adminTab === 'settings' }"
-          @click="adminTab = 'settings'"
-        >
-          SETTINGS
-        </button>
-      </nav>
-
-      <ShowDeskHostTools
-        :mode="adminTab"
-        :game-room="gameRoom"
-        :player-slots="PLAYER_SLOTS"
-        v-model:speaking-duration="speakingDuration"
-        :phase-options="PHASE_OPTIONS"
-        @start-round="controlStartRound"
-        @pause-show="controlPauseShow"
-        @reset-room="controlReset"
-        @set-phase="setPhase"
-        @set-speaker="setRoomSpeaker"
-        @start-timer="adminStartSpeakingTimer"
-        @pause-timer="adminPauseTimerOnly"
-        @resume-timer="adminResumeTimer"
-        @clear-timer="adminClearTimer"
-        @spotlight="setSpotlightPlayer"
-        @spotlight-clear="setSpotlightPlayer('')"
-      />
-
-      <div v-if="adminTab === 'live'" class="admin-row">
+      <section class="admin-zone admin-zone--players" aria-label="Гравці">
+        <h2 class="zone-kicker">Гравці</h2>
         <ShowPlayersRoster
           :players="allPlayers"
           :current-player-id="playerId"
           :spotlight-player-id="String(gameRoom.activePlayer || '')"
           :speaker-id="String(gameRoom.currentSpeaker || '')"
-          @pick="onRosterPick"
-          @set-spotlight="setSpotlightPlayer"
+          @select="goToPlayer"
         />
-      </div>
-
-      <div v-if="adminTab === 'settings'" class="settings-stack">
-        <aside class="side-tools">
-          <label class="field-label">game id</label>
+        <aside class="side-tools side-tools--inline">
+          <label class="field-label">Game id</label>
           <div class="inline">
             <input v-model="draftGameId" type="text" class="input" />
             <button type="button" class="btn-soft btn-lift" @click="applyNewGame">OK</button>
@@ -673,7 +653,7 @@ function rerollActiveCardOnly() {
             <button type="button" class="btn-soft btn-lift" @click="createAndGoToPlayer">+</button>
           </div>
         </aside>
-      </div>
+      </section>
     </template>
 
     <div v-else class="player-hero">
@@ -686,40 +666,87 @@ function rerollActiveCardOnly() {
     <section class="panel editor-panel">
       <h2 class="panel-kicker">{{ isAdmin ? `Редактор: ${playerId}` : 'Твій персонаж' }}</h2>
 
-      <div v-if="isAdmin" class="meta-grid">
-        <div>
-          <label class="field-label">Ім’я</label>
-          <input v-model="characterState.name" type="text" class="input" />
+      <div v-if="isAdmin" class="trait-block trait-block--identity">
+        <div class="trait-toolbar">
+          <span class="trait-label">Профіль (оверлей)</span>
+          <div class="trait-actions">
+            <button type="button" class="icon-btn" title="Перегенерувати" @click="rerollIdentity">🎲</button>
+            <button
+              type="button"
+              class="icon-btn"
+              :class="{ active: characterState.identityRevealed }"
+              title="Показати на оверлеї"
+              @click="characterState.identityRevealed = !characterState.identityRevealed"
+            >
+              👁
+            </button>
+          </div>
         </div>
-        <div>
-          <label class="field-label">Вік</label>
-          <input v-model="characterState.age" type="text" class="input" />
+        <div class="meta-grid">
+          <div>
+            <label class="field-label">Ім’я</label>
+            <input v-model="characterState.name" type="text" class="input" />
+          </div>
+          <div>
+            <label class="field-label">Вік</label>
+            <input v-model="characterState.age" type="text" class="input" />
+          </div>
+          <div>
+            <label class="field-label">Гендер</label>
+            <input v-model="characterState.gender" type="text" class="input" />
+          </div>
         </div>
-        <div>
-          <label class="field-label">Гендер</label>
-          <input v-model="characterState.gender" type="text" class="input" />
-        </div>
-      </div>
-      <div v-else class="player-meta">
-        <template v-if="characterState.identityRevealed">
-          <p><span class="mk">Ім’я</span> {{ characterState.name || '—' }}</p>
-          <p><span class="mk">Вік · гендер</span> {{ characterState.age || '—' }} · {{ characterState.gender || '—' }}</p>
-        </template>
-        <p v-else class="meta-locked">Профіль на шоу ще закритий — ведучий відкриє пізніше.</p>
       </div>
 
-      <div v-if="isAdmin" class="traits-grid">
-        <div v-for="row in fieldConfig" :key="row.key" class="trait-field">
-          <label class="field-label">{{ row.label }}</label>
-          <input v-model="characterState[row.key].value" type="text" class="input" />
+      <div v-else class="trait-block trait-block--player trait-block--identity">
+        <div class="trait-toolbar">
+          <span class="trait-label">Профіль</span>
+        </div>
+        <template v-if="characterState.identityRevealed">
+          <p class="pv-line"><span class="mk">Ім’я</span> {{ characterState.name || '—' }}</p>
+          <p class="pv-line"><span class="mk">Вік · гендер</span> {{ characterState.age || '—' }} · {{ characterState.gender || '—' }}</p>
+        </template>
+        <p v-else class="pv-hidden">••••••</p>
+      </div>
+
+      <div v-if="isAdmin" class="traits-stack">
+        <div v-for="row in fieldConfig" :key="row.key" class="trait-block">
+          <div class="trait-toolbar">
+            <span class="trait-label">{{ row.label }}</span>
+            <div class="trait-actions">
+              <button type="button" class="icon-btn" title="Перегенерувати поле" @click="rerollSingleTrait(row.key)">🎲</button>
+              <button
+                type="button"
+                class="icon-btn"
+                :class="{ active: characterState[row.key].revealed }"
+                title="На оверлеї"
+                @click="toggleRevealAdmin(row.key)"
+              >
+                👁
+              </button>
+            </div>
+          </div>
+          <input v-model="characterState[row.key].value" type="text" class="input trait-value-input" />
         </div>
       </div>
-      <div v-else class="traits-read">
-        <div v-for="row in fieldConfig" :key="row.key" class="trait-row">
-          <span class="t-label">{{ row.label }}</span>
-          <span class="t-val" :class="{ hidden: !characterState[row.key].revealed }">
-            {{ characterState[row.key].revealed ? (characterState[row.key].value || '—') : '❓' }}
-          </span>
+
+      <div v-else class="traits-stack traits-stack--player">
+        <div v-for="row in fieldConfig" :key="row.key" class="trait-block trait-block--player">
+          <div class="trait-toolbar">
+            <span class="trait-label">{{ row.label }}</span>
+            <button
+              v-if="!playerRevealLocked"
+              type="button"
+              class="icon-btn"
+              :class="{ active: characterState[row.key].revealed }"
+              @click="toggle(row.key)"
+            >
+              👁
+            </button>
+          </div>
+          <p class="trait-value-preview">
+            {{ characterState[row.key].revealed ? (characterState[row.key].value || '—') : '••••••' }}
+          </p>
         </div>
       </div>
 
@@ -791,75 +818,32 @@ function rerollActiveCardOnly() {
       </div>
     </section>
 
-    <section v-if="isAdmin" class="panel reveal-panel">
-      <h2 class="panel-kicker">Відкриття на оверлеї</h2>
-      <p class="reveal-hint">Клік по чіпу — відкрити / сховати значення та анімацію reveal.</p>
-      <div class="reveal-chips">
-        <button
-          type="button"
-          class="reveal-chip"
-          :class="{ on: characterState.identityRevealed }"
-          @click="characterState.identityRevealed = !characterState.identityRevealed"
-        >
-          Ім’я / вік / гендер <span class="chip-mark">{{ characterState.identityRevealed ? '✔' : '❌' }}</span>
-        </button>
-        <button
-          v-for="row in fieldConfig"
-          :key="'rv-' + row.key"
-          type="button"
-          class="reveal-chip"
-          :class="{ on: characterState[row.key].revealed }"
-          @click="characterState[row.key].revealed = !characterState[row.key].revealed"
-        >
-          {{ row.label }} <span class="chip-mark">{{ characterState[row.key].revealed ? '✔' : '❌' }}</span>
-        </button>
+    <section v-if="isAdmin" class="panel admin-zone admin-zone--actions" aria-label="Дії кімнати">
+      <h2 class="zone-kicker">Дії кімнати</h2>
+      <div class="gen-bar gen-bar--actions">
+        <button type="button" class="btn-neon" @click="generateRandomCharacter">🎲 Generate Player</button>
+        <button type="button" class="btn-neon btn-neon--soft" @click="generateCoreOnly">🎲 Generate All (6 карт)</button>
       </div>
-    </section>
-
-    <section v-if="isAdmin && adminTab === 'settings'" class="panel globals-panel">
-      <h2 class="panel-kicker">Глобальні дії</h2>
-      <div class="global-btns">
-        <button type="button" class="gbtn" @click="globalRollField('profession')">Професія всім</button>
-        <button type="button" class="gbtn" @click="globalRollField('health')">Здоров’я всім</button>
-        <button type="button" class="gbtn" @click="globalRollField('phobia')">Фобія всім</button>
-        <button type="button" class="gbtn" @click="globalChaos">Random chaos</button>
+      <div class="scenario-actions scenario-actions--top">
+        <button type="button" class="btn-neon btn-neon--wide" @click="regenerateAllPlayers">🎲 Generate All Players</button>
       </div>
-      <div class="pick-row">
-        <label class="field-label">Перегенерувати поле всім</label>
-        <select v-model="globalFieldPick" class="input select">
-          <option v-for="row in fieldConfig" :key="row.key" :value="row.key">{{ row.label }}</option>
-        </select>
-        <button type="button" class="btn-primary" @click="globalRollSelected">Застосувати</button>
-      </div>
-    </section>
-
-    <section v-if="isAdmin && adminTab === 'settings'" class="panel scenario-panel">
-      <h2 class="panel-kicker">Сценарій</h2>
-      <p class="hint-sc">{{ getScenarioHint(selectedScenario) }}</p>
+      <p class="hint-sc hint-sc--tight">{{ getScenarioHint(selectedScenario) }}</p>
       <select v-model="selectedScenario" class="input select" @change="persistScenarioChoice">
         <option v-for="sid in scenarioIds" :key="sid" :value="sid">{{ getScenarioLabel(sid) }}</option>
       </select>
-      <div class="scenario-actions">
-        <button type="button" class="btn-primary" @click="generateRandomCharacter">Generate поточного</button>
-        <button type="button" class="btn-soft" @click="generateCoreOnly">Тільки 6 карт</button>
-        <button type="button" class="btn-amber" @click="regenerateAllPlayers">Усіх у кімнаті</button>
+      <h3 class="sub-kicker">Глобально всім</h3>
+      <div class="global-btns">
+        <button type="button" class="gbtn" @click="globalRollField('profession')">Професія</button>
+        <button type="button" class="gbtn" @click="globalRollField('health')">Здоров’я</button>
+        <button type="button" class="gbtn" @click="globalRollField('phobia')">Фобія</button>
+        <button type="button" class="gbtn" @click="globalChaos">Chaos</button>
       </div>
-    </section>
-
-    <section v-if="!isAdmin" class="panel reveal-player">
-      <h2 class="panel-kicker">Твої картки</h2>
-      <div class="reveal-chips">
-        <button
-          v-for="row in fieldConfig"
-          :key="'pv-' + row.key"
-          type="button"
-          class="reveal-chip"
-          :class="{ on: characterState[row.key].revealed }"
-          :disabled="playerRevealLocked"
-          @click="toggle(row.key)"
-        >
-          {{ row.label }} <span class="chip-mark">{{ characterState[row.key].revealed ? '✔' : '❌' }}</span>
-        </button>
+      <div class="pick-row">
+        <label class="field-label">Поле всім</label>
+        <select v-model="globalFieldPick" class="input select">
+          <option v-for="row in fieldConfig" :key="row.key" :value="row.key">{{ row.label }}</option>
+        </select>
+        <button type="button" class="btn-primary" @click="globalRollSelected">OK</button>
       </div>
     </section>
 
@@ -875,6 +859,80 @@ function rerollActiveCardOnly() {
   margin: 0 auto;
   padding: 0 1.25rem 3.5rem;
   box-sizing: border-box;
+}
+
+.desk-sticky-bar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  margin: 0 -1.25rem 1rem;
+  padding: 0.5rem 1.25rem 0.65rem;
+  background: rgba(3, 2, 10, 0.94);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(168, 85, 247, 0.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.desk-sticky-bar :deep(.cc) {
+  margin-bottom: 0;
+  border: 1px solid rgba(168, 85, 247, 0.28);
+  box-shadow: none;
+}
+
+.admin-zone {
+  margin-bottom: 1.1rem;
+}
+
+.admin-zone--live .admin-zone__header {
+  margin-top: 0.35rem;
+}
+
+.zone-kicker {
+  margin: 0 0 0.55rem;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(196, 181, 253, 0.42);
+  font-family: 'Orbitron', sans-serif;
+}
+
+.sub-kicker {
+  margin: 0.85rem 0 0.45rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(196, 181, 253, 0.38);
+}
+
+.hint-sc--tight {
+  margin: 0.4rem 0 0.5rem;
+}
+
+.gen-bar--actions {
+  margin-bottom: 0.5rem;
+}
+
+.scenario-actions--top {
+  margin: 0 0 0.35rem;
+}
+
+.editor-panel {
+  --editor-space: 0.7rem;
+}
+
+.editor-panel .trait-block {
+  margin-bottom: var(--editor-space);
+}
+
+.editor-panel .traits-stack .trait-block:last-child {
+  margin-bottom: 0;
+}
+
+.editor-panel .trait-block--identity {
+  margin-bottom: 1rem;
 }
 
 .mode-strip {
@@ -939,50 +997,6 @@ function rerollActiveCardOnly() {
   color: rgba(196, 181, 253, 0.55);
 }
 
-.admin-tabs {
-  display: flex;
-  gap: 0.4rem;
-  margin: 0 0 0.85rem;
-}
-
-.admin-tab {
-  flex: 1;
-  padding: 0.55rem 0.85rem;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.32);
-  color: rgba(148, 163, 184, 0.95);
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  cursor: pointer;
-  font-family: 'Orbitron', sans-serif;
-  transition:
-    transform 0.15s ease,
-    border-color 0.15s,
-    color 0.15s,
-    background 0.15s;
-}
-
-.admin-tab:hover {
-  transform: scale(1.02);
-}
-
-.admin-tab.on {
-  border-color: rgba(168, 85, 247, 0.55);
-  color: #faf5ff;
-  background: rgba(88, 28, 135, 0.38);
-}
-
-.settings-stack {
-  margin-bottom: 1.25rem;
-}
-
-.admin-row {
-  display: block;
-  margin-bottom: 0.25rem;
-}
-
 .side-tools {
   padding: 1rem;
   border-radius: 16px;
@@ -1038,6 +1052,162 @@ function rerollActiveCardOnly() {
   font-weight: 700;
   color: #ede9fe;
   font-family: 'Orbitron', sans-serif;
+}
+
+.gen-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.btn-neon {
+  padding: 0.5rem 0.95rem;
+  border-radius: 12px;
+  border: 1px solid rgba(168, 85, 247, 0.55);
+  background: linear-gradient(180deg, rgba(139, 92, 246, 0.38), rgba(88, 28, 135, 0.52));
+  color: #faf5ff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: 'Orbitron', sans-serif;
+  letter-spacing: 0.04em;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.15s;
+}
+
+.btn-neon:hover {
+  transform: scale(1.02);
+  box-shadow: 0 0 22px rgba(168, 85, 247, 0.35);
+}
+
+.btn-neon--soft {
+  border-color: rgba(196, 181, 253, 0.38);
+  background: rgba(0, 0, 0, 0.42);
+}
+
+.btn-neon--wide {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.trait-block {
+  padding: 0.85rem 1rem;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(168, 85, 247, 0.16);
+  margin-bottom: 0.65rem;
+}
+
+.trait-block--identity {
+  margin-bottom: 1rem;
+}
+
+.trait-block--identity .meta-grid {
+  margin-bottom: 0;
+}
+
+.trait-block--player {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.trait-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.trait-label {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(196, 181, 253, 0.55);
+}
+
+.trait-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
+.icon-btn {
+  width: 2.15rem;
+  height: 2.15rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.4);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s,
+    transform 0.12s;
+}
+
+.icon-btn:hover {
+  transform: scale(1.06);
+  border-color: rgba(168, 85, 247, 0.45);
+}
+
+.icon-btn.active {
+  border-color: rgba(168, 85, 247, 0.6);
+  box-shadow: 0 0 16px rgba(168, 85, 247, 0.35);
+  background: rgba(88, 28, 135, 0.35);
+}
+
+.traits-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 1rem;
+}
+
+.trait-value-input {
+  margin-top: 0;
+}
+
+.pv-line {
+  margin: 0.35rem 0 0;
+  color: #e2e8f0;
+}
+
+.pv-line:first-of-type {
+  margin-top: 0.15rem;
+}
+
+.pv-hidden {
+  margin: 0.35rem 0 0;
+  letter-spacing: 0.25em;
+  font-size: 1.1rem;
+  color: rgba(196, 181, 253, 0.35);
+}
+
+.trait-value-preview {
+  margin: 0;
+  padding: 0.45rem 0 0.15rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  line-height: 1.4;
+}
+
+.traits-stack--player .trait-block--player {
+  margin-bottom: 0.5rem;
+}
+
+.side-tools--inline {
+  margin-bottom: 1.1rem;
+  padding: 0.85rem 1rem;
 }
 
 .meta-grid {

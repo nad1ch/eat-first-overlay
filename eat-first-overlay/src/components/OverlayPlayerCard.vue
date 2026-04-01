@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { fieldConfig } from '../characterState'
 
 const HUD_LEFT = ['profession', 'health', 'phobia']
@@ -23,6 +23,12 @@ const props = defineProps({
 const labelByKey = computed(() =>
   Object.fromEntries(fieldConfig.map((f) => [f.key, f.label])),
 )
+
+/** Закрите поле в HUD: [ ПРОФЕСІЯ ] */
+function fieldLabelUi(fieldKey) {
+  const raw = labelByKey.value[fieldKey] ?? fieldKey
+  return `[ ${String(raw).toLocaleUpperCase('uk')} ]`
+}
 
 function chunkFor(player, key) {
   const c = player[key]
@@ -59,6 +65,32 @@ function displayAgeGenderLine(player) {
 function isEliminated(player) {
   return player.eliminated === true
 }
+
+/** Випадковий арт вибуття 1…12 */
+const deathArtIndex = ref(null)
+
+watch(
+  () => props.player.id,
+  () => {
+    deathArtIndex.value = null
+  },
+)
+
+watch(
+  () => isEliminated(props.player),
+  (elim) => {
+    if (!elim) deathArtIndex.value = null
+    else if (deathArtIndex.value === null) {
+      deathArtIndex.value = Math.floor(Math.random() * 12) + 1
+    }
+  },
+  { immediate: true },
+)
+
+const deathSvgSrc = computed(() => {
+  const n = deathArtIndex.value ?? 1
+  return `/overlay-eliminated-${n}.svg`
+})
 
 function valueRevealKey(player, rowKey) {
   const r = chunkFor(player, rowKey).revealed
@@ -110,10 +142,10 @@ const timerRingStyle = computed(() => {
   }
 })
 
-const acChipTitle = computed(() => {
-  const t = activeCardFrom(props.player).title
-  if (!t) return 'Карта'
-  return t.length > 22 ? `${t.slice(0, 20)}…` : t
+const showActiveCardChip = computed(() => {
+  const ac = activeCardFrom(props.player)
+  if (ac.used) return false
+  return Boolean(ac.title || ac.description)
 })
 </script>
 
@@ -130,16 +162,16 @@ const acChipTitle = computed(() => {
       'card-grid--speaker': isTimerTarget && !isEliminated(player),
     }"
   >
-    <div v-if="isEliminated(player)" class="card-elim-screen">
-      <img class="card-elim-screen__art" src="/overlay-eliminated.svg" alt="" />
+    <div v-if="isEliminated(player)" class="card-elim-screen card-elim-screen--cut">
+      <img class="card-elim-screen__art" :src="deathSvgSrc" alt="" />
       <p class="card-elim-screen__title">ВИБУВ</p>
-      <p class="card-elim-screen__slot">Гравець {{ playerIdDisplay(player) }}</p>
-      <p class="card-elim-screen__hint">Слот закритий</p>
+      <p class="card-elim-screen__hint">Слот закритий до кінця гри</p>
+      <p class="card-elim-screen__slot">{{ playerIdDisplay(player) }}</p>
     </div>
 
     <template v-else>
       <div v-if="showSpeakerTimer" class="card-grid-timer" aria-hidden="true">
-        <p v-if="isTimerTarget" class="card-speaking-label">🎤 ГОВОРИТЬ</p>
+        <p v-if="isTimerTarget" class="card-speak-badge">ГОВОРИШ</p>
         <div class="timer-ring-wrap" :class="{ 'timer-ring-wrap--urgent': timerUrgent }">
           <span class="timer-ring" :style="timerRingStyle" />
           <span class="timer-num" :class="{ 'timer-num--urgent': timerUrgent }">⏱ {{ speakerTimeLeft }}s</span>
@@ -161,6 +193,7 @@ const acChipTitle = computed(() => {
               :key="valueRevealKey(player, row.key)"
             class="stat-cell"
             :class="{
+                'stat-cell--label': !chunkFor(player, row.key).revealed,
                 'stat-cell--open': chunkFor(player, row.key).revealed,
                 'stat-cell--wave': chunkFor(player, row.key).revealed,
                 'value--revealed': chunkFor(player, row.key).revealed,
@@ -168,7 +201,7 @@ const acChipTitle = computed(() => {
               }"
             >
               <template v-if="!chunkFor(player, row.key).revealed">
-                {{ labelByKey[row.key] }}
+                {{ fieldLabelUi(row.key) }}
               </template>
               <template v-else>
                 {{ statDisplay(player, row.key).text }}
@@ -191,28 +224,25 @@ const acChipTitle = computed(() => {
       'hud-root--drama': drama,
     }"
   >
-    <div v-if="isEliminated(player)" class="elim-solo-screen">
-      <div class="elim-solo-screen__death-flash" aria-hidden="true" />
+    <div v-if="isEliminated(player)" class="elim-solo-screen elim-solo-screen--cut">
       <div class="elim-solo-screen__base" aria-hidden="true" />
-      <div class="elim-solo-screen__grain" aria-hidden="true" />
+      <img class="elim-solo-screen__mark" :src="deathSvgSrc" alt="" />
       <div class="elim-solo-screen__content">
-        <img class="elim-solo-screen__art" src="/overlay-eliminated.svg" alt="" />
         <p class="elim-solo-screen__kicker">Кого ми з’їмо першим</p>
         <h2 class="elim-solo-screen__title">ВИБУВ</h2>
-        <p class="elim-solo-screen__sub">Ти покинув відбір. Камера для цього слоту прихована.</p>
-        <p class="elim-solo-screen__slot">Слот {{ playerIdDisplay(player) }}</p>
+        <p class="elim-solo-screen__subline">Слот закритий до кінця гри</p>
+        <p class="elim-solo-screen__slot">Гравець {{ playerIdDisplay(player) }}</p>
       </div>
     </div>
 
     <template v-else>
       <div
-        v-if="solo && (activeCardFrom(player).title || activeCardFrom(player).description)"
+        v-if="solo && showActiveCardChip"
         class="ac-chip"
-        :class="{ 'ac-chip--used': activeCardFrom(player).used }"
-        :title="activeCardFrom(player).description || activeCardFrom(player).title"
+        :title="activeCardFrom(player).description || activeCardFrom(player).title || 'Є карта'"
       >
         <span class="ac-chip-ico">🃏</span>
-        <span class="ac-chip-t">{{ acChipTitle }}</span>
+        <span class="ac-chip-t">Є карта</span>
       </div>
 
       <div class="hud-zones">
@@ -228,12 +258,20 @@ const acChipTitle = computed(() => {
       </div>
 
       <div class="hud-block hud-tr">
-        <span class="hud-slot">{{ playerIdDisplay(player) }}</span>
-        <p v-if="isTimerTarget" class="hud-speaking-pill">🎤 ГОВОРИТЬ</p>
+        <div class="hud-tr-top">
+          <span class="hud-slot">{{ playerIdDisplay(player) }}</span>
+          <span v-if="isTimerTarget" class="hud-speak-badge">ГОВОРИШ</span>
+        </div>
         <div v-if="showSpeakerTimer" class="hud-timer-stack">
-          <div class="hud-ring-wrap" :class="{ 'hud-ring-wrap--urgent': timerUrgent }">
+          <div
+            class="hud-ring-wrap"
+            :class="{ 'hud-ring-wrap--urgent': timerUrgent, 'timer--danger': timerUrgent }"
+          >
             <span class="hud-ring" :style="timerRingStyle" />
-            <span class="hud-timer-label" :class="{ 'hud-timer-label--urgent': timerUrgent }">⏱ {{ speakerTimeLeft }}s</span>
+            <span
+              class="hud-timer-label"
+              :class="{ 'hud-timer-label--urgent': timerUrgent, 'timer--danger': timerUrgent }"
+            >{{ speakerTimeLeft }}s</span>
           </div>
         </div>
       </div>
@@ -244,13 +282,14 @@ const acChipTitle = computed(() => {
             :key="valueRevealKey(player, key)"
             class="hud-stat-inner"
             :class="{
+              'hud-stat-inner--label': !chunkFor(player, key).revealed,
               'hud-stat-inner--open': chunkFor(player, key).revealed,
               'hud-stat-inner--wave': chunkFor(player, key).revealed,
               'value--revealed': chunkFor(player, key).revealed,
               'hud-stat-inner--drama': drama && chunkFor(player, key).revealed,
             }"
           >
-            <template v-if="!chunkFor(player, key).revealed">{{ labelByKey[key] }}</template>
+            <template v-if="!chunkFor(player, key).revealed">{{ fieldLabelUi(key) }}</template>
             <template v-else>{{ statDisplay(player, key).text }}</template>
           </span>
         </div>
@@ -262,13 +301,14 @@ const acChipTitle = computed(() => {
             :key="valueRevealKey(player, key)"
             class="hud-stat-inner"
             :class="{
+              'hud-stat-inner--label': !chunkFor(player, key).revealed,
               'hud-stat-inner--open': chunkFor(player, key).revealed,
               'hud-stat-inner--wave': chunkFor(player, key).revealed,
               'value--revealed': chunkFor(player, key).revealed,
               'hud-stat-inner--drama': drama && chunkFor(player, key).revealed,
             }"
           >
-            <template v-if="!chunkFor(player, key).revealed">{{ labelByKey[key] }}</template>
+            <template v-if="!chunkFor(player, key).revealed">{{ fieldLabelUi(key) }}</template>
             <template v-else>{{ statDisplay(player, key).text }}</template>
           </span>
         </div>
@@ -297,12 +337,14 @@ const acChipTitle = computed(() => {
   border-radius: 14px;
   background: rgba(12, 8, 28, 0.92);
   border: 1px solid rgba(168, 85, 247, 0.28);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
   overflow: hidden;
   transition:
-    transform 0.35s ease,
-    box-shadow 0.35s ease,
-    border-color 0.35s ease;
+    transform 0.4s ease,
+    box-shadow 0.4s ease,
+    border-color 0.4s ease,
+    opacity 0.4s ease,
+    filter 0.4s ease;
 }
 
 @media (min-width: 1600px) {
@@ -311,113 +353,94 @@ const acChipTitle = computed(() => {
   }
 }
 
-.card-grid--spotlight {
-  transform: scale(1.03);
-  border-color: rgba(168, 85, 247, 0.65);
+/* Spotlight: окремо від спікера — статична фіолетова рамка + м’яке світіння */
+.card-grid--spotlight:not(.card-grid--speaker) {
+  transform: scale(1.01);
+  border-color: rgba(168, 85, 247, 0.55);
   box-shadow:
-    0 0 0 2px rgba(168, 85, 247, 0.4),
-    0 0 32px rgba(168, 85, 247, 0.35);
-  animation: spotlightCardPulse 2.8s ease-in-out infinite;
+    0 0 0 1px rgba(168, 85, 247, 0.45),
+    0 0 24px rgba(168, 85, 247, 0.22);
 }
 
-.card-grid--spotlight::before {
+.card-grid--spotlight:not(.card-grid--speaker)::before {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: 14px;
   pointer-events: none;
   z-index: 1;
-  box-shadow:
-    inset 0 0 0 2px rgba(168, 85, 247, 0.5),
-    inset 0 0 80px rgba(168, 85, 247, 0.2);
-}
-
-@keyframes spotlightCardPulse {
-  0%,
-  100% {
-    box-shadow:
-      0 0 0 2px rgba(168, 85, 247, 0.35),
-      0 0 28px rgba(168, 85, 247, 0.28);
-  }
-  50% {
-    box-shadow:
-      0 0 0 2px rgba(168, 85, 247, 0.55),
-      0 0 40px rgba(168, 85, 247, 0.42);
-  }
+  box-shadow: inset 0 0 0 1px rgba(168, 85, 247, 0.35);
 }
 
 .card-grid--dimmed {
-  opacity: 0.62;
-  filter: saturate(0.65);
+  opacity: 0.5;
+  filter: saturate(0.55) brightness(0.92);
   transition:
-    opacity 0.35s ease,
-    filter 0.35s ease;
+    opacity 0.45s ease,
+    filter 0.45s ease;
 }
 
+/* Спікер у глобальній сітці — помітніший, без агресивного scale */
 .card-grid--speaker {
   opacity: 1;
   filter: none;
   z-index: 2;
-  transform: scale(1.03);
-  animation: speakerCardGlow 2s ease-in-out infinite;
+  transform: scale(1.025);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.35),
+    0 0 20px rgba(168, 85, 247, 0.38),
+    0 0 36px rgba(168, 85, 247, 0.2);
+  animation: speakerCardGlow 2.5s ease-in-out infinite;
 }
 
 @keyframes speakerCardGlow {
   0%,
   100% {
     box-shadow:
-      0 8px 28px rgba(0, 0, 0, 0.4),
-      0 0 24px rgba(168, 85, 247, 0.35);
+      0 8px 24px rgba(0, 0, 0, 0.35),
+      0 0 18px rgba(168, 85, 247, 0.32),
+      0 0 32px rgba(168, 85, 247, 0.16);
   }
   50% {
     box-shadow:
-      0 8px 28px rgba(0, 0, 0, 0.4),
-      0 0 48px rgba(168, 85, 247, 0.65);
+      0 8px 24px rgba(0, 0, 0, 0.35),
+      0 0 26px rgba(168, 85, 247, 0.48),
+      0 0 40px rgba(168, 85, 247, 0.24);
   }
 }
 
-.card-speaking-label {
+.card-speak-badge {
   margin: 0;
-  font-size: clamp(0.58rem, min(1.8vw, 2vh), 0.72rem);
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  font-size: clamp(0.5rem, min(1.5vw, 1.7vh), 0.62rem);
   font-weight: 800;
-  letter-spacing: 0.12em;
-  color: #e9d5ff;
-  text-shadow: 0 0 12px rgba(168, 85, 247, 0.5);
+  letter-spacing: 0.1em;
+  color: rgba(250, 245, 255, 0.92);
+  background: rgba(168, 85, 247, 0.22);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  line-height: 1;
 }
 
 .timer-ring-wrap--urgent {
-  animation: timerUrgentPulse 0.55s ease-in-out infinite;
+  animation: timerDangerPulse 0.6s ease-in-out infinite;
 }
 
-@keyframes timerUrgentPulse {
+@keyframes timerDangerPulse {
   0%,
   100% {
+    opacity: 1;
     transform: scale(1);
   }
   50% {
-    transform: scale(1.08);
+    opacity: 0.92;
+    transform: scale(1.04);
   }
 }
 
 .timer-num--urgent {
   color: #fecaca !important;
   text-shadow: 0 0 10px rgba(239, 68, 68, 0.6) !important;
-}
-
-.card-grid--timer {
-  animation: timerPulse 1.4s ease-in-out infinite;
-}
-
-@keyframes timerPulse {
-  0%,
-  100% {
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
-  }
-  50% {
-    box-shadow:
-      0 8px 28px rgba(0, 0, 0, 0.4),
-      0 0 20px rgba(168, 85, 247, 0.2);
-  }
 }
 
 .card-grid > .card-grid-timer {
@@ -466,9 +489,10 @@ const acChipTitle = computed(() => {
 }
 
 .card-grid--eliminated {
-  border-color: rgba(127, 29, 29, 0.65);
-  background: rgba(18, 6, 10, 0.98);
+  border-color: rgba(80, 20, 28, 0.75);
+  background: #050308;
   min-height: 200px;
+  box-shadow: inset 0 0 64px rgba(0, 0, 0, 0.75);
 }
 
 .card-elim-screen {
@@ -479,41 +503,67 @@ const acChipTitle = computed(() => {
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 1rem 0.75rem 1.15rem;
+  padding: 1.25rem 1rem;
   min-height: 220px;
   box-sizing: border-box;
 }
 
+.card-elim-screen--cut {
+  animation: deathCutCard 0.48s ease-out both;
+}
+
+@keyframes deathCutCard {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+    opacity: 0;
+  }
+  40% {
+    transform: scale(1.05);
+    filter: brightness(1.5);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+    opacity: 1;
+  }
+}
+
 .card-elim-screen__art {
-  width: min(72%, 160px);
+  width: min(56%, 140px);
   height: auto;
-  border-radius: 16px;
-  margin-bottom: 0.5rem;
-  filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.5));
+  margin: 0 0 0.5rem;
+  opacity: 0.9;
+  filter: drop-shadow(0 0 12px rgba(168, 85, 247, 0.25));
 }
 
 .card-elim-screen__title {
   margin: 0;
   font-family: Orbitron, sans-serif;
-  font-size: clamp(1rem, 3.5vw, 1.25rem);
+  font-size: clamp(1.15rem, 4vw, 1.5rem);
   font-weight: 900;
-  letter-spacing: 0.2em;
-  color: #fecaca;
-  text-shadow: 0 0 20px rgba(248, 113, 113, 0.35);
-}
-
-.card-elim-screen__slot {
-  margin: 0.35rem 0 0;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: rgba(226, 232, 240, 0.88);
+  letter-spacing: 0.22em;
+  color: #fca5a5;
 }
 
 .card-elim-screen__hint {
-  margin: 0.25rem 0 0;
-  font-size: 0.68rem;
-  color: rgba(196, 181, 253, 0.45);
-  letter-spacing: 0.06em;
+  margin: 0.65rem 0 0;
+  font-size: clamp(0.68rem, 2vw, 0.78rem);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(196, 181, 253, 0.42);
+  line-height: 1.4;
+  max-width: 16rem;
+}
+
+.card-elim-screen__slot {
+  margin: 1rem 0 0;
+  font-size: clamp(1.5rem, 5vw, 2rem);
+  font-weight: 900;
+  font-family: Orbitron, sans-serif;
+  color: rgba(248, 250, 252, 0.88);
+  letter-spacing: 0.08em;
 }
 
 .card-grid-id {
@@ -561,20 +611,28 @@ const acChipTitle = computed(() => {
   padding: var(--cg-stat-pad-y) var(--cg-stat-pad-x);
   border-radius: clamp(10px, 1.8vmin, 14px);
   background: rgba(0, 0, 0, 0.38);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   font-size: var(--cg-stat-fs);
   font-weight: 600;
-  color: rgba(196, 181, 253, 0.82);
   text-align: right;
   line-height: 1.45;
   transition:
-    color 0.2s ease,
-    border-color 0.2s ease;
+    color 0.28s ease,
+    border-color 0.28s ease,
+    background 0.28s ease;
+}
+
+.stat-cell--label {
+  color: rgba(148, 140, 180, 0.78);
+  font-weight: 700;
+  font-size: clamp(0.72rem, min(2.1vw, 2.5vh), 0.92rem);
+  letter-spacing: 0.1em;
+  font-family: ui-monospace, 'Cascadia Mono', monospace;
 }
 
 .stat-cell--open {
-  color: #f8fafc;
-  border-color: rgba(168, 85, 247, 0.25);
+  color: #f1f5f9;
+  border-color: rgba(168, 85, 247, 0.28);
   text-align: right;
 }
 
@@ -649,21 +707,21 @@ const acChipTitle = computed(() => {
  * Бічні колонки (bl/br) ширші за верхні (tl/tr).
  */
 .hud-root--solo {
-  --hud-edge: clamp(0.4rem, min(1.6vw, 2vh), 1.75rem);
-  --hud-side-max: min(46vw, clamp(15.5rem, 42vmin, 36rem));
-  --hud-top-max: min(50vw, clamp(12rem, 34vmin, 24rem));
-  --hud-pad-side: clamp(0.62rem, min(2.2vw, 2.6vh), 1.35rem);
-  --hud-pad-top: clamp(0.52rem, min(1.8vw, 2.2vh), 1.05rem);
-  --hud-stat-gap: clamp(0.38rem, min(1.5vw, 1.8vh), 0.72rem);
-  --hud-stat-pad-y: clamp(0.55rem, min(2.4vw, 2.8vh), 1.15rem);
-  --hud-stat-pad-x: clamp(0.62rem, min(2.8vw, 3.2vh), 1.35rem);
-  --hud-stat-font: clamp(0.92rem, min(3.1vw, 3.4vh), 1.45rem);
-  --hud-name: clamp(1.12rem, min(3.5vw, 4vh), 1.85rem);
-  --hud-sub: clamp(0.96rem, min(2.7vw, 3.2vh), 1.32rem);
-  --hud-slot: clamp(2.1rem, min(7vw, 8vh), 4rem);
-  --hud-timer-ring: clamp(4.5rem, min(12vw, 13vh), 7rem);
-  --hud-timer-fs: clamp(0.75rem, min(2.4vw, 2.6vh), 1.05rem);
-  --hud-br: clamp(12px, 2vmin, 18px);
+  --hud-edge: clamp(0.55rem, min(2vw, 2.6vh), 2.15rem);
+  --hud-side-max: min(48vw, clamp(16.5rem, 44vmin, 38rem));
+  --hud-top-max: min(52vw, clamp(13rem, 36vmin, 26rem));
+  --hud-pad-side: clamp(0.78rem, min(2.8vw, 3.2vh), 1.55rem);
+  --hud-pad-top: clamp(0.68rem, min(2.2vw, 2.8vh), 1.25rem);
+  --hud-stat-gap: clamp(0.45rem, min(1.7vw, 2vh), 0.85rem);
+  --hud-stat-pad-y: clamp(0.68rem, min(2.8vw, 3.2vh), 1.35rem);
+  --hud-stat-pad-x: clamp(0.75rem, min(3.2vw, 3.6vh), 1.55rem);
+  --hud-stat-font: clamp(0.98rem, min(3.3vw, 3.6vh), 1.55rem);
+  --hud-name: clamp(1.2rem, min(3.8vw, 4.2vh), 1.95rem);
+  --hud-sub: clamp(1.02rem, min(2.9vw, 3.4vh), 1.38rem);
+  --hud-slot: clamp(2.25rem, min(7.5vw, 8.5vh), 4.25rem);
+  --hud-timer-ring: clamp(5.15rem, min(14vw, 15vh), 8rem);
+  --hud-timer-fs: clamp(0.88rem, min(2.8vw, 3vh), 1.22rem);
+  --hud-br: clamp(14px, 2.2vmin, 20px);
 }
 
 @media (max-width: 480px) {
@@ -680,74 +738,99 @@ const acChipTitle = computed(() => {
   }
 }
 
-.hud-root--spotlight .hud-block {
-  border-color: rgba(168, 85, 247, 0.65);
+/* Spotlight без спікера: окремий стиль — рамка + м’який glow, без пульсу */
+.hud-root--solo.hud-root--spotlight:not(.hud-root--speaker) .hud-block {
+  border-color: rgba(168, 85, 247, 0.48);
   box-shadow:
-    inset 0 0 28px rgba(168, 85, 247, 0.16),
-    0 0 0 1px rgba(168, 85, 247, 0.45),
-    0 0 26px rgba(168, 85, 247, 0.32);
-  animation: hudSpotPulse 2.6s ease-in-out infinite;
+    0 2px 12px rgba(0, 0, 0, 0.32),
+    0 0 0 1px rgba(168, 85, 247, 0.38),
+    0 0 22px rgba(168, 85, 247, 0.16);
 }
 
-@keyframes hudSpotPulse {
+.hud-root--solo.hud-root--spotlight:not(.hud-root--speaker) .hud-stat-inner {
+  border-color: rgba(168, 85, 247, 0.26);
+}
+
+/* Легкий «дихаючий» фокус для спікера + слабкий центральний градієнт */
+.hud-root--solo.hud-root--speaker:not(.hud-root--eliminated) {
+  animation: speakerBreath 2.5s ease-in-out infinite;
+  transform-origin: center center;
+}
+
+@keyframes speakerBreath {
   0%,
   100% {
-    box-shadow:
-      inset 0 0 22px rgba(168, 85, 247, 0.12),
-      0 0 0 1px rgba(168, 85, 247, 0.38),
-      0 0 20px rgba(168, 85, 247, 0.22);
+    transform: scale(1);
   }
   50% {
-    box-shadow:
-      inset 0 0 36px rgba(168, 85, 247, 0.22),
-      0 0 0 1px rgba(168, 85, 247, 0.55),
-      0 0 34px rgba(168, 85, 247, 0.4);
+    transform: scale(1.015);
   }
 }
 
-.hud-root--spotlight .hud-stat-inner {
-  border-color: rgba(168, 85, 247, 0.32);
-  box-shadow: inset 0 0 14px rgba(168, 85, 247, 0.08);
+.hud-root--solo.hud-root--speaker:not(.hud-root--eliminated)::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(circle at center, rgba(168, 85, 247, 0.07), transparent 60%);
 }
 
-.hud-root--speaker:not(.hud-root--eliminated) .hud-zones {
-  animation: speakerHudPulse 2s ease-in-out infinite;
-  filter: drop-shadow(0 0 22px rgba(168, 85, 247, 0.35));
+.hud-root--solo.hud-root--speaker:not(.hud-root--eliminated)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(circle at center, rgba(168, 85, 247, 0.12), transparent 70%);
 }
 
-@keyframes speakerHudPulse {
-  0%,
-  100% {
-    filter: drop-shadow(0 0 18px rgba(168, 85, 247, 0.28));
-  }
-  50% {
-    filter: drop-shadow(0 0 36px rgba(168, 85, 247, 0.55));
-  }
-}
-
-.hud-root--speaker:not(.hud-root--eliminated) .hud-block {
+.hud-root--solo.hud-root--speaker:not(.hud-root--eliminated) .hud-block {
   box-shadow:
-    inset 0 0 20px rgba(168, 85, 247, 0.12),
-    0 0 0 1px rgba(168, 85, 247, 0.5),
-    0 0 32px rgba(168, 85, 247, 0.38);
+    0 2px 14px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(168, 85, 247, 0.28),
+    0 0 12px rgba(168, 85, 247, 0.22),
+    0 0 28px rgba(168, 85, 247, 0.12);
 }
 
-.hud-speaking-pill {
-  margin: 0.35rem 0 0;
-  font-size: clamp(0.62rem, min(1.9vw, 2.1vh), 0.82rem);
+.hud-tr-top {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
+.hud-speak-badge {
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  font-size: clamp(0.52rem, min(1.55vw, 1.75vh), 0.65rem);
   font-weight: 800;
-  letter-spacing: 0.14em;
-  color: #faf5ff;
-  text-shadow: 0 0 14px rgba(168, 85, 247, 0.55);
+  letter-spacing: 0.12em;
+  color: rgba(250, 245, 255, 0.9);
+  background: rgba(168, 85, 247, 0.2);
+  border: 1px solid rgba(168, 85, 247, 0.32);
+  line-height: 1;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
-.hud-ring-wrap--urgent {
-  animation: timerUrgentPulse 0.55s ease-in-out infinite;
+.hud-ring-wrap--urgent,
+.hud-ring-wrap.timer--danger {
+  animation: timerDangerPulse 0.6s ease-in-out infinite;
 }
 
-.hud-timer-label--urgent {
-  color: #fecaca !important;
-  text-shadow: 0 0 8px rgba(239, 68, 68, 0.65) !important;
+.hud-timer-label--urgent,
+.hud-timer-label.timer--danger {
+  color: #ef4444 !important;
+  text-shadow:
+    0 0 10px rgba(239, 68, 68, 0.45),
+    0 1px 3px rgba(0, 0, 0, 0.5) !important;
+}
+
+.hud-root--solo .hud-timer-label:not(.hud-timer-label--urgent) {
+  text-shadow:
+    0 0 12px rgba(168, 85, 247, 0.28),
+    0 1px 3px rgba(0, 0, 0, 0.45);
 }
 
 .hud-stat-inner.value--revealed {
@@ -767,20 +850,22 @@ const acChipTitle = computed(() => {
   overflow: hidden;
 }
 
-.elim-solo-screen__death-flash {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  animation: deathFlash 0.55s ease-out forwards;
+.elim-solo-screen--cut {
+  animation: deathCutSolo 0.48s ease-out both;
 }
 
-@keyframes deathFlash {
+@keyframes deathCutSolo {
   0% {
-    background: rgba(255, 0, 0, 0.78);
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  40% {
+    transform: scale(1.04);
+    filter: brightness(1.55);
   }
   100% {
-    background: rgba(0, 0, 0, 0);
+    transform: scale(1);
+    filter: brightness(1);
   }
 }
 
@@ -788,72 +873,87 @@ const acChipTitle = computed(() => {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: radial-gradient(circle, #0a0616 0%, #000 100%);
+  background-color: #050308;
   opacity: 1;
 }
 
-.elim-solo-screen__grain {
+.elim-solo-screen__base::after {
+  content: '';
   position: absolute;
   inset: 0;
-  z-index: 1;
-  opacity: 0.09;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.15) 0%, rgba(0, 0, 0, 0.65) 100%);
   pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 180px 180px;
+}
+
+.elim-solo-screen__mark {
+  position: absolute;
+  left: 50%;
+  top: 26%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  width: min(48vw, 220px);
+  height: auto;
+  opacity: 0.88;
+  pointer-events: none;
+  filter: drop-shadow(0 0 20px rgba(168, 85, 247, 0.2));
 }
 
 .elim-solo-screen__content {
   position: relative;
-  z-index: 3;
-  max-width: min(92vw, 400px);
+  z-index: 2;
+  max-width: min(92vw, 420px);
   text-align: center;
+  margin-top: clamp(4.5rem, 22vh, 7rem);
+  animation: elimSoloIn 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
 }
 
-.elim-solo-screen__art {
-  width: min(72vw, 260px);
-  height: auto;
-  margin: 0 auto 1rem;
-  display: block;
-  border-radius: 20px;
-  filter: drop-shadow(0 12px 40px rgba(0, 0, 0, 0.55));
+@keyframes elimSoloIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .elim-solo-screen__kicker {
-  margin: 0 0 0.35rem;
-  font-size: 0.68rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.62rem;
   font-weight: 700;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: rgba(196, 181, 253, 0.5);
+  color: rgba(196, 181, 253, 0.38);
   font-family: 'Orbitron', sans-serif;
 }
 
 .elim-solo-screen__title {
   margin: 0;
   font-family: 'Orbitron', sans-serif;
-  font-size: clamp(1.75rem, 6vw, 2.5rem);
+  font-size: clamp(2.25rem, 10vw, 3.75rem);
   font-weight: 900;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.14em;
+  line-height: 1.05;
   color: #fecaca;
-  text-shadow:
-    0 0 28px rgba(248, 113, 113, 0.35),
-    0 2px 12px rgba(0, 0, 0, 0.6);
 }
 
-.elim-solo-screen__sub {
-  margin: 0.85rem 0 0;
-  font-size: clamp(0.88rem, 2.4vw, 1.05rem);
-  line-height: 1.5;
-  color: rgba(226, 232, 240, 0.88);
+.elim-solo-screen__subline {
+  margin: 1rem 0 0;
+  font-size: clamp(0.88rem, 2.8vw, 1.05rem);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: rgba(203, 213, 225, 0.78);
+  line-height: 1.45;
 }
 
 .elim-solo-screen__slot {
-  margin: 1rem 0 0;
-  font-size: 0.82rem;
-  font-weight: 700;
+  margin: 1.35rem 0 0;
+  font-size: clamp(1.35rem, 5vw, 2rem);
+  font-weight: 900;
   font-family: 'Orbitron', sans-serif;
-  letter-spacing: 0.12em;
-  color: rgba(196, 181, 253, 0.65);
+  letter-spacing: 0.1em;
+  color: rgba(248, 250, 252, 0.9);
 }
 
 .hud-root--solo .ac-chip {
@@ -867,16 +967,17 @@ const acChipTitle = computed(() => {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 7;
+  z-index: 8;
   display: inline-flex;
   align-items: center;
   gap: clamp(0.35rem, 1.5vmin, 0.55rem);
   border-radius: 999px;
   background: rgba(10, 6, 22, 0.94);
-  border: 1px solid rgba(168, 85, 247, 0.42);
+  border: 1px solid rgba(168, 85, 247, 0.38);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.32);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
 .ac-chip--used {
@@ -904,16 +1005,19 @@ const acChipTitle = computed(() => {
 .hud-zones {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 3;
 }
 
 .hud-block {
   position: absolute;
-  background: rgba(8, 6, 20, 0.94);
+  background: rgba(6, 4, 16, 0.96);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border: 1px solid rgba(168, 85, 247, 0.32);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.38);
+  transition:
+    border-color 0.35s ease,
+    box-shadow 0.35s ease;
 }
 
 .hud-root--solo .hud-block {
@@ -991,7 +1095,7 @@ const acChipTitle = computed(() => {
   color: #faf5ff;
   font-family: 'Orbitron', sans-serif;
   line-height: 1;
-  text-shadow: 0 0 18px rgba(168, 85, 247, 0.32);
+  text-shadow: 0 0 14px rgba(168, 85, 247, 0.22);
 }
 
 .hud-timer-stack {
@@ -1058,10 +1162,20 @@ const acChipTitle = computed(() => {
   padding: 0.45rem 0.58rem;
   border-radius: 11px;
   background: rgba(10, 6, 22, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   font-weight: 600;
-  color: rgba(196, 181, 253, 0.82);
   line-height: 1.38;
+  transition:
+    color 0.28s ease,
+    border-color 0.28s ease;
+}
+
+.hud-stat-inner--label {
+  color: rgba(148, 140, 180, 0.82);
+  font-weight: 700;
+  font-size: clamp(0.72rem, min(2.4vw, 2.7vh), 0.95rem);
+  letter-spacing: 0.1em;
+  font-family: ui-monospace, 'Cascadia Mono', monospace;
 }
 
 .hud-br .hud-stat-inner {
@@ -1069,8 +1183,8 @@ const acChipTitle = computed(() => {
 }
 
 .hud-stat-inner--open {
-  color: #f8fafc;
-  border-color: rgba(168, 85, 247, 0.28);
+  color: #f1f5f9;
+  border-color: rgba(168, 85, 247, 0.3);
 }
 
 .hud-stat-inner--wave {

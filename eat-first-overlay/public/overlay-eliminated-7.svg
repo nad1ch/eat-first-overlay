@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 280" width="400" height="280">
+  <rect width="400" height="280" fill="#050308"/>
+  <text x="200" y="118" text-anchor="middle" fill="#a855f7" font-family="system-ui,sans-serif" font-size="18" font-weight="800" letter-spacing="0.08em">SKILL ISSUE</text>
+  <rect x="120" y="138" width="160" height="2" fill="#a855f7" opacity="0.4"/>
+  <text x="200" y="178" text-anchor="middle" fill="#94a3b8" font-family="system-ui,sans-serif" font-size="10" letter-spacing="0.12em">stream edition</text>
+</svg>
