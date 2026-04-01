@@ -476,7 +476,7 @@ async function hostVotingToggle() {
     const curActive = Boolean(v?.active)
     const tp = String(v?.targetPlayer ?? '').trim() || 'p1'
     await setRoomVoting(gameId.value, !curActive, !curActive ? tp : '')
-    showToast(!curActive ? 'Голосування увімкнено' : 'Голосування вимкнено')
+    showToast(!curActive ? 'Голосування відкрито' : 'Голосування вимкнено')
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -577,7 +577,7 @@ async function adminNextSpeaker() {
         speakingDuration.value = 30
         timerSpeakerSlot.value = slot
         await startSpeakingTimer(gameId.value, slot, 30)
-        showToast(`Next: ${slot} · 30s`)
+        showToast(`Раунд почався · ${slot} · 30s`)
       } catch (e) {
         loadError.value = e instanceof Error ? e.message : String(e)
       }
@@ -912,6 +912,8 @@ function rerollActiveCardOnly() {
           :current-player-id="playerId"
           :spotlight-player-id="String(gameRoom.activePlayer || '')"
           :speaker-id="String(gameRoom.currentSpeaker || '')"
+          :voting-target-id="String(gameRoom.voting?.targetPlayer || '')"
+          :voting-active="Boolean(gameRoom.voting?.active)"
           @select="goToPlayer"
         />
         <aside class="side-tools side-tools--inline">

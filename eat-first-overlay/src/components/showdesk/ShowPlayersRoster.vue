@@ -8,6 +8,8 @@ const props = defineProps({
   currentPlayerId: { type: String, default: '' },
   spotlightPlayerId: { type: String, default: '' },
   speakerId: { type: String, default: '' },
+  votingTargetId: { type: String, default: '' },
+  votingActive: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['select'])
@@ -28,6 +30,8 @@ function slotNum(id) {
 function statusLine(p) {
   if (p.eliminated === true) return 'Вибув'
   if (String(p.id) === String(props.speakerId || '').trim()) return 'Говорить'
+  const vt = String(props.votingTargetId || '').trim()
+  if (props.votingActive && vt && String(p.id) === vt) return 'Ціль голосу'
   if (String(p.id) === String(props.spotlightPlayerId || '').trim()) return 'Spotlight'
   return '—'
 }
@@ -64,6 +68,11 @@ const playersSorted = computed(() => {
           speak: String(speakerId || '').trim() === p.id,
           spot: String(spotlightPlayerId || '').trim() === p.id,
           'pcard--hand': handUp(p),
+          'pcard--vote-target':
+            votingActive &&
+            String(votingTargetId || '').trim() === p.id &&
+            p.eliminated !== true &&
+            String(speakerId || '').trim() !== p.id,
         }"
         @click="emit('select', p.id)"
       >
@@ -141,6 +150,15 @@ const playersSorted = computed(() => {
 .pcard--hand:not(.elim) {
   border-color: rgba(251, 191, 36, 0.35);
   box-shadow: 0 0 12px rgba(251, 191, 36, 0.12);
+}
+
+.pcard--vote-target:not(.elim):not(.speak) {
+  border-color: rgba(56, 189, 248, 0.55);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.28);
+}
+
+.pcard--vote-target:not(.elim) .st {
+  color: rgba(125, 211, 252, 0.88);
 }
 
 .pcard.speak:not(.elim) {

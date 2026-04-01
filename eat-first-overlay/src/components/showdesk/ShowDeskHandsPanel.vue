@@ -21,12 +21,15 @@ const raised = computed(() => {
     String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' }),
   )
 })
+
+const manyHands = computed(() => raised.value.length > 3)
 </script>
 
 <template>
   <section class="hp">
     <h3 class="hp-title">Руки</h3>
-    <ul v-if="raised.length" class="hp-list">
+    <p v-if="manyHands" class="hp-summary">3 руки чекають</p>
+    <ul v-else-if="raised.length" class="hp-list">
       <li v-for="slot in raised" :key="slot" class="hp-li">✋ p{{ slotNum(slot) }}</li>
     </ul>
     <p v-else class="hp-empty">Ніхто не підняв руку</p>
@@ -68,6 +71,15 @@ const raised = computed(() => {
   font-size: 0.72rem;
   color: rgba(226, 232, 240, 0.88);
   padding: 0.15rem 0;
+  font-family: 'Orbitron', sans-serif;
+}
+
+.hp-summary {
+  margin: 0 0 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: rgba(254, 240, 138, 0.92);
   font-family: 'Orbitron', sans-serif;
 }
 

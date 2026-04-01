@@ -2,6 +2,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { fieldConfig } from '../characterState'
 import { saveVote } from '../services/gameService'
+import { playVoteSubmitSound } from '../utils/voteUiSound.js'
 
 const HUD_LEFT = ['profession', 'health', 'phobia']
 const HUD_RIGHT = ['luggage', 'fact', 'quirk']
@@ -209,6 +210,97 @@ const showVoteDetail = computed(
     props.votesReceived.length > 0,
 )
 
+/** Детальний список голосів з мікро-stagger (30–50ms) */
+const staggeredVotes = ref([])
+const staggerTimers = []
+
+function clearVoteStaggerTimers() {
+  while (staggerTimers.length) {
+    const t = staggerTimers.pop()
+    clearTimeout(t)
+  }
+}
+
+watch(
+  () => props.votesReceived,
+  (list) => {
+    clearVoteStaggerTimers()
+    const sorted = Array.isArray(list)
+      ? [...list].sort((a, b) =>
+          String(a.id).localeCompare(String(b.id), undefined, { numeric: true, sensitivity: 'base' }),
+        )
+      : []
+    if (sorted.length === 0) {
+      staggeredVotes.value = []
+      return
+    }
+    const nextById = Object.fromEntries(sorted.map((v) => [v.id, v]))
+    staggeredVotes.value = staggeredVotes.value.filter((v) => nextById[v.id]).map((v) => nextById[v.id])
+    const shown = new Set(staggeredVotes.value.map((v) => v.id))
+    const newcomers = sorted.filter((v) => !shown.has(v.id))
+    newcomers.forEach((v, i) => {
+      const tid = window.setTimeout(() => {
+        const latest = props.votesReceived
+        if (!Array.isArray(latest) || !latest.some((x) => x.id === v.id)) return
+        const cur = latest.find((x) => x.id === v.id)
+        if (!cur) return
+        if (staggeredVotes.value.some((x) => x.id === v.id)) return
+        staggeredVotes.value = [...staggeredVotes.value, cur].sort((a, b) =>
+          String(a.id).localeCompare(String(b.id), undefined, { numeric: true, sensitivity: 'base' }),
+        )
+      }, i * 45)
+      staggerTimers.push(tid)
+    })
+  },
+  { deep: true },
+)
+
+const bumpFor = ref(false)
+const bumpAgainst = ref(false)
+let bumpForT = null
+let bumpAgainstT = null
+
+watch(countFor, (n, prev) => {
+  if (prev === undefined || n === prev || !votingShown.value) return
+  bumpFor.value = true
+  if (bumpForT) clearTimeout(bumpForT)
+  bumpForT = window.setTimeout(() => {
+    bumpFor.value = false
+  }, 160)
+})
+
+watch(countAgainst, (n, prev) => {
+  if (prev === undefined || n === prev || !votingShown.value) return
+  bumpAgainst.value = true
+  if (bumpAgainstT) clearTimeout(bumpAgainstT)
+  bumpAgainstT = window.setTimeout(() => {
+    bumpAgainst.value = false
+  }, 160)
+})
+
+const isVoteTargetCard = computed(
+  () =>
+    !props.solo &&
+    votingShown.value &&
+    String(props.player?.id ?? '') === votingTargetNorm.value,
+)
+
+const handPop = ref(false)
+let handPopT = null
+
+watch(
+  () => props.handRaised,
+  (up, was) => {
+    if (was === undefined) return
+    if (!up || was) return
+    handPop.value = true
+    if (handPopT) clearTimeout(handPopT)
+    handPopT = window.setTimeout(() => {
+      handPop.value = false
+    }, 120)
+  },
+)
+
 const voteAckText = computed(() => {
   if (localVoteChoice.value && !props.hasVotedThisRound) return 'Твій голос зараховано'
   return ''
@@ -237,6 +329,10 @@ watch(
 
 onUnmounted(() => {
   if (voteFlashTimer) clearTimeout(voteFlashTimer)
+  clearVoteStaggerTimers()
+  if (bumpForT) clearTimeout(bumpForT)
+  if (bumpAgainstT) clearTimeout(bumpAgainstT)
+  if (handPopT) clearTimeout(handPopT)
 })
 
 const voteBusy = ref(false)
@@ -262,6 +358,7 @@ async function submitVote(choice) {
     const res = await saveVote(gid, voter, target, choice, rr)
     if (res.ok) {
       localVoteChoice.value = choice === 'against' ? 'against' : 'for'
+      playVoteSubmitSound(0.14)
     }
   } catch (e) {
     console.error('[saveVote]', e)
@@ -283,6 +380,7 @@ async function submitVote(choice) {
       'card-grid--dimmed': dimmed && !isEliminated(player),
       'card-grid--speaker': isTimerTarget && !isEliminated(player),
       'card-grid--nominated': isNominated && !isEliminated(player),
+      'card-grid--vote-target': isVoteTargetCard,
     }"
   >
     <div v-if="isEliminated(player)" class="card-elim-screen card-elim-screen--cut">
@@ -296,6 +394,7 @@ async function submitVote(choice) {
       <span
         v-if="handRaised && !suppressHandBadge"
         class="hand-badge hand-badge--grid"
+        :class="{ 'hand-badge--pop': handPop }"
         aria-hidden="true"
         title="Піднята рука"
         >✋</span
@@ -353,12 +452,12 @@ async function submitVote(choice) {
         <p class="vote-strip__title">ГОЛОСУВАННЯ</p>
         <p class="vote-strip__target">{{ voteHintLine }}</p>
         <p v-if="showVoteScore" class="vote-score">
-          <span class="vote-score__n">👍 {{ countFor }}</span>
-          <span class="vote-score__n">👎 {{ countAgainst }}</span>
+          <span class="vote-score__n" :class="{ 'vote-score__n--bump': bumpFor }">👍 {{ countFor }}</span>
+          <span class="vote-score__n" :class="{ 'vote-score__n--bump': bumpAgainst }">👎 {{ countAgainst }}</span>
         </p>
         <p v-if="showVoteDetail && !voteInteractive" class="vote-tally">
           <span
-            v-for="v in votesReceived"
+            v-for="v in staggeredVotes"
             :key="v.id"
             class="vote-tally__it"
           >{{ playerIdDisplay({ id: v.id }) }}{{ v.choice === 'against' ? '👎' : '👍' }}</span>
@@ -402,6 +501,8 @@ async function submitVote(choice) {
       'hud-root--cinema': cinema,
       'hud-root--drama': drama,
       'hud-root--nominated': isNominated && !isEliminated(player),
+      'hud-root--nominee-breathe': solo && isNominated && !isEliminated(player),
+      'hud-root--vote-target-ambient': solo && isVoteTargetSelf && !isEliminated(player),
     }"
   >
     <div v-if="isEliminated(player)" class="elim-solo-screen elim-solo-screen--cut">
@@ -445,7 +546,12 @@ async function submitVote(choice) {
           'hud-tr--urgent': timerUrgent,
         }"
       >
-        <div v-if="handRaised" class="hand-wait-hud" aria-hidden="true">
+        <div
+          v-if="handRaised"
+          class="hand-wait-hud"
+          :class="{ 'hand-wait-hud--pop': handPop }"
+          aria-hidden="true"
+        >
           <span class="hand-wait-hud__ico">✋</span>
           <span class="hand-wait-hud__txt">ЧЕКАЮ СЛОВА</span>
         </div>
@@ -521,12 +627,12 @@ async function submitVote(choice) {
         <p v-if="voteInteractive && isVoteTargetSelf" class="vote-strip__dramatic">ТЕБЕ ГОЛОСУЮТЬ</p>
         <p class="vote-strip__target">{{ voteHintLine }}</p>
         <p v-if="showVoteScore" class="vote-score vote-score--solo">
-          <span class="vote-score__n">👍 {{ countFor }}</span>
-          <span class="vote-score__n">👎 {{ countAgainst }}</span>
+          <span class="vote-score__n" :class="{ 'vote-score__n--bump': bumpFor }">👍 {{ countFor }}</span>
+          <span class="vote-score__n" :class="{ 'vote-score__n--bump': bumpAgainst }">👎 {{ countAgainst }}</span>
         </p>
         <p v-if="voteInteractive && showVoteDetail" class="vote-tally vote-tally--solo">
           <span
-            v-for="v in votesReceived"
+            v-for="v in staggeredVotes"
             :key="v.id"
             class="vote-tally__it"
           >{{ playerIdDisplay({ id: v.id }) }}{{ v.choice === 'against' ? '👎' : '👍' }}</span>
@@ -621,6 +727,12 @@ async function submitVote(choice) {
       0 0 24px rgba(220, 38, 38, 0.3);
     border-color: rgba(220, 38, 38, 0.58);
   }
+}
+
+.card-grid--vote-target:not(.card-grid--eliminated) {
+  box-shadow:
+    inset 0 0 28px rgba(220, 38, 38, 0.28),
+    0 6px 20px rgba(0, 0, 0, 0.32);
 }
 
 .card-grid--dimmed {
@@ -778,6 +890,21 @@ async function submitVote(choice) {
   background: rgba(8, 6, 18, 0.88);
   border: 1px solid rgba(251, 191, 36, 0.35);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  transform-origin: center;
+}
+
+.hand-badge--pop {
+  animation: handPopNudge 0.12s ease;
+}
+
+@keyframes handPopNudge {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
 }
 
 .vote-strip {
@@ -862,7 +989,23 @@ async function submitVote(choice) {
 }
 
 .vote-score__n {
+  display: inline-block;
   white-space: nowrap;
+  transform-origin: center;
+}
+
+.vote-score__n--bump {
+  animation: voteCountBump 0.15s ease;
+}
+
+@keyframes voteCountBump {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15);
+  }
 }
 
 .vote-strip__voted-only {
@@ -1420,6 +1563,50 @@ async function submitVote(choice) {
   50% {
     outline-color: rgba(220, 38, 38, 0.62);
   }
+}
+
+.hud-root--solo.hud-root--nominee-breathe:not(.hud-root--eliminated) {
+  position: relative;
+}
+
+.hud-root--solo.hud-root--nominee-breathe:not(.hud-root--eliminated)::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 85% 70% at 50% 45%,
+    rgba(220, 38, 38, 0.22) 0%,
+    transparent 62%
+  );
+  animation: nomineeBreatheBg 3.5s ease-in-out infinite;
+}
+
+@keyframes nomineeBreatheBg {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.65;
+    transform: scale(1.04);
+  }
+}
+
+.hud-root--solo.hud-root--vote-target-ambient:not(.hud-root--eliminated)::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 35%, rgba(220, 38, 38, 0.45) 0%, transparent 55%);
+  opacity: 0.05;
+}
+
+.hand-wait-hud--pop {
+  animation: handPopNudge 0.12s ease;
 }
 
 .hud-root--solo.hud-root--nominated:not(.hud-root--eliminated) .hud-block:not(.hud-tr) {

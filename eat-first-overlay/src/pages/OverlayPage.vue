@@ -279,7 +279,7 @@ watch(roomRound, (r, prev) => {
   if (overlayRoundTimer) clearTimeout(overlayRoundTimer)
   overlayRoundTimer = setTimeout(() => {
     overlayRoundPulse.value = false
-  }, 220)
+  }, 260)
 })
 
 function handsMap() {
@@ -353,6 +353,10 @@ onUnmounted(() => {
     >
       ✋ +{{ handsClusterExtra }}
     </p>
+    <div
+      class="overlay-body"
+      :class="{ 'overlay-body--all-voted': showAllVotedBanner }"
+    >
     <header
       v-if="!isPersonal"
       class="board-head"
@@ -416,6 +420,7 @@ onUnmounted(() => {
         v-bind="cardTimerProps(p)"
       />
     </div>
+    </div>
 
     <Teleport to="body">
       <div
@@ -440,16 +445,36 @@ onUnmounted(() => {
 }
 
 .overlay-root--round-pulse {
-  animation: overlayRoundScene 0.2s ease both;
+  animation: roundScene 0.25s ease both;
 }
 
-@keyframes overlayRoundScene {
-  from {
-    opacity: 0.74;
+@keyframes roundScene {
+  0% {
+    transform: scale(1.02);
+    opacity: 0.8;
   }
-  to {
+  100% {
+    transform: scale(1);
     opacity: 1;
   }
+}
+
+.overlay-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  transform-origin: top center;
+  transition: transform 0.35s ease;
+}
+
+.overlay-body--all-voted {
+  transform: scale(1.01);
+}
+
+.overlay-root--personal .overlay-body {
+  flex: 1;
+  min-height: 100vh;
 }
 
 .overlay-edge-hint {
@@ -468,6 +493,30 @@ onUnmounted(() => {
   left: max(0.5rem, env(safe-area-inset-left, 0px));
   font-size: clamp(0.52rem, min(1.4vw, 1.5vh), 0.62rem);
   color: rgba(187, 247, 208, 0.92);
+  animation:
+    allVotedFade 0.25s ease-out,
+    allVotedGlow 1.2s ease-in-out;
+}
+
+@keyframes allVotedFade {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes allVotedGlow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 4px rgba(74, 222, 128, 0.35));
+  }
+  50% {
+    filter: drop-shadow(0 0 12px rgba(74, 222, 128, 0.65));
+  }
 }
 
 .overlay-edge-hint--hands {
@@ -494,6 +543,8 @@ onUnmounted(() => {
   background: transparent;
   padding: 0;
   margin: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .overlay-root--drama {
