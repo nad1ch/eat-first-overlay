@@ -1,10 +1,19 @@
-import { fieldConfig } from '../characterState'
+import { FIELD_KEYS, assignRandomActiveCard } from '../characterState'
+import { scenarios } from './scenarios.js'
+import {
+  professions,
+  healthConditions,
+  phobias,
+  baggage,
+  facts,
+  quirks,
+} from './pools/characterPools.js'
 
 function pick(arr) {
   return arr[Math.floor(Math.random() * arr.length)]
 }
 
-export const ages = ['22', '24', '27', '29', '31', '33', '36', '41']
+export const ages = ['20', '22', '24', '26', '28', '30', '32', '35', '38', '41', '45']
 
 export const genders = ['Чол.', 'Жін.', 'Non-binary', 'Не вказано']
 
@@ -25,122 +34,84 @@ export const displayNames = [
   'Світлана',
   'Ігор',
   'Христина',
+  'Віка',
+  'Роман',
+  'Леся',
+  'Петро',
 ]
 
-export const professions = [
-  'Стрімер',
-  'Кухар',
-  'Парамедик',
-  'Вчитель історії',
-  'Актор дубляжу',
-  'Сомельє',
-  'Інженер залізниці',
-  'Фермер',
-  'Діджей',
-  'Кібербезпека',
-  'Перукар',
-  'Архітектор',
-  'Журналіст',
-  'Пілот дронів',
-  'Бібліотекар',
-  'Клоун на дитячих святах',
-]
-
-export const healthConditions = [
-  'Ідеальне здоров’я',
-  'Хронічна алергія на пил',
-  'Слабкі коліна',
-  'Безсоння',
-  'Астма (легка)',
-  'Дальтонізм',
-  'Мігрені раз на тиждень',
-  'Шлунок «чутливий»',
-  'Тиск скаче від кави',
-  'Перелом зап’ястя 3 роки тому',
-  'Вегето-судинна дистонія',
-  'Залізничний травматизм (мінімальний)',
-]
-
-export const phobias = [
-  'Висота',
-  'Павуки',
-  'Тісні ліфти',
-  'Гучні звуки',
-  'Темрява',
-  'Змії',
-  'Клоуни',
-  'Глибина води',
-  'Голки',
-  'Натовпи',
-  'Старі ляльки',
-  'Тиша в лісі',
-]
-
-export const baggage = [
-  'Ніж мультитул',
-  'Котяча переноска (порожня)',
-  'Блокнот з паролями (зашифрований)',
-  'Термос з борщем',
-  'Павербанк 20000 mAh',
-  'Міні-аптечка',
-  'Гітара без струн',
-  'Настільна гра «Монополія»',
-  'Фото кота',
-  'Радіоприймач',
-  'Пляшка віскі (закрита)',
-  'Набір для шиття',
-]
-
-export const facts = [
-  'Колись виграв турнір з Hearthstone',
-  'Вміє читати задом наперед',
-  'Має двоюрідного брата в Канаді',
-  'Ніколи не їв буряк до 25 років',
-  'Спав у аеропорту 8 годин',
-  'Знає 4 мови жестів (різних країн)',
-  'Був на весіллі знайомого знайомого',
-  'Мріє про власну кав’ярню',
-  'Боїться оголошення «затримка рейсу»',
-  'Колись працював у цирку (1 день)',
-  'Має тату, яку ніхто не бачив',
-  'Виграв у лотерею 50 грн',
-]
-
-export const traits = [
-  'Завжди жартує в невдалий момент',
-  'Говорить надто швидко коли нервує',
-  'Не їсть після 20:00',
-  'Любить сперечатися заради процесу',
-  'Пам’ятає всі дні народження',
-  'Не дивиться хорори',
-  'Збирає вініл',
-  'Не терпить «крижану тишу»',
-  'Постійно втрачає навушники',
-  'Робить голос «радіоведучого» в стресі',
-  'Не п’є газоване',
-  'Засинає під подкасти',
-]
-
-const POOLS = {
+const DEFAULT_POOLS = {
   profession: professions,
   health: healthConditions,
   phobia: phobias,
   luggage: baggage,
   fact: facts,
-  quirk: traits,
+  quirk: quirks,
+}
+
+export function poolForScenarioField(scenarioId, fieldKey) {
+  const sc = scenarioId && scenarios[scenarioId]
+  if (sc && Array.isArray(sc[fieldKey]) && sc[fieldKey].length) {
+    return sc[fieldKey]
+  }
+  return DEFAULT_POOLS[fieldKey] ?? ['—']
 }
 
 /**
- * Випадково заповнює ім’я та всі характеристики; усі revealed → false.
- * Поле eliminated не змінює.
+ * @param {import('vue').Reactive | object} target
+ * @param {{ scenarioId?: string, keys?: string[], skipActiveCard?: boolean }} [options]
  */
-export function rollRandomIntoCharacter(target) {
+export function rollRandomIntoCharacter(target, options = {}) {
+  const sid =
+    options.scenarioId && scenarios[options.scenarioId] ? options.scenarioId : 'classic_crash'
+  const keys = Array.isArray(options.keys) && options.keys.length ? options.keys : FIELD_KEYS
+
   target.name = pick(displayNames)
   target.age = pick(ages)
   target.gender = pick(genders)
-  for (const { key } of fieldConfig) {
-    const pool = POOLS[key]
-    target[key].value = pick(pool)
-    target[key].revealed = false
+  for (const key of keys) {
+    const slot = target[key]
+    if (!slot || typeof slot !== 'object') continue
+    const pool = poolForScenarioField(sid, key)
+    slot.value = pick(pool)
+    slot.revealed = false
   }
+  if (!options.skipActiveCard) {
+    assignRandomActiveCard(target)
+  }
+}
+
+export function rollFieldValue(fieldKey, scenarioId = 'classic_crash') {
+  const pool = poolForScenarioField(scenarioId, fieldKey)
+  return pick(pool)
+}
+
+export function rollKeysIntoCharacter(target, keys, scenarioId = 'classic_crash') {
+  const sid = scenarioId && scenarios[scenarioId] ? scenarioId : 'classic_crash'
+  for (const key of keys) {
+    const slot = target[key]
+    if (!slot || typeof slot !== 'object') continue
+    const pool = poolForScenarioField(sid, key)
+    slot.value = pick(pool)
+    slot.revealed = false
+  }
+}
+
+export function buildRandomPlayerDocument(scenarioId = 'classic_crash') {
+  const sid = scenarioId && scenarios[scenarioId] ? scenarioId : 'classic_crash'
+  const out = {
+    eliminated: false,
+    name: pick(displayNames),
+    age: pick(ages),
+    gender: pick(genders),
+    activeCardRequest: false,
+  }
+  for (const key of FIELD_KEYS) {
+    out[key] = {
+      value: pick(poolForScenarioField(sid, key)),
+      revealed: false,
+    }
+  }
+  assignRandomActiveCard(out)
+  return out
 }

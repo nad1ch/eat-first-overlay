@@ -2,9 +2,41 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ADMIN_KEY } from '../config/access.js'
-import { rollRandomIntoCharacter } from '../data/randomPools.js'
-import { characterState, fieldConfig, applyRemoteCharacterData, snapshotCharacter } from '../characterState'
-import { saveCharacter, fetchCharacter, subscribeToGameRoom, saveGameRoom } from '../services/gameService'
+import {
+  rollFieldValue,
+  rollKeysIntoCharacter,
+  rollRandomIntoCharacter,
+} from '../data/randomPools.js'
+import { scenarioIds, getScenarioLabel, getScenarioHint } from '../data/scenarios.js'
+import {
+  GAME_TITLE,
+  characterState,
+  CORE_FIELD_KEYS,
+  fieldConfig,
+  applyRemoteCharacterData,
+  snapshotCharacter,
+} from '../characterState'
+import { pickRandomActiveCardTemplate } from '../data/activeCards.js'
+import { applyActiveCardEffect } from '../services/activeCardEffects.js'
+import {
+  saveCharacter,
+  fetchCharacter,
+  subscribeToGameRoom,
+  subscribeToPlayers,
+  saveGameRoom,
+  applyGlobalAction,
+  startSpeakingTimer,
+  clearSpeakingTimer,
+  pauseSpeakingTimer,
+  resumeSpeakingTimer,
+  resetGameRoomControls,
+  setGamePhase,
+  regenerateAllPlayersRandom,
+} from '../services/gameService'
+import { millisFromFirestore } from '../utils/firestoreTime.js'
+import ShowDeskHeader from '../components/showdesk/ShowDeskHeader.vue'
+import ShowDeskHostTools from '../components/showdesk/ShowDeskHostTools.vue'
+import ShowPlayersRoster from '../components/showdesk/ShowPlayersRoster.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -20,17 +52,15 @@ const playerId = computed(() => String(route.query.player ?? 'p1'))
 
 const modeLabel = computed(() => {
   if (adminAccessDenied.value) return 'Access denied'
-  if (isAdmin.value) return 'Admin mode'
-  return 'Player mode'
+  if (isAdmin.value) return 'Ведучий'
+  return 'Гравець'
 })
 
-/** Ведучий: усі гравці в сітці. */
 const overlayHrefGlobal = computed(() => ({
   path: '/overlay',
   query: { game: gameId.value },
 }))
 
-/** Стрімер поточного слота: тільки цей player. */
 const overlayHrefPersonal = computed(() => ({
   path: '/overlay',
   query: { game: gameId.value, player: playerId.value },
@@ -38,7 +68,6 @@ const overlayHrefPersonal = computed(() => ({
 
 const syncing = ref(false)
 const loadError = ref(null)
-
 const newPlayerId = ref('')
 const draftGameId = ref('')
 
@@ -51,12 +80,29 @@ watch(
 )
 
 const PLAYER_SLOTS = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10']
+const PHASE_OPTIONS = ['intro', 'discussion', 'voting', 'final']
+
+const selectedScenario = ref('classic_crash')
+const timerSpeakerSlot = ref('p1')
+const speakingDuration = ref(30)
+const globalFieldPick = ref('profession')
 
 const gameRoom = ref({})
+const allPlayers = ref([])
 let unsubGameRoom = null
+let unsubPlayers = null
 
 const toast = ref('')
 let toastTimer = null
+
+const tick = ref(Date.now())
+let tickTimer = null
+
+onMounted(() => {
+  tickTimer = window.setInterval(() => {
+    tick.value = Date.now()
+  }, 250)
+})
 
 const personalUrlAbsolute = computed(() => {
   const h = router.resolve(overlayHrefPersonal.value).href
@@ -75,7 +121,7 @@ function showToast(msg) {
   clearTimeout(toastTimer)
   toastTimer = setTimeout(() => {
     toast.value = ''
-  }, 2200)
+  }, 2400)
 }
 
 async function copyPersonal() {
@@ -83,7 +129,7 @@ async function copyPersonal() {
     await navigator.clipboard.writeText(personalUrlAbsolute.value)
     showToast('Скопійовано')
   } catch {
-    showToast('Не вдалося скопіювати')
+    showToast('Помилка копіювання')
   }
 }
 
@@ -92,27 +138,187 @@ async function copyGlobal() {
     await navigator.clipboard.writeText(globalUrlAbsolute.value)
     showToast('Скопійовано')
   } catch {
-    showToast('Не вдалося скопіювати')
+    showToast('Помилка копіювання')
+  }
+}
+
+function cleanupSubs() {
+  if (unsubGameRoom) {
+    unsubGameRoom()
+    unsubGameRoom = null
+  }
+  if (unsubPlayers) {
+    unsubPlayers()
+    unsubPlayers = null
   }
 }
 
 watch(
-  [gameId, adminAccessDenied],
+  [gameId, adminAccessDenied, isAdmin],
   () => {
-    if (unsubGameRoom) {
-      unsubGameRoom()
-      unsubGameRoom = null
-    }
+    cleanupSubs()
     if (adminAccessDenied.value) {
       gameRoom.value = {}
+      allPlayers.value = []
       return
     }
     unsubGameRoom = subscribeToGameRoom(gameId.value, (d) => {
       gameRoom.value = d && typeof d === 'object' ? d : {}
     })
+    if (isAdmin.value) {
+      unsubPlayers = subscribeToPlayers(gameId.value, (list) => {
+        allPlayers.value = list
+      })
+    } else {
+      allPlayers.value = []
+    }
   },
   { immediate: true },
 )
+
+const aliveCount = computed(
+  () => allPlayers.value.filter((p) => p.eliminated !== true).length,
+)
+
+watch(
+  () => gameRoom.value?.activeScenario,
+  (a) => {
+    if (typeof a === 'string' && a && scenarioIds.includes(a) && selectedScenario.value !== a) {
+      selectedScenario.value = a
+    }
+  },
+)
+
+const scenarioForRolls = computed(
+  () => String(gameRoom.value?.activeScenario || selectedScenario.value || 'classic_crash'),
+)
+
+const myStatusLabel = computed(() => {
+  if (characterState.eliminated) return 'ВИБУВ'
+  const ap = String(gameRoom.value?.activePlayer ?? '').trim()
+  if (ap && ap === playerId.value) return 'АКТИВНИЙ'
+  return 'ЧЕКАЄШ'
+})
+
+const hostTimerRemaining = computed(() => {
+  const gr = gameRoom.value
+  if (gr?.timerPaused === true) {
+    const f = Number(gr?.timerRemainingFrozen)
+    if (Number.isFinite(f) && f >= 0) return f
+    return null
+  }
+  const start = millisFromFirestore(gr?.timerStartedAt)
+  const total = Number(gr?.speakingTimer) || 0
+  if (start == null || total <= 0) return null
+  const elapsed = Math.floor((tick.value - start) / 1000)
+  return Math.max(0, total - elapsed)
+})
+
+async function persistScenarioChoice() {
+  if (!isAdmin.value) return
+  try {
+    await saveGameRoom(gameId.value, { activeScenario: selectedScenario.value })
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function controlStartRound() {
+  if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    await setGamePhase(gameId.value, 'discussion')
+    showToast('Фаза: discussion')
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function controlPauseShow() {
+  if (!isAdmin.value) return
+  const r = hostTimerRemaining.value
+  try {
+    loadError.value = null
+    if (r != null && r >= 0 && gameRoom.value?.timerPaused !== true) {
+      await pauseSpeakingTimer(gameId.value, r)
+      showToast('Таймер на паузі')
+    } else if (gameRoom.value?.timerPaused === true) {
+      showToast('Уже на паузі')
+    } else {
+      showToast('Таймер не активний')
+    }
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function controlReset() {
+  if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    await resetGameRoomControls(gameId.value)
+    showToast('Кімнату скинуто')
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function adminStartSpeakingTimer() {
+  if (!isAdmin.value) return
+  const slot = String(timerSpeakerSlot.value || 'p1').trim() || 'p1'
+  const sec = Number(speakingDuration.value) || 30
+  try {
+    loadError.value = null
+    await startSpeakingTimer(gameId.value, slot, sec)
+    showToast(`${slot} · ${sec}s`)
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function adminPauseTimerOnly() {
+  const r = hostTimerRemaining.value
+  if (r == null) {
+    showToast('Немає активного таймера')
+    return
+  }
+  try {
+    await pauseSpeakingTimer(gameId.value, r)
+    showToast('Пауза')
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function adminResumeTimer() {
+  try {
+    await resumeSpeakingTimer(gameId.value)
+    showToast('Продовжено')
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function adminClearTimer() {
+  if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    await clearSpeakingTimer(gameId.value)
+    showToast('Таймер знято')
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function setPhase(ph) {
+  if (!isAdmin.value) return
+  try {
+    await setGamePhase(gameId.value, ph)
+    showToast(`Фаза: ${ph}`)
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
 
 async function setSpotlightPlayer(slot) {
   if (!isAdmin.value) return
@@ -128,6 +334,93 @@ async function setSpotlightPlayer(slot) {
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
+}
+
+function generateRandomCharacter() {
+  if (!isAdmin.value) return
+  rollRandomIntoCharacter(characterState, { scenarioId: selectedScenario.value })
+}
+
+function generateCoreOnly() {
+  if (!isAdmin.value) return
+  rollKeysIntoCharacter(characterState, CORE_FIELD_KEYS, selectedScenario.value)
+}
+
+async function globalRollField(fieldKey) {
+  if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    const sid = scenarioForRolls.value
+    await applyGlobalAction(gameId.value, fieldKey, () => rollFieldValue(fieldKey, sid))
+    showToast(`Усім: ${fieldKey}`)
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function globalChaos() {
+  const k = CORE_FIELD_KEYS[Math.floor(Math.random() * CORE_FIELD_KEYS.length)]
+  await globalRollField(k)
+}
+
+async function globalRollSelected() {
+  await globalRollField(globalFieldPick.value)
+}
+
+async function regenerateAllPlayers() {
+  if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    await regenerateAllPlayersRandom(gameId.value, selectedScenario.value)
+    showToast('Усіх перегенеровано')
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function confirmActiveCardEffect() {
+  if (!isAdmin.value) return
+  const eid = String(characterState.activeCard?.effectId || '')
+  if (!eid) {
+    showToast('Немає effectId у карти')
+    return
+  }
+  try {
+    loadError.value = null
+    const res = await applyActiveCardEffect(
+      gameId.value,
+      playerId.value,
+      eid,
+      scenarioForRolls.value,
+    )
+    if (!res.ok) {
+      showToast(res.message)
+      return
+    }
+    const fresh = await fetchCharacter(gameId.value, playerId.value)
+    syncing.value = true
+    applyRemoteCharacterData(characterState, fresh)
+    characterState.activeCard.used = true
+    characterState.activeCardRequest = false
+    syncing.value = false
+    await saveCharacter(gameId.value, playerId.value, snapshotCharacter(characterState))
+    showToast(res.message)
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function clearCardRequest() {
+  if (!isAdmin.value) return
+  characterState.activeCardRequest = false
+  await saveCharacter(gameId.value, playerId.value, snapshotCharacter(characterState))
+  showToast('Запит знято')
+}
+
+function requestCardFromHost() {
+  if (isAdmin.value) return
+  if (characterState.activeCard.used) return
+  characterState.activeCardRequest = true
 }
 
 let saveTimer = null
@@ -213,9 +506,10 @@ onMounted(() => {
 onUnmounted(() => {
   clearTimeout(saveTimer)
   clearTimeout(toastTimer)
-  if (unsubGameRoom) {
-    unsubGameRoom()
-    unsubGameRoom = null
+  cleanupSubs()
+  if (tickTimer != null) {
+    window.clearInterval(tickTimer)
+    tickTimer = null
   }
 })
 
@@ -233,202 +527,175 @@ function toggleEliminated() {
   characterState.eliminated = !characterState.eliminated
 }
 
-function generateRandomCharacter() {
+function rerollActiveCardOnly() {
   if (!isAdmin.value) return
-  rollRandomIntoCharacter(characterState)
+  const t = pickRandomActiveCardTemplate()
+  characterState.activeCard = {
+    title: t.title,
+    description: t.description,
+    used: false,
+    effectId: t.effectId,
+    templateId: t.templateId,
+  }
 }
 </script>
 
 <template>
   <div v-if="adminAccessDenied" class="access-denied">
     <h1 class="denied-title">Access denied</h1>
-    <p class="denied-text">Невірний або відсутній параметр <code>key</code> для режиму адміністратора.</p>
-    <p class="denied-hint">Гравці відкривають панель без <code>role=admin</code> — ключ не потрібен.</p>
+    <p class="denied-text">Невірний або відсутній <code>key</code> для ведучого.</p>
   </div>
 
-  <div v-else class="control">
-    <div class="mode-bar" :class="{ admin: isAdmin, player: !isAdmin }">
-      <span class="mode-text">{{ modeLabel }}</span>
-      <span v-if="!isAdmin && !playerRevealLocked" class="mode-hint">Тільки відкриття карт; текст змінює адмін.</span>
-      <span v-if="!isAdmin && playerRevealLocked" class="mode-hint warn">Вибув: відкриття карт вимкнено.</span>
+  <div v-else class="desk">
+    <div class="mode-strip" :class="{ admin: isAdmin, player: !isAdmin }">
+      <span class="mode-label">{{ modeLabel }}</span>
+      <span v-if="!isAdmin" class="status-pill" :data-s="myStatusLabel">{{ myStatusLabel }}</span>
     </div>
 
-    <header class="header">
-      <h1 class="app-title">Eat First</h1>
-      <p class="sub">Панель керування оверлеєм (Firestore)</p>
-      <p class="ids">
-        <span class="id-pill">game={{ gameId }}</span>
-        <span class="id-pill">player={{ playerId }}</span>
-      </p>
-      <p class="hint">
-        Адмін (збережи в приватних закладках):
-        <code>?game=test1&amp;player=p1&amp;role=admin&amp;key=…</code>
-        · Гравець:
-        <code>?game=test1&amp;player=p1</code>
-        · Overlay глобальний:
-        <code>/overlay?game=test1</code>
-        · Overlay стрімера:
-        <code>/overlay?game=test1&amp;player=p1</code>
-      </p>
-
-      <section v-if="isAdmin" class="admin-tools panel-inline">
-        <h2 class="tools-title">Гра та гравці</h2>
-        <div class="tool-row">
-          <label class="field-label" for="game-id">game (id кімнати)</label>
-          <div class="row-controls">
-            <input
-              id="game-id"
-              v-model="draftGameId"
-              type="text"
-              class="input"
-              placeholder="test1"
-              autocomplete="off"
-            />
-            <button type="button" class="btn-secondary" @click="applyNewGame">Застосувати</button>
-          </div>
-        </div>
-        <div class="tool-row">
-          <span class="field-label">Швидко: гравці</span>
-          <div class="chip-row">
-            <button
-              v-for="slot in PLAYER_SLOTS"
-              :key="slot"
-              type="button"
-              class="chip"
-              :class="{ active: playerId === slot }"
-              @click="goToPlayer(slot)"
-            >
-              {{ slot }}
-            </button>
-          </div>
-        </div>
-        <div class="tool-row">
-          <span class="field-label">Активний гравець (spotlight на overlay)</span>
-          <p class="spotlight-hint">
-            Зараз:
-            <strong>{{ String(gameRoom.activePlayer || '').trim() || '—' }}</strong>
-          </p>
-          <div class="chip-row">
-            <button
-              v-for="slot in PLAYER_SLOTS"
-              :key="'sp-' + slot"
-              type="button"
-              class="chip chip-spotlight"
-              :class="{ active: String(gameRoom.activePlayer || '') === slot }"
-              @click="setSpotlightPlayer(slot)"
-            >
-              {{ slot }}
-            </button>
-            <button type="button" class="btn-secondary" @click="setSpotlightPlayer('')">
-              Вимкнути
-            </button>
-          </div>
-        </div>
-        <div class="tool-row">
-          <label class="field-label" for="new-player">Новий персонаж (id гравця)</label>
-          <div class="row-controls">
-            <input
-              id="new-player"
-              v-model="newPlayerId"
-              type="text"
-              class="input"
-              placeholder="наприклад p9 або streamer_name"
-              autocomplete="off"
-              @keydown.enter.prevent="createAndGoToPlayer"
-            />
-            <button type="button" class="btn-secondary" @click="createAndGoToPlayer">Створити / відкрити</button>
-          </div>
-        </div>
-      </section>
-
-      <nav class="nav nav-overlays">
-        <RouterLink :to="overlayHrefGlobal" class="link" target="_blank">Overlay — усі гравці</RouterLink>
-        <RouterLink :to="overlayHrefPersonal" class="link link-accent" target="_blank">Overlay — тільки цей гравець</RouterLink>
-      </nav>
-
-      <section class="panel copy-panel" aria-label="Посилання для OBS">
-        <h2 class="panel-title">Посилання для стріму (OBS)</h2>
-        <div class="copy-line">
-          <div class="copy-info">
-            <span class="copy-emoji">🎥</span>
-            <div>
-              <span class="copy-label">Твій overlay</span>
-              <p class="copy-url">{{ personalUrlAbsolute }}</p>
-            </div>
-          </div>
-          <button type="button" class="btn-copy" @click="copyPersonal">Копіювати</button>
-        </div>
-        <div class="copy-line">
-          <div class="copy-info">
-            <span class="copy-emoji">🎬</span>
-            <div>
-              <span class="copy-label">Overlay усіх гравців</span>
-              <p class="copy-url">{{ globalUrlAbsolute }}</p>
-            </div>
-          </div>
-          <button type="button" class="btn-copy" @click="copyGlobal">Копіювати</button>
-        </div>
-      </section>
-
-      <p v-if="loadError" class="error" role="alert">{{ loadError }}</p>
-    </header>
-
-    <Teleport to="body">
-      <div v-if="toast" class="toast" role="status">{{ toast }}</div>
-    </Teleport>
-
-    <section class="panel">
-      <div class="panel-head">
-        <h2 class="panel-title">Персонаж</h2>
-        <button
-          v-if="isAdmin"
-          type="button"
-          class="btn-generate"
-          @click="generateRandomCharacter"
-        >
-          🎲 Generate
-        </button>
-      </div>
-      <label class="field-label" :for="isAdmin ? 'char-name' : 'char-name-ro'">Ім’я</label>
-      <input
-        v-if="isAdmin"
-        id="char-name"
-        v-model="characterState.name"
-        type="text"
-        class="input"
-        placeholder="Введіть ім’я"
-        autocomplete="off"
+    <template v-if="isAdmin">
+      <ShowDeskHeader
+        :game-title="GAME_TITLE"
+        :game-id="gameId"
+        :game-phase="String(gameRoom.gamePhase || 'intro')"
+        :scenario-label="getScenarioLabel(selectedScenario)"
+        :alive-count="aliveCount"
+        :personal-url="personalUrlAbsolute"
+        :global-url="globalUrlAbsolute"
+        @copy-personal="copyPersonal"
+        @copy-global="copyGlobal"
       />
-      <p v-else id="char-name-ro" class="readonly">{{ characterState.name.trim() || '—' }}</p>
-      <div class="meta-row">
-        <div class="meta-field">
-          <label class="field-label" :for="isAdmin ? 'char-age' : 'char-age-ro'">Вік</label>
-          <input
-            v-if="isAdmin"
-            id="char-age"
-            v-model="characterState.age"
-            type="text"
-            class="input"
-            placeholder="напр. 27"
-            autocomplete="off"
-          />
-          <p v-else id="char-age-ro" class="readonly readonly-sm">{{ characterState.age.trim() || '—' }}</p>
+
+      <ShowDeskHostTools
+        :game-room="gameRoom"
+        :player-slots="PLAYER_SLOTS"
+        v-model:timer-speaker-slot="timerSpeakerSlot"
+        v-model:speaking-duration="speakingDuration"
+        :phase-options="PHASE_OPTIONS"
+        @start-round="controlStartRound"
+        @pause-show="controlPauseShow"
+        @reset-room="controlReset"
+        @set-phase="setPhase"
+        @start-timer="adminStartSpeakingTimer"
+        @pause-timer="adminPauseTimerOnly"
+        @resume-timer="adminResumeTimer"
+        @clear-timer="adminClearTimer"
+        @spotlight="setSpotlightPlayer"
+        @spotlight-clear="setSpotlightPlayer('')"
+      />
+
+      <div class="admin-row">
+        <ShowPlayersRoster
+          :players="allPlayers"
+          :current-player-id="playerId"
+          :active-speaker-id="String(gameRoom.activePlayer || '')"
+          @select="goToPlayer"
+        />
+
+        <aside class="side-tools">
+          <label class="field-label">game id</label>
+          <div class="inline">
+            <input v-model="draftGameId" type="text" class="input" />
+            <button type="button" class="btn-soft" @click="applyNewGame">OK</button>
+          </div>
+          <label class="field-label mt">Новий player id</label>
+          <div class="inline">
+            <input v-model="newPlayerId" type="text" class="input" placeholder="p11" />
+            <button type="button" class="btn-soft" @click="createAndGoToPlayer">+</button>
+          </div>
+        </aside>
+      </div>
+    </template>
+
+    <div v-else class="player-hero">
+      <h1 class="player-title">{{ GAME_TITLE }}</h1>
+      <p class="player-phase">Фаза: {{ String(gameRoom.gamePhase || 'intro') }}</p>
+    </div>
+
+    <p v-if="loadError" class="error">{{ loadError }}</p>
+
+    <section class="panel editor-panel">
+      <h2 class="panel-kicker">{{ isAdmin ? `Редактор: ${playerId}` : 'Твій персонаж' }}</h2>
+
+      <div v-if="isAdmin" class="meta-grid">
+        <div>
+          <label class="field-label">Ім’я</label>
+          <input v-model="characterState.name" type="text" class="input" />
         </div>
-        <div class="meta-field">
-          <label class="field-label" :for="isAdmin ? 'char-gender' : 'char-gender-ro'">Гендер</label>
-          <input
-            v-if="isAdmin"
-            id="char-gender"
-            v-model="characterState.gender"
-            type="text"
-            class="input"
-            placeholder="напр. жін."
-            autocomplete="off"
-          />
-          <p v-else id="char-gender-ro" class="readonly readonly-sm">{{ characterState.gender.trim() || '—' }}</p>
+        <div>
+          <label class="field-label">Вік</label>
+          <input v-model="characterState.age" type="text" class="input" />
+        </div>
+        <div>
+          <label class="field-label">Гендер</label>
+          <input v-model="characterState.gender" type="text" class="input" />
         </div>
       </div>
-      <div v-if="isAdmin" class="elim-block">
+      <div v-else class="player-meta">
+        <p><span class="mk">Ім’я</span> {{ characterState.name || '—' }}</p>
+        <p><span class="mk">Вік</span> {{ characterState.age || '—' }}</p>
+        <p><span class="mk">Гендер</span> {{ characterState.gender || '—' }}</p>
+      </div>
+
+      <div v-if="isAdmin" class="traits-grid">
+        <div v-for="row in fieldConfig" :key="row.key" class="trait-field">
+          <label class="field-label">{{ row.label }}</label>
+          <input v-model="characterState[row.key].value" type="text" class="input" />
+        </div>
+      </div>
+      <div v-else class="traits-read">
+        <div v-for="row in fieldConfig" :key="row.key" class="trait-row">
+          <span class="t-label">{{ row.label }}</span>
+          <span class="t-val" :class="{ hidden: !characterState[row.key].revealed }">
+            {{ characterState[row.key].revealed ? (characterState[row.key].value || '—') : '❓' }}
+          </span>
+        </div>
+      </div>
+
+      <div class="active-card-box">
+        <h3 class="ac-title">Активна карта</h3>
+        <template v-if="isAdmin">
+          <input v-model="characterState.activeCard.title" type="text" class="input" placeholder="Заголовок" />
+          <textarea v-model="characterState.activeCard.description" class="textarea" rows="3" placeholder="Опис" />
+          <p class="ac-meta">effectId: <code>{{ characterState.activeCard.effectId || '—' }}</code></p>
+          <div class="ac-actions">
+            <button type="button" class="btn-soft" @click="rerollActiveCardOnly">Нова карта (random)</button>
+            <button
+              v-if="characterState.activeCardRequest"
+              type="button"
+              class="btn-soft"
+              @click="clearCardRequest"
+            >
+              Зняти запит гравця
+            </button>
+            <button
+              type="button"
+              class="btn-primary"
+              :disabled="characterState.activeCard.used"
+              @click="confirmActiveCardEffect"
+            >
+              Підтвердити ефект карти
+            </button>
+          </div>
+        </template>
+        <template v-else>
+          <p class="ac-t">{{ characterState.activeCard.title || '—' }}</p>
+          <p class="ac-d">{{ characterState.activeCard.description || '—' }}</p>
+          <p v-if="characterState.activeCard.used" class="ac-used">Використано</p>
+          <button
+            v-else
+            type="button"
+            class="btn-request"
+            :disabled="characterState.activeCardRequest"
+            @click="requestCardFromHost"
+          >
+            {{
+              characterState.activeCardRequest ? 'Запит надіслано ведучому' : 'Хочу використати карту'
+            }}
+          </button>
+        </template>
+      </div>
+
+      <div v-if="isAdmin" class="elim-row">
         <button
           type="button"
           class="btn-elim"
@@ -437,62 +704,484 @@ function generateRandomCharacter() {
         >
           {{ characterState.eliminated ? 'Повернути в гру' : 'Вибув' }}
         </button>
-        <span class="elim-note">На overlay — затемнення та «ВИБУВ»; гравець не відкриває карти.</span>
       </div>
     </section>
 
-    <section class="panel">
-      <h2 class="panel-title">Характеристики</h2>
-      <div class="fields">
-        <div v-for="row in fieldConfig" :key="row.key" class="row">
-          <label class="field-label" :for="isAdmin ? `f-${row.key}` : undefined">{{ row.label }}</label>
-          <div class="row-controls">
-            <input
-              v-if="isAdmin"
-              :id="`f-${row.key}`"
-              v-model="characterState[row.key].value"
-              type="text"
-              class="input"
-              placeholder="Текст…"
-              autocomplete="off"
-            />
-            <p v-else class="readonly input-like">{{ characterState[row.key].value.trim() || '—' }}</p>
-            <button
-              type="button"
-              class="toggle"
-              :class="{ on: characterState[row.key].revealed }"
-              :disabled="playerRevealLocked"
-              @click="toggle(row.key)"
-            >
-              {{ characterState[row.key].revealed ? 'Закрити' : 'Відкрити' }}
-            </button>
-          </div>
-        </div>
+    <section v-if="isAdmin" class="panel reveal-panel">
+      <h2 class="panel-kicker">Відкриття карт на оверлеї</h2>
+      <div class="reveal-grid">
+        <button
+          v-for="row in fieldConfig"
+          :key="'rv-' + row.key"
+          type="button"
+          class="reveal-tile"
+          :class="{ on: characterState[row.key].revealed }"
+          @click="characterState[row.key].revealed = !characterState[row.key].revealed"
+        >
+          <span class="rt-label">{{ row.label }}</span>
+          <span class="rt-state">{{ characterState[row.key].revealed ? 'Відкрито' : 'Закрито' }}</span>
+        </button>
       </div>
     </section>
+
+    <section v-if="isAdmin" class="panel globals-panel">
+      <h2 class="panel-kicker">Глобальні дії</h2>
+      <div class="global-btns">
+        <button type="button" class="gbtn" @click="globalRollField('profession')">Професія всім</button>
+        <button type="button" class="gbtn" @click="globalRollField('health')">Здоров’я всім</button>
+        <button type="button" class="gbtn" @click="globalRollField('phobia')">Фобія всім</button>
+        <button type="button" class="gbtn" @click="globalChaos">Random chaos</button>
+      </div>
+      <div class="pick-row">
+        <label class="field-label">Перегенерувати поле всім</label>
+        <select v-model="globalFieldPick" class="input select">
+          <option v-for="row in fieldConfig" :key="row.key" :value="row.key">{{ row.label }}</option>
+        </select>
+        <button type="button" class="btn-primary" @click="globalRollSelected">Застосувати</button>
+      </div>
+    </section>
+
+    <section v-if="isAdmin" class="panel scenario-panel">
+      <h2 class="panel-kicker">Сценарій</h2>
+      <p class="hint-sc">{{ getScenarioHint(selectedScenario) }}</p>
+      <select v-model="selectedScenario" class="input select" @change="persistScenarioChoice">
+        <option v-for="sid in scenarioIds" :key="sid" :value="sid">{{ getScenarioLabel(sid) }}</option>
+      </select>
+      <div class="scenario-actions">
+        <button type="button" class="btn-primary" @click="generateRandomCharacter">Generate поточного</button>
+        <button type="button" class="btn-soft" @click="generateCoreOnly">Тільки 6 карт</button>
+        <button type="button" class="btn-amber" @click="regenerateAllPlayers">Усіх у кімнаті</button>
+      </div>
+    </section>
+
+    <section v-if="!isAdmin" class="panel reveal-player">
+      <h2 class="panel-kicker">Твої картки</h2>
+      <div class="reveal-grid">
+        <button
+          v-for="row in fieldConfig"
+          :key="'pv-' + row.key"
+          type="button"
+          class="reveal-tile"
+          :class="{ on: characterState[row.key].revealed }"
+          :disabled="playerRevealLocked"
+          @click="toggle(row.key)"
+        >
+          <span class="rt-label">{{ row.label }}</span>
+          <span class="rt-state">{{ characterState[row.key].revealed ? 'Відкрито' : 'Закрито' }}</span>
+        </button>
+      </div>
+    </section>
+
+    <Teleport to="body">
+      <div v-if="toast" class="toast">{{ toast }}</div>
+    </Teleport>
   </div>
 </template>
 
 <style scoped>
-.mode-bar {
-  padding: 0.65rem 1.25rem;
+.desk {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 0 1.25rem 3.5rem;
+  box-sizing: border-box;
+}
+
+.mode-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.mode-strip.admin {
+  border-color: rgba(124, 58, 237, 0.2);
+}
+
+.mode-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #c4b5fd;
+}
+
+.status-pill {
+  font-size: 0.78rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(88, 28, 135, 0.25);
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  color: #f5f3ff;
+}
+
+.status-pill[data-s='АКТИВНИЙ'] {
+  border-color: rgba(251, 191, 36, 0.45);
+}
+
+.status-pill[data-s='ВИБУВ'] {
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(80, 20, 30, 0.35);
+}
+
+.player-hero {
+  text-align: center;
+  padding: 1.5rem 0 1rem;
+}
+
+.player-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-family: 'Orbitron', sans-serif;
+  color: #f5f3ff;
+}
+
+.player-phase {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  color: rgba(196, 181, 253, 0.55);
+}
+
+.admin-row {
+  display: grid;
+  grid-template-columns: 1fr 200px;
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 800px) {
+  .admin-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.side-tools {
+  padding: 1rem;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.inline {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(196, 181, 253, 0.45);
+}
+
+.field-label.mt {
+  margin-top: 0.75rem;
+}
+
+.input,
+.textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.55rem 0.7rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 6, 20, 0.85);
+  color: #f1f5f9;
+  font-size: 0.9rem;
+}
+
+.select {
+  max-width: 280px;
+}
+
+.panel {
+  padding: 1.25rem 1.35rem;
+  margin-bottom: 1.25rem;
+  border-radius: 20px;
+  background: rgba(10, 8, 22, 0.75);
+  border: 1px solid rgba(124, 58, 237, 0.15);
+}
+
+.panel-kicker {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #ede9fe;
+  font-family: 'Orbitron', sans-serif;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 640px) {
+  .meta-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.traits-grid {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.player-meta p {
+  margin: 0.25rem 0;
+  color: #e2e8f0;
+}
+
+.mk {
+  display: inline-block;
+  min-width: 4.5rem;
+  font-size: 0.72rem;
+  color: rgba(196, 181, 253, 0.5);
+}
+
+.traits-read {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.trait-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.t-label {
+  font-size: 0.75rem;
+  color: rgba(196, 181, 253, 0.55);
+}
+
+.t-val.hidden {
+  font-size: 1rem;
+}
+
+.active-card-box {
+  padding: 1rem;
+  border-radius: 16px;
+  background: rgba(88, 28, 135, 0.12);
+  border: 1px solid rgba(167, 139, 250, 0.25);
+  margin-bottom: 1rem;
+}
+
+.ac-title {
+  margin: 0 0 0.65rem;
+  font-size: 0.85rem;
+  color: #e9d5ff;
+}
+
+.ac-meta {
+  font-size: 0.75rem;
+  color: rgba(196, 181, 253, 0.65);
+}
+
+.ac-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 0.5rem;
+  margin-top: 0.65rem;
 }
 
-.mode-bar.admin {
-  background: linear-gradient(90deg, rgba(99, 102, 241, 0.2), rgba(30, 35, 50, 0.5));
+.ac-t {
+  margin: 0 0 0.35rem;
+  font-weight: 700;
+  color: #f5f3ff;
 }
 
-.mode-bar.player {
-  background: linear-gradient(90deg, rgba(34, 197, 94, 0.12), rgba(30, 35, 50, 0.5));
+.ac-d {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: #cbd5e1;
 }
 
-.mode-bar.denied {
-  background: linear-gradient(90deg, rgba(185, 28, 28, 0.25), rgba(30, 35, 50, 0.5));
+.ac-used {
+  margin: 0.5rem 0 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #c4b5fd;
+}
+
+.btn-request {
+  margin-top: 0.75rem;
+  padding: 0.55rem 1rem;
+  border-radius: 12px;
+  border: 1px solid rgba(167, 139, 250, 0.45);
+  background: rgba(88, 28, 135, 0.35);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-request:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.elim-row {
+  margin-top: 0.5rem;
+}
+
+.btn-elim {
+  padding: 0.45rem 1rem;
+  border-radius: 12px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  background: rgba(80, 20, 30, 0.35);
+  color: #fecaca;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-elim.on {
+  border-color: rgba(74, 222, 128, 0.4);
+  background: rgba(22, 101, 52, 0.3);
+  color: #bbf7d0;
+}
+
+.reveal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.5rem;
+}
+
+.reveal-tile {
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.25);
+  color: #e2e8f0;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.reveal-tile.on {
+  border-color: rgba(167, 139, 250, 0.45);
+  background: rgba(88, 28, 135, 0.25);
+}
+
+.reveal-tile:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.rt-label {
+  display: block;
+  font-size: 0.72rem;
+  color: rgba(196, 181, 253, 0.55);
+  margin-bottom: 0.25rem;
+}
+
+.rt-state {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.global-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+}
+
+.gbtn {
+  padding: 0.5rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.3);
+  color: #e2e8f0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.gbtn:hover {
+  border-color: rgba(167, 139, 250, 0.35);
+}
+
+.pick-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.65rem;
+}
+
+.hint-sc {
+  font-size: 0.8rem;
+  color: rgba(186, 181, 200, 0.85);
+  margin: 0 0 0.65rem;
+  line-height: 1.4;
+}
+
+.scenario-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.btn-primary {
+  padding: 0.5rem 0.9rem;
+  border-radius: 12px;
+  border: 1px solid rgba(167, 139, 250, 0.45);
+  background: rgba(88, 28, 135, 0.4);
+  color: #f5f3ff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-soft {
+  padding: 0.5rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.35);
+  color: #e2e8f0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-amber {
+  padding: 0.5rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: rgba(120, 53, 15, 0.35);
+  color: #fef3c7;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.error {
+  padding: 0.65rem 0.85rem;
+  border-radius: 12px;
+  background: rgba(80, 20, 30, 0.4);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  color: #fecaca;
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
 }
 
 .access-denied {
@@ -501,508 +1190,13 @@ function generateRandomCharacter() {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 2rem 1.25rem;
+  padding: 2rem;
   text-align: center;
-  box-sizing: border-box;
+  color: #e2e8f0;
 }
 
 .denied-title {
-  margin: 0 0 0.75rem;
-  font-size: 1.5rem;
-  font-weight: 600;
   color: #fecaca;
-}
-
-.denied-text,
-.denied-hint {
-  margin: 0 0 0.5rem;
-  max-width: 28rem;
-  font-size: 0.95rem;
-  color: rgba(203, 213, 225, 0.95);
-  line-height: 1.5;
-}
-
-.denied-hint {
-  font-size: 0.85rem;
-  color: rgba(148, 163, 184, 0.9);
-}
-
-.access-denied code {
-  font-size: 0.8em;
-  padding: 0.1rem 0.35rem;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.35);
-}
-
-.mode-text {
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #e2e8f0;
-}
-
-.mode-hint {
-  font-size: 0.78rem;
-  color: rgba(148, 163, 184, 0.95);
-}
-
-.mode-hint.warn {
-  color: #fecaca;
-}
-
-.control {
-  max-width: 560px;
-  margin: 0 auto;
-  padding: 0 1.25rem 3rem;
-  box-sizing: border-box;
-}
-
-.header {
-  margin-bottom: 1.75rem;
-  padding-top: 1.5rem;
-}
-
-.app-title {
-  margin: 0 0 0.25rem;
-  font-size: 1.75rem;
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  color: #f8fafc;
-}
-
-.sub {
-  margin: 0 0 0.65rem;
-  font-size: 0.9rem;
-  color: rgba(148, 163, 184, 0.95);
-}
-
-.ids {
-  margin: 0 0 0.35rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
-
-.id-pill {
-  font-size: 0.75rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: 8px;
-  background: rgba(99, 102, 241, 0.15);
-  color: #c7d2fe;
-  border: 1px solid rgba(99, 102, 241, 0.3);
-}
-
-.hint {
-  margin: 0 0 0.85rem;
-  font-size: 0.75rem;
-  color: rgba(148, 163, 184, 0.75);
-  line-height: 1.4;
-}
-
-.hint code {
-  font-size: 0.7rem;
-  padding: 0.15rem 0.35rem;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.35);
-  display: inline-block;
-  margin: 0.15rem 0.25rem 0 0;
-}
-
-.panel-inline {
-  margin-bottom: 1rem;
-  padding: 1rem 1.1rem;
-  border-radius: 14px;
-  background: rgba(30, 35, 50, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.tools-title {
-  margin: 0 0 0.85rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #e2e8f0;
-}
-
-.tool-row {
-  margin-bottom: 1rem;
-}
-
-.tool-row:last-child {
-  margin-bottom: 0;
-}
-
-.chip-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-top: 0.35rem;
-}
-
-.chip {
-  padding: 0.35rem 0.55rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(15, 18, 28, 0.85);
-  color: #cbd5e1;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.chip:hover {
-  background: rgba(51, 65, 85, 0.6);
-}
-
-.chip.active {
-  border-color: rgba(129, 140, 248, 0.55);
-  background: rgba(99, 102, 241, 0.25);
-  color: #eef2ff;
-}
-
-.btn-secondary {
-  flex-shrink: 0;
-  padding: 0 0.9rem;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(51, 65, 85, 0.55);
-  color: #e2e8f0;
-  font-size: 0.82rem;
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.btn-secondary:hover {
-  background: rgba(71, 85, 105, 0.75);
-}
-
-.error {
-  margin: 0.75rem 0 0;
-  padding: 0.6rem 0.75rem;
-  border-radius: 10px;
-  font-size: 0.85rem;
-  color: #fecaca;
-  background: rgba(127, 29, 29, 0.35);
-  border: 1px solid rgba(248, 113, 113, 0.35);
-}
-
-.nav-overlays {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.nav .link {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.45rem 0.85rem;
-  border-radius: 10px;
-  font-size: 0.85rem;
-  color: #a5b4fc;
-  text-decoration: none;
-  background: rgba(99, 102, 241, 0.12);
-  border: 1px solid rgba(99, 102, 241, 0.25);
-  transition: background 0.2s, border-color 0.2s;
-}
-
-.nav .link:hover {
-  background: rgba(99, 102, 241, 0.2);
-  border-color: rgba(129, 140, 248, 0.45);
-}
-
-.nav .link-accent {
-  color: #fde68a;
-  background: rgba(245, 158, 11, 0.12);
-  border-color: rgba(251, 191, 36, 0.35);
-}
-
-.nav .link-accent:hover {
-  background: rgba(245, 158, 11, 0.22);
-  border-color: rgba(251, 191, 36, 0.5);
-}
-
-.spotlight-hint {
-  margin: 0 0 0.5rem;
-  font-size: 0.8rem;
-  color: rgba(148, 163, 184, 0.95);
-}
-
-.spotlight-hint strong {
-  color: #c7d2fe;
-}
-
-.chip-spotlight.active {
-  border-color: rgba(251, 191, 36, 0.55);
-  background: rgba(245, 158, 11, 0.22);
-  color: #fef3c7;
-}
-
-.copy-panel .panel-title {
-  margin-bottom: 0.85rem;
-}
-
-.copy-line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 0.65rem;
-  padding: 0.75rem 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.copy-line:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-.copy-info {
-  display: flex;
-  gap: 0.6rem;
-  align-items: flex-start;
-  min-width: 0;
-  flex: 1;
-}
-
-.copy-emoji {
-  font-size: 1.25rem;
-  line-height: 1;
-}
-
-.copy-label {
-  display: block;
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: rgba(148, 163, 184, 0.9);
-  margin-bottom: 0.25rem;
-}
-
-.copy-url {
-  margin: 0;
-  font-size: 0.72rem;
-  line-height: 1.35;
-  color: #cbd5e1;
-  word-break: break-all;
-}
-
-.btn-copy {
-  flex-shrink: 0;
-  padding: 0.45rem 0.9rem;
-  border-radius: 10px;
-  border: 1px solid rgba(129, 140, 248, 0.45);
-  background: rgba(99, 102, 241, 0.2);
-  color: #e0e7ff;
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
-}
-
-.btn-copy:hover {
-  background: rgba(99, 102, 241, 0.35);
-}
-
-.panel {
-  padding: 1.25rem 1.35rem;
-  margin-bottom: 1.25rem;
-  border-radius: 16px;
-  background: rgba(30, 35, 50, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
-}
-
-.panel-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.panel-title {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #e2e8f0;
-}
-
-.panel-head .panel-title {
-  margin: 0;
-}
-
-.panel > .panel-title {
-  margin: 0 0 1rem;
-}
-
-.btn-generate {
-  padding: 0.4rem 0.75rem;
-  border-radius: 10px;
-  border: 1px solid rgba(251, 191, 36, 0.4);
-  background: rgba(245, 158, 11, 0.15);
-  color: #fde68a;
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
-}
-
-.btn-generate:hover {
-  background: rgba(245, 158, 11, 0.28);
-}
-
-.elim-block {
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-}
-
-.btn-elim {
-  align-self: flex-start;
-  padding: 0.45rem 1rem;
-  border-radius: 10px;
-  border: 1px solid rgba(248, 113, 113, 0.4);
-  background: rgba(127, 29, 29, 0.35);
-  color: #fecaca;
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
-}
-
-.btn-elim:hover {
-  background: rgba(153, 27, 27, 0.45);
-}
-
-.btn-elim.on {
-  border-color: rgba(74, 222, 128, 0.45);
-  background: rgba(22, 101, 52, 0.35);
-  color: #bbf7d0;
-}
-
-.elim-note {
-  font-size: 0.72rem;
-  color: rgba(148, 163, 184, 0.85);
-  line-height: 1.35;
-}
-
-.meta-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
-  margin-top: 1rem;
-}
-
-.meta-field .field-label {
-  margin-bottom: 0.35rem;
-}
-
-.readonly-sm {
-  min-height: 2.5rem;
-  font-size: 0.88rem;
-}
-
-.field-label {
-  display: block;
-  margin-bottom: 0.4rem;
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: rgba(148, 163, 184, 0.9);
-}
-
-.readonly {
-  margin: 0;
-  padding: 0.65rem 0.85rem;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(15, 18, 28, 0.55);
-  color: #cbd5e1;
-  font-size: 0.95rem;
-  min-height: 2.75rem;
-  display: flex;
-  align-items: center;
-}
-
-.readonly.input-like {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  min-height: auto;
-}
-
-.input {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 0.65rem 0.85rem;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(15, 18, 28, 0.9);
-  color: #f1f5f9;
-  font-size: 0.95rem;
-  outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.input::placeholder {
-  color: rgba(148, 163, 184, 0.45);
-}
-
-.input:focus {
-  border-color: rgba(129, 140, 248, 0.55);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
-}
-
-.fields {
-  display: flex;
-  flex-direction: column;
-  gap: 1.1rem;
-}
-
-.row-controls {
-  display: flex;
-  gap: 0.6rem;
-  align-items: stretch;
-  margin-top: 0.35rem;
-}
-
-.row-controls .input {
-  flex: 1;
-  min-width: 0;
-}
-
-.toggle {
-  flex-shrink: 0;
-  padding: 0 1rem;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(51, 65, 85, 0.6);
-  color: #e2e8f0;
-  font-size: 0.82rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.2s, border-color 0.2s, color 0.2s;
-  white-space: nowrap;
-}
-
-.toggle:hover {
-  background: rgba(71, 85, 105, 0.75);
-}
-
-.toggle.on {
-  background: rgba(99, 102, 241, 0.35);
-  border-color: rgba(129, 140, 248, 0.45);
-  color: #eef2ff;
-}
-
-.toggle:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
 }
 </style>
 
@@ -1016,11 +1210,15 @@ function generateRandomCharacter() {
   padding: 0.55rem 1.2rem;
   border-radius: 12px;
   background: rgba(20, 83, 45, 0.95);
-  border: 1px solid rgba(74, 222, 128, 0.5);
+  border: 1px solid rgba(74, 222, 128, 0.45);
   color: #ecfdf5;
   font-size: 0.88rem;
   font-weight: 600;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
   pointer-events: none;
+}
+
+body {
+  background: radial-gradient(ellipse 100% 60% at 50% -10%, rgba(55, 25, 95, 0.35), transparent),
+    #06040f;
 }
 </style>

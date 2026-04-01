@@ -1,6 +1,21 @@
 import { reactive } from 'vue'
+import { pickRandomActiveCardTemplate } from './data/activeCards.js'
 
-const FIELD_KEYS = ['profession', 'health', 'phobia', 'luggage', 'fact', 'quirk']
+export const GAME_TITLE = 'Кого ми з’їмо першим'
+
+export const CORE_FIELD_KEYS = ['profession', 'health', 'phobia', 'luggage', 'fact', 'quirk']
+
+export const FIELD_KEYS = [...CORE_FIELD_KEYS]
+
+export function defaultActiveCard() {
+  return {
+    title: '',
+    description: '',
+    used: false,
+    effectId: '',
+    templateId: '',
+  }
+}
 
 export const characterState = reactive({
   eliminated: false,
@@ -13,6 +28,8 @@ export const characterState = reactive({
   luggage: { value: '', revealed: false },
   fact: { value: '', revealed: false },
   quirk: { value: '', revealed: false },
+  activeCard: defaultActiveCard(),
+  activeCardRequest: false,
 })
 
 export const fieldConfig = [
@@ -33,9 +50,24 @@ export function resetCharacterState(target = characterState) {
     target[key].value = ''
     target[key].revealed = false
   }
+  target.activeCard = defaultActiveCard()
+  target.activeCardRequest = false
 }
 
-/** Застосувати дані з Firestore до reactive-стану (поле key ігнорується — лише для rules). */
+function readActiveCard(data) {
+  const ac = data.activeCard
+  if (ac && typeof ac === 'object') {
+    return {
+      title: typeof ac.title === 'string' ? ac.title : '',
+      description: typeof ac.description === 'string' ? ac.description : '',
+      used: Boolean(ac.used),
+      effectId: typeof ac.effectId === 'string' ? ac.effectId : '',
+      templateId: typeof ac.templateId === 'string' ? ac.templateId : '',
+    }
+  }
+  return defaultActiveCard()
+}
+
 export function applyRemoteCharacterData(target, data) {
   if (!data || typeof data !== 'object') {
     resetCharacterState(target)
@@ -58,15 +90,24 @@ export function applyRemoteCharacterData(target, data) {
       target[key].revealed = false
     }
   }
+  target.activeCard = readActiveCard(data)
+  target.activeCardRequest = Boolean(data.activeCardRequest)
 }
 
-/** Плоский знімок для збереження в Firestore (key додає gameService). */
 export function snapshotCharacter(target = characterState) {
   const out = {
     eliminated: Boolean(target.eliminated),
     name: target.name,
     age: target.age,
     gender: target.gender,
+    activeCard: {
+      title: target.activeCard.title,
+      description: target.activeCard.description,
+      used: Boolean(target.activeCard.used),
+      effectId: target.activeCard.effectId,
+      templateId: target.activeCard.templateId,
+    },
+    activeCardRequest: Boolean(target.activeCardRequest),
   }
   for (const key of FIELD_KEYS) {
     out[key] = {
@@ -75,4 +116,16 @@ export function snapshotCharacter(target = characterState) {
     }
   }
   return out
+}
+
+export function assignRandomActiveCard(target = characterState) {
+  const t = pickRandomActiveCardTemplate()
+  target.activeCard = {
+    title: t.title,
+    description: t.description,
+    used: false,
+    effectId: t.effectId,
+    templateId: t.templateId,
+  }
+  target.activeCardRequest = false
 }

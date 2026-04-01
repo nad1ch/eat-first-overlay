@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import OverlayPlayerCard from '../components/OverlayPlayerCard.vue'
 import {
@@ -7,6 +7,7 @@ import {
   subscribeToGameRoom,
   subscribeToPlayers,
 } from '../services/gameService'
+import { millisFromFirestore } from '../utils/firestoreTime.js'
 
 const route = useRoute()
 
@@ -24,12 +25,20 @@ const isPersonal = computed(() => personalPlayerId.value != null)
 const players = ref([])
 const singlePlayer = ref(null)
 const gameRoom = ref({})
-/** Для cinema mode в персональному HUD — рахуємо «живих» у кімнаті. */
 const aliveForCinema = ref(0)
 
 let unsubscribe = null
 let unsubPlayersCount = null
 let unsubGameRoom = null
+
+const tick = ref(Date.now())
+let tickId = null
+
+onMounted(() => {
+  tickId = window.setInterval(() => {
+    tick.value = Date.now()
+  }, 250)
+})
 
 function cleanupPlayerSub() {
   if (unsubscribe) {
@@ -108,29 +117,67 @@ watch(
 onUnmounted(() => {
   cleanupPlayerSub()
   cleanupGameRoom()
+  if (tickId != null) {
+    window.clearInterval(tickId)
+    tickId = null
+  }
 })
 
-const modeLabel = computed(() =>
-  isPersonal.value ? `персональний · ${personalPlayerId.value}` : 'усі гравці',
-)
+const speakerTimeLeft = computed(() => {
+  const gr = gameRoom.value
+  if (gr?.timerPaused === true) {
+    const f = Number(gr?.timerRemainingFrozen)
+    if (Number.isFinite(f) && f >= 0) return f
+    return undefined
+  }
+  const start = millisFromFirestore(gr?.timerStartedAt)
+  const total = Number(gr?.speakingTimer) || 0
+  if (start == null || total <= 0) return undefined
+  const elapsed = Math.floor((tick.value - start) / 1000)
+  return Math.max(0, total - elapsed)
+})
+
+const speakerTimerTotal = computed(() => Number(gameRoom.value?.speakingTimer) || 30)
+
+const dramaMode = computed(() => {
+  if (isPersonal.value) return false
+  return aliveInGame.value === 3
+})
 
 function isSpotlightPlayer(p) {
   return activeSpotlightId.value != null && p.id === activeSpotlightId.value
 }
+
+function cardTimerProps(p) {
+  if (!isSpotlightPlayer(p) || speakerTimeLeft.value === undefined) return {}
+  return {
+    speakerTimeLeft: speakerTimeLeft.value,
+    speakerTimerTotal: speakerTimerTotal.value,
+  }
+}
 </script>
 
 <template>
-  <div class="overlay-root" :class="{ 'overlay-root--personal': isPersonal }">
-    <header class="board-head" :class="{ 'board-head--compact': isPersonal }">
-      <p class="eyebrow">Стрім-оверлей · гра {{ gameId }} · {{ modeLabel }}</p>
-      <h1 v-if="!isPersonal" class="title">Кого з’їмо першим</h1>
-      <p v-if="isPersonal && !singlePlayer" class="empty">
-        Немає даних для {{ personalPlayerId }}…
-      </p>
-      <p v-else-if="!isPersonal && players.length === 0" class="empty">
-        Очікуємо гравців у Firestore…
-      </p>
+  <div
+    class="overlay-root"
+    :class="{
+      'overlay-root--personal': isPersonal,
+      'overlay-root--global': !isPersonal,
+      'overlay-root--drama': dramaMode,
+    }"
+  >
+    <header
+      v-if="!isPersonal"
+      class="board-head"
+    >
+      <p class="eyebrow">Оверлей · {{ gameId }}</p>
+      <h1 class="title">Кого ми з’їмо першим</h1>
+      <p v-if="players.length === 0" class="empty">Очікуємо гравців у Firestore…</p>
     </header>
+
+    <p v-if="isPersonal && !singlePlayer" class="personal-wait" role="status">
+      Немає даних для {{ personalPlayerId }}…
+    </p>
 
     <div v-if="isPersonal" class="single-stage single-stage--hud">
       <OverlayPlayerCard
@@ -138,6 +185,8 @@ function isSpotlightPlayer(p) {
         :player="singlePlayer"
         :highlighted="isSpotlightPlayer(singlePlayer)"
         :cinema="cinemaHud"
+        :drama="false"
+        v-bind="cardTimerProps(singlePlayer)"
         solo
       />
     </div>
@@ -149,6 +198,8 @@ function isSpotlightPlayer(p) {
         :player="p"
         :highlighted="isSpotlightPlayer(p)"
         :cinema="cinemaGrid"
+        :drama="dramaMode"
+        v-bind="cardTimerProps(p)"
       />
     </div>
   </div>
@@ -159,25 +210,48 @@ function isSpotlightPlayer(p) {
   min-height: 100vh;
   width: 100%;
   box-sizing: border-box;
+}
+
+.overlay-root--global {
   padding: 1rem 1rem 2rem;
   display: flex;
   flex-direction: column;
   background: linear-gradient(
     180deg,
-    rgba(6, 8, 14, 0.35) 0%,
-    rgba(6, 8, 14, 0.82) 45%,
-    rgba(6, 8, 14, 0.94) 100%
+    rgba(8, 6, 22, 0.92) 0%,
+    rgba(6, 4, 18, 0.97) 100%
   );
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow:
-    inset 0 0 24px rgba(255, 255, 255, 0.06),
-    0 0 20px rgba(255, 255, 255, 0.1);
 }
 
 .overlay-root--personal {
-  padding: 0.5rem 0 0;
+  position: relative;
   min-height: 100vh;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+}
+
+.overlay-root--drama {
+  position: relative;
+}
+
+.overlay-root--drama::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 35%,
+    rgba(90, 20, 30, 0.35) 100%
+  );
+}
+
+.overlay-root--drama .board-head,
+.overlay-root--drama .grid {
+  position: relative;
+  z-index: 1;
 }
 
 .board-head {
@@ -186,17 +260,6 @@ function isSpotlightPlayer(p) {
   max-width: 960px;
   margin-left: auto;
   margin-right: auto;
-  filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.08));
-}
-
-.board-head--compact {
-  margin-bottom: 0.35rem;
-  padding: 0 0.75rem;
-}
-
-.board-head--compact .eyebrow {
-  font-size: 0.58rem;
-  margin-bottom: 0.15rem;
 }
 
 .eyebrow {
@@ -204,48 +267,45 @@ function isSpotlightPlayer(p) {
   font-size: 0.65rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgba(196, 210, 255, 0.45);
+  color: rgba(196, 181, 253, 0.45);
 }
 
 .title {
   margin: 0;
-  font-size: clamp(1.1rem, 2.5vw, 1.5rem);
+  font-size: clamp(1.05rem, 2.4vw, 1.45rem);
   font-weight: 600;
   letter-spacing: -0.02em;
-  color: #f1f5ff;
+  color: #f5f3ff;
+  font-family: 'Orbitron', sans-serif;
   line-height: 1.2;
 }
 
 .empty {
   margin: 0.75rem 0 0;
   font-size: 0.85rem;
-  color: rgba(148, 163, 184, 0.9);
+  color: rgba(186, 181, 200, 0.85);
 }
 
-.single-stage {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: min(72vh, calc(100vh - 9rem));
-  width: 100%;
-  max-width: 560px;
-  margin: 0 auto;
-  padding: 0.5rem 0.75rem 2rem;
-  box-sizing: border-box;
-  filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.06));
+.personal-wait {
+  position: absolute;
+  top: 0.35rem;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.65rem;
+  color: rgba(226, 220, 255, 0.75);
+  z-index: 10;
+  pointer-events: none;
 }
 
 .single-stage--hud {
   position: relative;
   flex: 1;
-  min-height: calc(100vh - 3.5rem);
-  max-width: none;
+  min-height: 100vh;
   width: 100%;
   margin: 0;
   padding: 0;
-  align-items: stretch;
-  justify-content: stretch;
-  filter: none;
 }
 
 .grid {
@@ -255,7 +315,6 @@ function isSpotlightPlayer(p) {
   max-width: 1200px;
   margin: 0 auto;
   align-content: end;
-  filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.06));
 }
 
 .grid--cinema {
