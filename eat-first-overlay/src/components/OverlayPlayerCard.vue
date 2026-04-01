@@ -97,8 +97,6 @@ const timerRingStyle = computed(() => {
   const pct = ringPct.value
   return {
     background: `conic-gradient(#a855f7 ${pct}%, rgba(255,255,255,0.12) 0)`,
-    WebkitMask: 'radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px))',
-    mask: 'radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px))',
   }
 })
 
@@ -262,6 +260,18 @@ const acChipTitle = computed(() => {
 
 <style scoped>
 .card-grid {
+  --cg-pad-x: clamp(0.75rem, min(2.8vw, 3.2vh), 1.45rem);
+  --cg-pad-y: clamp(0.85rem, min(3vw, 3.4vh), 1.5rem);
+  --cg-stat-gap: clamp(0.42rem, min(1.8vw, 2.2vh), 0.75rem);
+  --cg-stat-pad-y: clamp(0.52rem, min(2.2vw, 2.6vh), 1.05rem);
+  --cg-stat-pad-x: clamp(0.58rem, min(2.6vw, 3vh), 1.2rem);
+  --cg-stat-fs: clamp(0.9rem, min(2.8vw, 3.2vh), 1.22rem);
+  --cg-id-fs: clamp(0.68rem, min(2vw, 2.2vh), 0.88rem);
+  --cg-name-fs: clamp(1.05rem, min(2.8vw, 3.4vh), 1.42rem);
+  --cg-meta-fs: clamp(0.88rem, min(2.2vw, 2.8vh), 1.12rem);
+  --cg-timer: clamp(3.25rem, min(10vw, 11vh), 5.5rem);
+  --cg-timer-num: clamp(0.68rem, min(2vw, 2.4vh), 0.9rem);
+
   position: relative;
   padding: 0;
   border-radius: 14px;
@@ -273,6 +283,12 @@ const acChipTitle = computed(() => {
     transform 0.35s ease,
     box-shadow 0.35s ease,
     border-color 0.35s ease;
+}
+
+@media (min-width: 1600px) {
+  .card-grid {
+    --cg-stat-fs: clamp(1rem, 1.1vw, 1.35rem);
+  }
 }
 
 .card-grid--spotlight {
@@ -336,8 +352,8 @@ const acChipTitle = computed(() => {
 
 .timer-ring-wrap {
   position: relative;
-  width: 62px;
-  height: 62px;
+  width: var(--cg-timer, 62px);
+  height: var(--cg-timer, 62px);
   display: grid;
   place-items: center;
 }
@@ -347,12 +363,14 @@ const acChipTitle = computed(() => {
   inset: 0;
   border-radius: 50%;
   transition: background 0.35s linear;
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 3px));
 }
 
 .timer-num {
   position: relative;
   z-index: 1;
-  font-size: 0.72rem;
+  font-size: var(--cg-timer-num, 0.72rem);
   font-weight: 800;
   color: #faf5ff;
   font-family: 'Orbitron', sans-serif;
@@ -362,7 +380,7 @@ const acChipTitle = computed(() => {
 .card-grid-body {
   position: relative;
   z-index: 2;
-  padding: 1rem 1.05rem 1.1rem;
+  padding: var(--cg-pad-y) var(--cg-pad-x);
 }
 
 .card-grid--eliminated {
@@ -418,7 +436,7 @@ const acChipTitle = computed(() => {
 
 .card-grid-id {
   margin: 0 0 0.25rem;
-  font-size: 0.72rem;
+  font-size: var(--cg-id-fs);
   letter-spacing: 0.14em;
   color: rgba(196, 181, 253, 0.55);
   font-family: 'Orbitron', sans-serif;
@@ -426,15 +444,15 @@ const acChipTitle = computed(() => {
 
 .card-grid-name {
   margin: 0 0 0.2rem;
-  font-size: clamp(1.05rem, 2.4vw, 1.25rem);
+  font-size: var(--cg-name-fs);
   font-weight: 700;
   color: #f5f3ff;
   line-height: 1.2;
 }
 
 .card-grid-meta {
-  margin: 0 0 0.65rem;
-  font-size: clamp(0.88rem, 2vw, 1rem);
+  margin: 0 0 clamp(0.5rem, min(2vw, 2.2vh), 0.85rem);
+  font-size: var(--cg-meta-fs);
   color: rgba(226, 232, 240, 0.9);
 }
 
@@ -449,7 +467,7 @@ const acChipTitle = computed(() => {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: var(--cg-stat-gap);
 }
 
 .stats li {
@@ -458,15 +476,15 @@ const acChipTitle = computed(() => {
 
 .stat-cell {
   display: block;
-  padding: 0.48rem 0.6rem;
-  border-radius: 11px;
+  padding: var(--cg-stat-pad-y) var(--cg-stat-pad-x);
+  border-radius: clamp(10px, 1.8vmin, 14px);
   background: rgba(0, 0, 0, 0.38);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: clamp(0.8rem, 2.1vw, 0.95rem);
+  font-size: var(--cg-stat-fs);
   font-weight: 600;
   color: rgba(196, 181, 253, 0.82);
   text-align: right;
-  line-height: 1.4;
+  line-height: 1.45;
   transition:
     color 0.2s ease,
     border-color 0.2s ease;
@@ -525,6 +543,42 @@ const acChipTitle = computed(() => {
   pointer-events: none;
   box-sizing: border-box;
   background: transparent;
+}
+
+/**
+ * Персональний HUD: vmin/vw/vh — масштаб від розміру екрана.
+ * Бічні колонки (bl/br) ширші за верхні (tl/tr).
+ */
+.hud-root--solo {
+  --hud-edge: clamp(0.4rem, min(1.6vw, 2vh), 1.75rem);
+  --hud-side-max: min(46vw, clamp(15.5rem, 42vmin, 36rem));
+  --hud-top-max: min(50vw, clamp(12rem, 34vmin, 24rem));
+  --hud-pad-side: clamp(0.62rem, min(2.2vw, 2.6vh), 1.35rem);
+  --hud-pad-top: clamp(0.52rem, min(1.8vw, 2.2vh), 1.05rem);
+  --hud-stat-gap: clamp(0.38rem, min(1.5vw, 1.8vh), 0.72rem);
+  --hud-stat-pad-y: clamp(0.55rem, min(2.4vw, 2.8vh), 1.15rem);
+  --hud-stat-pad-x: clamp(0.62rem, min(2.8vw, 3.2vh), 1.35rem);
+  --hud-stat-font: clamp(0.92rem, min(3.1vw, 3.4vh), 1.45rem);
+  --hud-name: clamp(1.12rem, min(3.5vw, 4vh), 1.85rem);
+  --hud-sub: clamp(0.96rem, min(2.7vw, 3.2vh), 1.32rem);
+  --hud-slot: clamp(2.1rem, min(7vw, 8vh), 4rem);
+  --hud-timer-ring: clamp(4.5rem, min(12vw, 13vh), 7rem);
+  --hud-timer-fs: clamp(0.75rem, min(2.4vw, 2.6vh), 1.05rem);
+  --hud-br: clamp(12px, 2vmin, 18px);
+}
+
+@media (max-width: 480px) {
+  .hud-root--solo {
+    --hud-side-max: min(48vw, 17.5rem);
+    --hud-stat-font: clamp(0.85rem, min(3.4vw, 3.6vh), 1.15rem);
+  }
+}
+
+@media (min-width: 1920px) {
+  .hud-root--solo {
+    --hud-stat-font: clamp(1.05rem, 1.05vw, 1.5rem);
+    --hud-side-max: min(40vw, 38rem);
+  }
 }
 
 .hud-root--spotlight .hud-block {
@@ -633,17 +687,21 @@ const acChipTitle = computed(() => {
   color: rgba(196, 181, 253, 0.65);
 }
 
+.hud-root--solo .ac-chip {
+  bottom: var(--hud-edge);
+  max-width: min(92vw, clamp(18rem, 58vmin, 36rem));
+  padding: clamp(0.42rem, min(1.8vw, 2vh), 0.62rem) clamp(0.72rem, min(2.6vw, 2.8vh), 1.15rem)
+    clamp(0.42rem, min(1.8vw, 2vh), 0.62rem) clamp(0.55rem, min(2.2vw, 2.4vh), 0.85rem);
+}
+
 .ac-chip {
   position: absolute;
-  bottom: clamp(0.55rem, 2vh, 1rem);
   left: 50%;
   transform: translateX(-50%);
   z-index: 7;
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  max-width: min(90vw, 380px);
-  padding: 0.4rem 0.75rem 0.4rem 0.55rem;
+  gap: clamp(0.35rem, 1.5vmin, 0.55rem);
   border-radius: 999px;
   background: rgba(10, 6, 22, 0.94);
   border: 1px solid rgba(168, 85, 247, 0.42);
@@ -658,12 +716,15 @@ const acChipTitle = computed(() => {
 }
 
 .ac-chip-ico {
-  font-size: 0.9rem;
+  font-size: clamp(0.85rem, min(2.6vw, 2.8vh), 1.15rem);
   line-height: 1;
 }
 
+.hud-root--solo .ac-chip-t {
+  font-size: clamp(0.82rem, min(2.5vw, 2.7vh), 1.12rem);
+}
+
 .ac-chip-t {
-  font-size: clamp(0.78rem, 2vw, 0.9rem);
   font-weight: 700;
   color: #ede9fe;
   white-space: nowrap;
@@ -679,36 +740,48 @@ const acChipTitle = computed(() => {
 
 .hud-block {
   position: absolute;
-  padding: 0.58rem 0.72rem;
-  border-radius: 14px;
   background: rgba(8, 6, 20, 0.94);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border: 1px solid rgba(168, 85, 247, 0.32);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-  max-width: min(48vw, 340px);
+}
+
+.hud-root--solo .hud-block {
+  border-radius: var(--hud-br);
+}
+
+.hud-root--solo .hud-block.hud-tl,
+.hud-root--solo .hud-block.hud-tr {
+  max-width: var(--hud-top-max);
+  padding: var(--hud-pad-top) clamp(0.55rem, min(2vw, 2.4vh), 1rem);
+}
+
+.hud-root--solo .hud-block.hud-bl,
+.hud-root--solo .hud-block.hud-br {
+  max-width: var(--hud-side-max);
+  padding: var(--hud-pad-side);
 }
 
 .hud-tl {
-  top: clamp(0.5rem, 1.4vh, 1.1rem);
-  left: clamp(0.5rem, 1.4vw, 1.1rem);
+  top: var(--hud-edge, clamp(0.5rem, 1.4vh, 1.1rem));
+  left: var(--hud-edge, clamp(0.5rem, 1.4vw, 1.1rem));
 }
 
 .hud-tr {
-  top: clamp(0.5rem, 1.4vh, 1.1rem);
-  right: clamp(0.5rem, 1.4vw, 1.1rem);
+  top: var(--hud-edge, clamp(0.5rem, 1.4vh, 1.1rem));
+  right: var(--hud-edge, clamp(0.5rem, 1.4vw, 1.1rem));
   text-align: right;
-  max-width: min(44vw, 260px);
 }
 
 .hud-bl {
-  bottom: clamp(0.5rem, 1.4vh, 1.1rem);
-  left: clamp(0.5rem, 1.4vw, 1.1rem);
+  bottom: var(--hud-edge, clamp(0.5rem, 1.4vh, 1.1rem));
+  left: var(--hud-edge, clamp(0.5rem, 1.4vw, 1.1rem));
 }
 
 .hud-br {
-  bottom: clamp(0.5rem, 1.4vh, 1.1rem);
-  right: clamp(0.5rem, 1.4vw, 1.1rem);
+  bottom: var(--hud-edge, clamp(0.5rem, 1.4vh, 1.1rem));
+  right: var(--hud-edge, clamp(0.5rem, 1.4vw, 1.1rem));
   text-align: right;
 }
 
@@ -718,14 +791,20 @@ const acChipTitle = computed(() => {
   line-height: 1.3;
 }
 
+.hud-root--solo .hud-line--name {
+  font-size: var(--hud-name);
+}
+
 .hud-line--name {
-  font-size: clamp(1.08rem, 2.8vw, 1.38rem);
   font-weight: 700;
+}
+
+.hud-root--solo .hud-line--sub {
+  font-size: var(--hud-sub);
 }
 
 .hud-line--sub {
   margin-top: 0.25rem;
-  font-size: clamp(0.9rem, 2.2vw, 1.05rem);
   color: rgba(226, 232, 240, 0.92);
 }
 
@@ -734,8 +813,11 @@ const acChipTitle = computed(() => {
   color: rgba(196, 181, 253, 0.5);
 }
 
+.hud-root--solo .hud-slot {
+  font-size: var(--hud-slot);
+}
+
 .hud-slot {
-  font-size: clamp(1.85rem, 5.2vw, 2.85rem);
   font-weight: 900;
   color: #faf5ff;
   font-family: 'Orbitron', sans-serif;
@@ -744,9 +826,14 @@ const acChipTitle = computed(() => {
 }
 
 .hud-timer-stack {
-  margin-top: 0.4rem;
+  margin-top: clamp(0.35rem, min(1.4vw, 1.6vh), 0.55rem);
   display: flex;
   justify-content: flex-end;
+}
+
+.hud-root--solo .hud-ring-wrap {
+  width: var(--hud-timer-ring);
+  height: var(--hud-timer-ring);
 }
 
 .hud-ring-wrap {
@@ -762,16 +849,25 @@ const acChipTitle = computed(() => {
   inset: 0;
   border-radius: 50%;
   transition: background 0.3s linear;
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 3px));
+}
+
+.hud-root--solo .hud-timer-label {
+  font-size: var(--hud-timer-fs);
 }
 
 .hud-timer-label {
   position: relative;
   z-index: 1;
-  font-size: 0.78rem;
   font-weight: 800;
   font-family: 'Orbitron', sans-serif;
   color: #fff;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+}
+
+.hud-root--solo .hud-stat {
+  margin-bottom: var(--hud-stat-gap);
 }
 
 .hud-stat {
@@ -782,16 +878,21 @@ const acChipTitle = computed(() => {
   margin-bottom: 0;
 }
 
+.hud-root--solo .hud-stat-inner {
+  padding: var(--hud-stat-pad-y) var(--hud-stat-pad-x);
+  font-size: var(--hud-stat-font);
+  border-radius: clamp(10px, 1.8vmin, 14px);
+}
+
 .hud-stat-inner {
   display: block;
   padding: 0.45rem 0.58rem;
   border-radius: 11px;
   background: rgba(10, 6, 22, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  font-size: clamp(0.82rem, 2.1vw, 0.98rem);
   font-weight: 600;
   color: rgba(196, 181, 253, 0.82);
-  line-height: 1.35;
+  line-height: 1.38;
 }
 
 .hud-br .hud-stat-inner {

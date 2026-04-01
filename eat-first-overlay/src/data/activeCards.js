@@ -171,12 +171,6 @@ export const ACTIVE_CARD_TEMPLATES = [
     effectId: ACTIVE_CARD_EFFECT_IDS.NARRATIVE,
   },
   {
-    id: 'night_watch',
-    title: 'Нічна варта',
-    description: 'Ти не спиш першу ніч — дізнаєшся щось у ведучого наодинці.',
-    effectId: ACTIVE_CARD_EFFECT_IDS.NARRATIVE,
-  },
-  {
     id: 'confession',
     title: 'Зізнання',
     description: 'Можеш публічно змінити одну заяву про себе (без автозміни карток).',
