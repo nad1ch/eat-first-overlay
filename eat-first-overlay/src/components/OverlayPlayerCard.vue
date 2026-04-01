@@ -1808,7 +1808,7 @@ async function submitVote(choice) {
   z-index: 1;
   width: min(42vw, 200px);
   height: auto;
-  opacity: 0.48;
+  opacity: 0.58;
   pointer-events: none;
   filter: drop-shadow(0 0 10px rgba(168, 85, 247, 0.1));
 }

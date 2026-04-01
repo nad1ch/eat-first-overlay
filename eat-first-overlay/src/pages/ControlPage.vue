@@ -224,6 +224,24 @@ const nominatedPlayerActive = computed(() =>
   Boolean(String(gameRoom.value?.nominatedPlayer ?? '').trim()),
 )
 
+const raisedHandsCount = computed(() => {
+  const h = gameRoom.value?.hands || {}
+  return Object.keys(h).filter((k) => h[k] === true).length
+})
+
+/** Sticky рядок для ведучого: фаза, раунд, спікер, ціль, голосування, руки */
+const hostSummaryLine = computed(() => {
+  const ph = String(gameRoom.value?.gamePhase || 'intro').toUpperCase()
+  const r = roomRoundLive.value
+  const sp = String(gameRoom.value?.currentSpeaker ?? '').trim()
+  const spTxt = sp ? sp.toUpperCase() : '—'
+  const tg = String(gameRoom.value?.voting?.targetPlayer ?? '').trim()
+  const tgTxt = tg ? tg.toUpperCase() : '—'
+  const v = gameRoom.value?.voting?.active ? 'ON' : 'OFF'
+  const hc = raisedHandsCount.value
+  return `${ph} · R${r} · SPEAKER ${spTxt} · TARGET ${tgTxt} · VOTING ${v} · HANDS ${hc}`
+})
+
 watch(
   () => gameRoom.value?.activeScenario,
   (a) => {
@@ -447,7 +465,7 @@ async function hostNominate(slot) {
     const next = s === '' || cur === s ? '' : s
     const byHostSlot = next ? String(playerId.value ?? '').trim() : ''
     await setNominatedPlayer(gameId.value, next, byHostSlot)
-    showToast(next ? `Номінація: ${next}` : 'Номінацію знято')
+    showToast(next ? 'Номінація виставлена' : 'Номінацію знято')
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -461,7 +479,7 @@ async function hostVotingTarget(slot) {
     loadError.value = null
     const active = Boolean(gameRoom.value?.voting?.active)
     await setRoomVoting(gameId.value, active, s)
-    showToast(`Голосування → ${s}`)
+    showToast('Ціль обрано')
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -477,7 +495,7 @@ async function hostVotingStart() {
   try {
     loadError.value = null
     await setRoomVoting(gameId.value, true, tp)
-    showToast('Голосування почалось')
+    showToast('Голосування відкрито')
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -489,6 +507,18 @@ async function hostStopVoting() {
     loadError.value = null
     await setRoomVoting(gameId.value, false, '')
     showToast('Голосування зупинено')
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function hostFinishVoting() {
+  if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    await setRoomVoting(gameId.value, false, '')
+    await clearAllVotes(gameId.value)
+    showToast('Голосування завершено')
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -581,7 +611,7 @@ async function adminNextSpeaker() {
         speakingDuration.value = 30
         timerSpeakerSlot.value = slot
         await startSpeakingTimer(gameId.value, slot, 30)
-        showToast(`Раунд почався · ${slot} · 30s`)
+        showToast(`${slot} · 30s`)
       } catch (e) {
         loadError.value = e instanceof Error ? e.message : String(e)
       }
@@ -827,9 +857,9 @@ function rerollActiveCardOnly() {
     </div>
 
     <template v-if="isAdmin">
-      <section class="admin-zone admin-zone--live admin-card" aria-label="Live">
-        <h2 class="zone-kicker zone-kicker--section">LIVE</h2>
-        <div class="desk-sticky-bar">
+      <div class="host-summary-bar" role="status">{{ hostSummaryLine }}</div>
+      <section class="admin-zone admin-zone--live admin-card admin-zone--live-priority" aria-label="Live">
+        <div class="admin-dock">
           <ShowDeskHostTools
             :game-room="gameRoom"
             :player-slots="PLAYER_SLOTS"
@@ -869,7 +899,7 @@ function rerollActiveCardOnly() {
         />
       </section>
 
-      <section class="admin-zone admin-zone--generate" aria-label="Генерація">
+      <section class="admin-zone admin-zone--generate admin-zone--tier-lower" aria-label="Генерація">
         <h2 class="zone-kicker zone-kicker--soft zone-kicker--gen-title">ГЕНЕРАЦІЯ</h2>
         <div class="gen-bar gen-bar--actions gen-bar--compact">
           <button type="button" class="btn-neon btn-neon--compact" @click="generateRandomCharacter">
@@ -919,6 +949,7 @@ function rerollActiveCardOnly() {
           :speaker-id="String(gameRoom.currentSpeaker || '')"
           :voting-target-id="String(gameRoom.voting?.targetPlayer || '')"
           :voting-active="Boolean(gameRoom.voting?.active)"
+          :nominated-player-id="String(gameRoom.nominatedPlayer || '')"
           @select="goToPlayer"
         />
         <aside class="side-tools side-tools--inline">
@@ -951,6 +982,7 @@ function rerollActiveCardOnly() {
           @clear-votes="hostClearVotes"
           @remove-vote="hostRemoveVote"
           @stop-voting="hostStopVoting"
+          @voting-finish="hostFinishVoting"
         />
       </section>
 
@@ -974,14 +1006,16 @@ function rerollActiveCardOnly() {
 
     <p v-if="loadError" class="error">{{ loadError }}</p>
 
-    <section class="panel editor-panel">
+    <section class="panel editor-panel editor-panel--calm">
       <h2 class="panel-kicker">{{ isAdmin ? `Редактор: ${playerId}` : 'Твій персонаж' }}</h2>
 
       <div v-if="isAdmin" class="trait-block trait-block--identity">
         <div class="trait-toolbar">
           <span class="trait-label">Профіль (оверлей)</span>
           <div class="trait-actions">
-            <button type="button" class="icon-btn" title="Перегенерувати" @click="rerollIdentity">🎲</button>
+            <button type="button" class="icon-btn icon-btn--reroll" title="Перегенерувати" @click="rerollIdentity">
+              🎲
+            </button>
             <button
               type="button"
               class="reveal-pill"
@@ -1025,7 +1059,14 @@ function rerollActiveCardOnly() {
           <div class="trait-toolbar">
             <span class="trait-label">{{ row.label }}</span>
             <div class="trait-actions">
-              <button type="button" class="icon-btn" title="Перегенерувати поле" @click="rerollSingleTrait(row.key)">🎲</button>
+              <button
+                type="button"
+                class="icon-btn icon-btn--reroll"
+                title="Перегенерувати поле"
+                @click="rerollSingleTrait(row.key)"
+              >
+                🎲
+              </button>
               <button
                 type="button"
                 class="reveal-pill"
@@ -1143,23 +1184,46 @@ function rerollActiveCardOnly() {
   box-sizing: border-box;
 }
 
-.desk-sticky-bar {
+.host-summary-bar {
   position: sticky;
   top: 0;
-  z-index: 50;
-  margin: 0 -1.25rem 1rem;
-  padding: 0.5rem 1.25rem 0.65rem;
-  background: rgba(3, 2, 10, 0.94);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border-bottom: 1px solid rgba(168, 85, 247, 0.2);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 60;
+  margin: 0 -1.25rem 0.55rem;
+  padding: 0.42rem 1.25rem;
+  background: rgba(4, 3, 14, 0.97);
+  border-bottom: 1px solid rgba(45, 212, 191, 0.22);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  line-height: 1.35;
+  color: #e2e8f0;
+  font-family: 'Orbitron', sans-serif;
+  overflow-x: auto;
+  white-space: nowrap;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
 }
 
-.desk-sticky-bar :deep(.cc) {
+.admin-dock {
+  position: sticky;
+  top: 2.35rem;
+  z-index: 55;
+  margin: 0 0 0.75rem;
+  padding-bottom: 0.35rem;
+}
+
+@media (max-width: 520px) {
+  .admin-dock {
+    top: 2.85rem;
+  }
+}
+
+.admin-dock :deep(.cc) {
   margin-bottom: 0;
-  border: 1px solid rgba(168, 85, 247, 0.28);
-  box-shadow: none;
+}
+
+.admin-zone--live-priority.admin-card {
+  border-color: rgba(168, 85, 247, 0.38);
+  box-shadow: 0 0 32px rgba(168, 85, 247, 0.12);
 }
 
 .admin-zone {
@@ -1249,6 +1313,11 @@ function rerollActiveCardOnly() {
   background: rgba(4, 3, 14, 0.52);
   border: 1px solid rgba(255, 255, 255, 0.04);
   margin-bottom: 1.2rem;
+}
+
+.admin-zone--tier-lower {
+  opacity: 0.92;
+  border-color: rgba(71, 85, 105, 0.2);
 }
 
 .zone-kicker--soft {
@@ -1348,6 +1417,30 @@ function rerollActiveCardOnly() {
 
 .editor-panel {
   --editor-space: 0.7rem;
+}
+
+.editor-panel--calm {
+  border-color: rgba(51, 65, 85, 0.35);
+  background: rgba(8, 10, 18, 0.55);
+}
+
+.editor-panel--calm .trait-label,
+.editor-panel--calm .panel-kicker {
+  color: rgba(148, 163, 184, 0.55);
+}
+
+.editor-panel--calm .trait-block,
+.editor-panel--calm .trait-block--identity {
+  border-color: rgba(51, 65, 85, 0.35);
+}
+
+.editor-panel--calm .input:focus,
+.editor-panel--calm .textarea:focus,
+.editor-panel--calm .trait-value-input:focus,
+.editor-panel--calm .select:focus {
+  outline: none;
+  border-color: rgba(100, 116, 139, 0.65);
+  box-shadow: 0 0 0 2px rgba(71, 85, 105, 0.35);
 }
 
 .editor-panel .trait-block {
@@ -1584,7 +1677,7 @@ function rerollActiveCardOnly() {
 .trait-actions {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.7rem;
   flex-shrink: 0;
 }
 
@@ -1618,6 +1711,17 @@ function rerollActiveCardOnly() {
   background: rgba(88, 28, 135, 0.35);
 }
 
+.icon-btn--reroll {
+  border-color: rgba(251, 191, 36, 0.42);
+  background: rgba(120, 53, 15, 0.38);
+}
+
+.icon-btn--reroll:hover {
+  transform: scale(1.08) translateY(-1px);
+  border-color: rgba(252, 211, 77, 0.55);
+  box-shadow: 0 4px 14px rgba(251, 191, 36, 0.15);
+}
+
 .reveal-pill {
   padding: 0.38rem 0.65rem;
   border-radius: 10px;
@@ -1625,9 +1729,9 @@ function rerollActiveCardOnly() {
   font-weight: 800;
   letter-spacing: 0.08em;
   cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(0, 0, 0, 0.45);
-  color: rgba(226, 232, 240, 0.85);
+  border: 1px solid rgba(248, 113, 113, 0.38);
+  background: rgba(60, 22, 28, 0.5);
+  color: #fecaca;
   transition:
     border-color 0.15s,
     box-shadow 0.15s,
@@ -1635,15 +1739,14 @@ function rerollActiveCardOnly() {
 }
 
 .reveal-pill:hover {
-  transform: scale(1.05);
-  border-color: rgba(168, 85, 247, 0.45);
+  transform: scale(1.05) translateY(-1px);
 }
 
 .reveal-pill.active {
-  border-color: rgba(168, 85, 247, 0.6);
-  box-shadow: 0 0 14px rgba(168, 85, 247, 0.3);
-  background: rgba(88, 28, 135, 0.35);
-  color: #faf5ff;
+  border-color: rgba(74, 222, 128, 0.5);
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.2);
+  background: rgba(22, 101, 52, 0.4);
+  color: #bbf7d0;
 }
 
 .traits-stack {

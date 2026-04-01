@@ -34,35 +34,28 @@ function slotNum(slot) {
 
 const speakerSlot = computed(() => String(props.gameRoom?.currentSpeaker ?? '').trim())
 
-const speakerLine = computed(() => (speakerSlot.value ? `[${speakerSlot.value}]` : '— НІХТО —'))
-
 const phaseLabel = computed(() => String(props.gameRoom?.gamePhase || 'intro'))
+
+const votingOn = computed(() => Boolean(props.gameRoom?.voting?.active))
+
+/** Один рядок: PHASE · ROUND n · SPEAKER … · VOTING … */
+const statusRibbon = computed(() => {
+  const ph = phaseLabel.value.toUpperCase()
+  const sp = speakerSlot.value ? `SPEAKER ${speakerSlot.value}` : 'SPEAKER —'
+  const v = votingOn.value ? 'VOTING ON' : 'VOTING OFF'
+  return `${ph} · ROUND ${props.roomRound} · ${sp} · ${v}`
+})
 </script>
 
 <template>
   <section class="cc">
     <h2 class="cc-title">LIVE</h2>
 
-    <div class="cc-pult">
-      <aside class="cc-pult__state">
-        <p class="cc-state-k">СТАН</p>
-        <div class="cc-stat">
-          <span class="cc-stat__k">PHASE</span>
-          <b class="cc-stat__v">{{ phaseLabel }}</b>
-        </div>
-        <div class="cc-stat">
-          <span class="cc-stat__k">ROUND</span>
-          <b class="cc-stat__v">{{ roomRound }}</b>
-        </div>
-        <div class="cc-stat cc-stat--speaker">
-          <span class="cc-stat__k">🎤 SPEAKER</span>
-          <b class="cc-stat__v cc-stat__v--wide">{{ speakerLine }}</b>
-          <button type="button" class="cc-clear" @click="emit('clear-timer')">✖ CLEAR</button>
-        </div>
-      </aside>
+    <p class="cc-ribbon" role="status">{{ statusRibbon }}</p>
 
+    <div class="cc-pult">
       <div class="cc-pult__act">
-        <span class="cc-lab">Кнопки</span>
+        <span class="cc-lab">Шоу</span>
         <div class="cc-btns">
           <button type="button" class="cc-btn cc-btn--go" @click="emit('start-round')">Start</button>
           <button type="button" class="cc-btn cc-btn--pause" @click="emit('pause-show')">Pause</button>
@@ -89,23 +82,20 @@ const phaseLabel = computed(() => String(props.gameRoom?.gamePhase || 'intro'))
             <button type="button" class="cc-btn cc-btn--ghost" @click="emit('clear-timer')">↺</button>
           </div>
         </div>
-        <p class="cc-hint">
-          {{ speakerSlot || '—' }}
-          <span v-if="gameRoom.timerPaused" class="cc-paused">· пауза</span>
-        </p>
+        <p v-if="gameRoom.timerPaused" class="cc-pause-only">таймер на паузі</p>
       </div>
     </div>
 
     <div class="cc-footer">
-      <div class="cc-block">
-        <span class="cc-lab">Обрати спікера</span>
-        <div class="cc-chips cc-chips--speaker">
+      <div class="cc-block cc-block--speaker">
+        <span class="cc-lab">Спікер</span>
+        <div class="cc-speaker-row">
           <button
             v-for="slot in playerSlots"
             :key="'spk-' + slot"
             type="button"
-            class="chip"
-            :class="{ on: speakerSlot === slot }"
+            class="chip chip--speaker"
+            :class="{ 'chip--speaker-active': speakerSlot === slot }"
             @click="emit('set-speaker', slot)"
           >
             {{ slotNum(slot) }}
@@ -118,6 +108,7 @@ const phaseLabel = computed(() => String(props.gameRoom?.gamePhase || 'intro'))
           >
             Next ▶
           </button>
+          <button type="button" class="cc-clear" @click="emit('clear-timer')">✖ CLEAR</button>
         </div>
       </div>
 
@@ -162,100 +153,38 @@ const phaseLabel = computed(() => String(props.gameRoom?.gamePhase || 'intro'))
   padding: 1rem 1.1rem 1.15rem;
   border-radius: 16px;
   background: rgba(8, 4, 20, 0.92);
-  border: 1px solid rgba(168, 85, 247, 0.35);
-  box-shadow: 0 0 40px rgba(168, 85, 247, 0.08);
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  box-shadow: 0 0 48px rgba(168, 85, 247, 0.12);
   margin-bottom: 1rem;
 }
 
 .cc-title {
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.5rem;
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: rgba(196, 181, 253, 0.55);
+  color: rgba(196, 181, 253, 0.65);
   font-family: 'Orbitron', sans-serif;
+}
+
+.cc-ribbon {
+  margin: 0 0 0.75rem;
+  padding: 0.42rem 0.55rem;
+  border-radius: 8px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  line-height: 1.35;
+  color: #e2e8f0;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(168, 85, 247, 0.22);
+  font-family: 'Orbitron', sans-serif;
+  word-break: break-word;
 }
 
 .cc-pult {
-  display: grid;
-  gap: 0.85rem 1rem;
   margin-bottom: 0.85rem;
-}
-
-@media (min-width: 720px) {
-  .cc-pult {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
-    align-items: start;
-  }
-}
-
-.cc-pult__state {
-  padding: 0.65rem 0.75rem;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.28);
-  border: 1px solid rgba(168, 85, 247, 0.18);
-}
-
-.cc-state-k {
-  margin: 0 0 0.5rem;
-  font-size: 0.55rem;
-  font-weight: 900;
-  letter-spacing: 0.22em;
-  color: rgba(196, 181, 253, 0.45);
-  font-family: 'Orbitron', sans-serif;
-}
-
-.cc-stat {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.35rem 0.5rem;
-  margin-bottom: 0.4rem;
-}
-
-.cc-stat--speaker {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.4rem;
-}
-
-.cc-stat__k {
-  font-size: 0.55rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  color: rgba(148, 163, 184, 0.85);
-  min-width: 5.5rem;
-}
-
-.cc-stat__v {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 0.88rem;
-  font-weight: 800;
-  color: #e9d5ff;
-}
-
-.cc-stat__v--wide {
-  font-size: 0.95rem;
-  letter-spacing: 0.04em;
-}
-
-.cc-clear {
-  align-self: flex-start;
-  padding: 0.32rem 0.55rem;
-  border-radius: 8px;
-  font-size: 0.65rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  border: 1px solid rgba(248, 113, 113, 0.4);
-  background: rgba(80, 20, 30, 0.45);
-  color: #fecaca;
-  transition: transform 0.12s ease;
-}
-
-.cc-clear:hover {
-  transform: scale(1.05);
 }
 
 .cc-pult__act {
@@ -275,6 +204,10 @@ const phaseLabel = computed(() => String(props.gameRoom?.gamePhase || 'intro'))
 
 .cc-block--phase {
   padding-bottom: 0.15rem;
+}
+
+.cc-block--speaker {
+  margin-bottom: 0.15rem;
 }
 
 .cc-lab {
@@ -304,6 +237,13 @@ const phaseLabel = computed(() => String(props.gameRoom?.gamePhase || 'intro'))
   gap: 0.45rem;
 }
 
+.cc-speaker-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 .cc-btn {
   padding: 0.45rem 0.75rem;
   border-radius: 10px;
@@ -311,7 +251,9 @@ const phaseLabel = computed(() => String(props.gameRoom?.gamePhase || 'intro'))
   font-weight: 600;
   cursor: pointer;
   border: 1px solid transparent;
-  transition: transform 0.12s ease;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.15s ease;
 }
 
 .cc-btn:hover {
@@ -361,12 +303,8 @@ const phaseLabel = computed(() => String(props.gameRoom?.gamePhase || 'intro'))
   gap: 0.3rem;
 }
 
-.cc-chips--speaker {
-  align-items: center;
-}
-
 .cc-btn--next {
-  padding: 0.3rem 0.55rem;
+  padding: 0.32rem 0.6rem;
   border-radius: 10px;
   font-size: 0.68rem;
   font-weight: 800;
@@ -380,6 +318,23 @@ const phaseLabel = computed(() => String(props.gameRoom?.gamePhase || 'intro'))
 
 .cc-btn--next:hover {
   transform: scale(1.04);
+}
+
+.cc-clear {
+  padding: 0.32rem 0.55rem;
+  border-radius: 8px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  background: rgba(80, 20, 30, 0.45);
+  color: #fecaca;
+  transition: transform 0.12s ease;
+}
+
+.cc-clear:hover {
+  transform: scale(1.05);
 }
 
 .chip {
@@ -400,6 +355,16 @@ const phaseLabel = computed(() => String(props.gameRoom?.gamePhase || 'intro'))
   transform: scale(1.06);
 }
 
+.chip--speaker-active {
+  border-color: #c4b5fd !important;
+  background: linear-gradient(155deg, rgba(139, 92, 246, 0.5), rgba(76, 29, 149, 0.88)) !important;
+  color: #fff !important;
+  box-shadow:
+    0 0 22px rgba(167, 139, 250, 0.45),
+    0 0 0 2px rgba(255, 255, 255, 0.14);
+  transform: scale(1.08);
+}
+
 .chip.on {
   border-color: rgba(168, 85, 247, 0.65);
   background: rgba(168, 85, 247, 0.25);
@@ -418,13 +383,11 @@ const phaseLabel = computed(() => String(props.gameRoom?.gamePhase || 'intro'))
   background: rgba(49, 46, 129, 0.4);
 }
 
-.cc-hint {
+.cc-pause-only {
   margin: 0.35rem 0 0;
-  font-size: 0.68rem;
-  color: rgba(186, 181, 200, 0.75);
-}
-
-.cc-paused {
+  font-size: 0.65rem;
+  font-weight: 700;
   color: #fcd34d;
+  letter-spacing: 0.04em;
 }
 </style>

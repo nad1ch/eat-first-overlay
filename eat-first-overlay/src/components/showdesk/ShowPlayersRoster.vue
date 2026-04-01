@@ -10,6 +10,7 @@ const props = defineProps({
   speakerId: { type: String, default: '' },
   votingTargetId: { type: String, default: '' },
   votingActive: { type: Boolean, default: false },
+  nominatedPlayerId: { type: String, default: '' },
 })
 
 const emit = defineEmits(['select'])
@@ -29,11 +30,35 @@ function slotNum(id) {
 
 function statusLine(p) {
   if (p.eliminated === true) return 'Вибув'
-  if (String(p.id) === String(props.speakerId || '').trim()) return 'Говорить'
-  const vt = String(props.votingTargetId || '').trim()
-  if (props.votingActive && vt && String(p.id) === vt) return 'Ціль голосу'
   if (String(p.id) === String(props.spotlightPlayerId || '').trim()) return 'Spotlight'
   return '—'
+}
+
+function isSpeak(p) {
+  return p.eliminated !== true && String(p.id) === String(props.speakerId || '').trim()
+}
+
+function isVoteTargetCard(p) {
+  const sp = String(props.speakerId || '').trim()
+  const vt = String(props.votingTargetId || '').trim()
+  return (
+    p.eliminated !== true &&
+    props.votingActive &&
+    Boolean(vt) &&
+    String(p.id) === vt &&
+    String(p.id) !== sp
+  )
+}
+
+function isNominatedCard(p) {
+  const n = String(props.nominatedPlayerId || '').trim()
+  return p.eliminated !== true && Boolean(n) && String(p.id) === n
+}
+
+function showBadgesRow(p) {
+  if (p.eliminated === true) return false
+  if (isSpeak(p)) return true
+  return isVoteTargetCard(p) || isNominatedCard(p) || handUp(p)
 }
 
 function handUp(p) {
@@ -77,6 +102,14 @@ const playersSorted = computed(() => {
         @click="emit('select', p.id)"
       >
         <span v-if="p.eliminated === true" class="elim-badge" aria-hidden="true">ВИБУВ</span>
+        <div v-else-if="showBadgesRow(p)" class="pcard-badges">
+          <span v-if="isSpeak(p)" class="pcb pcb--speak">ГОВОРИТЬ</span>
+          <template v-else>
+            <span v-if="isVoteTargetCard(p)" class="pcb pcb--target">ЦІЛЬ</span>
+            <span v-if="isNominatedCard(p)" class="pcb pcb--nom">НОМІНОВАНИЙ</span>
+            <span v-if="handUp(p)" class="pcb pcb--hand">РУКА</span>
+          </template>
+        </div>
         <span class="num">{{ slotNum(p.id) }}</span>
         <span class="st">{{ statusLine(p) }}</span>
         <span v-if="cardActive(p)" class="card-ico" title="Є активна карта">🃏</span>
@@ -116,15 +149,61 @@ const playersSorted = computed(() => {
   gap: 0.45rem;
 }
 
+.pcard-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.2rem;
+  margin-bottom: 0.15rem;
+  min-height: 1rem;
+}
+
+.pcb {
+  padding: 0.1rem 0.28rem;
+  border-radius: 4px;
+  font-size: 0.45rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.pcb--speak {
+  color: #faf5ff;
+  background: rgba(109, 40, 217, 0.75);
+  border: 1px solid rgba(196, 181, 253, 0.55);
+  box-shadow: 0 0 8px rgba(168, 85, 247, 0.35);
+}
+
+.pcb--target {
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.65);
+  border: 1px solid rgba(248, 113, 113, 0.45);
+}
+
+.pcb--nom {
+  color: #fde68a;
+  background: rgba(120, 53, 15, 0.5);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  font-size: 0.42rem;
+}
+
+.pcb--hand {
+  color: rgba(226, 232, 240, 0.85);
+  background: rgba(30, 41, 59, 0.85);
+  border: 1px solid rgba(100, 116, 139, 0.4);
+  font-weight: 700;
+}
+
 .pcard {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.25rem;
-  min-height: 4.5rem;
-  padding: 0.5rem 0.35rem;
+  gap: 0.2rem;
+  min-height: 4.85rem;
+  padding: 0.45rem 0.35rem 0.5rem;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(0, 0, 0, 0.35);
