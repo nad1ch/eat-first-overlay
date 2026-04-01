@@ -7,8 +7,11 @@ const HUD_RIGHT = ['luggage', 'fact', 'quirk']
 
 const props = defineProps({
   player: { type: Object, required: true },
+  /** Spotlight з games/{gameId}.activePlayer */
   highlighted: { type: Boolean, default: false },
   solo: { type: Boolean, default: false },
+  /** Режим «cinema»: рівно 4 живих гравці в кімнаті */
+  cinema: { type: Boolean, default: false },
 })
 
 const labelByKey = computed(() =>
@@ -53,13 +56,13 @@ function playerIdDisplay(player) {
 </script>
 
 <template>
-  <!-- Режим шоу: компактна картка в grid -->
   <article
     v-if="!solo"
     class="card-grid"
     :class="{
-      'card-grid--hl': highlighted,
+      'card-grid--active': highlighted,
       'card-grid--eliminated': isEliminated(player),
+      'card-grid--cinema': cinema,
     }"
   >
     <Transition name="badge-pop">
@@ -89,13 +92,13 @@ function playerIdDisplay(player) {
     </div>
   </article>
 
-  <!-- Персональний стрім: HUD по краях, центр вільний під вебку -->
   <div
     v-else
     class="hud-root"
     :class="{
       'hud-root--eliminated': isEliminated(player),
       'hud-root--active': highlighted,
+      'hud-root--cinema': cinema,
     }"
   >
     <div v-if="isEliminated(player)" class="hud-eliminated-veil" aria-hidden="true" />
@@ -124,11 +127,7 @@ function playerIdDisplay(player) {
       </div>
 
       <div class="hud-block hud-bl">
-        <div
-          v-for="key in HUD_LEFT"
-          :key="key"
-          class="hud-row"
-        >
+        <div v-for="key in HUD_LEFT" :key="key" class="hud-row">
           <span class="hud-label">{{ labelByKey[key] }}</span>
           <span
             :key="valueRevealKey(player, key)"
@@ -144,11 +143,7 @@ function playerIdDisplay(player) {
       </div>
 
       <div class="hud-block hud-br">
-        <div
-          v-for="key in HUD_RIGHT"
-          :key="key"
-          class="hud-row"
-        >
+        <div v-for="key in HUD_RIGHT" :key="key" class="hud-row">
           <span class="hud-label">{{ labelByKey[key] }}</span>
           <span
             :key="valueRevealKey(player, key)"
@@ -167,7 +162,7 @@ function playerIdDisplay(player) {
 </template>
 
 <style scoped>
-/* ========== Grid (глобальний overlay) ========== */
+/* ========== Grid ========== */
 .card-grid {
   position: relative;
   padding: 0;
@@ -178,7 +173,27 @@ function playerIdDisplay(player) {
     0 16px 36px rgba(0, 0, 0, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
   overflow: hidden;
-  transition: border-color 0.32s ease, box-shadow 0.32s ease, background 0.32s ease;
+  transition: border-color 0.32s ease, box-shadow 0.32s ease, transform 0.35s ease;
+}
+
+.card-grid--cinema {
+  border-radius: 18px;
+}
+
+.card-grid--cinema .card-grid-body {
+  padding: 1.2rem 1.25rem 1.3rem;
+}
+
+.card-grid--cinema .card-grid-name {
+  font-size: clamp(1.05rem, 2.2vw, 1.25rem);
+}
+
+.card-grid--cinema .value {
+  font-size: 0.82rem;
+}
+
+.card-grid--cinema .stats li {
+  padding: 0.5rem 0.55rem;
 }
 
 .card-grid-body {
@@ -191,12 +206,31 @@ function playerIdDisplay(player) {
   filter: grayscale(1);
 }
 
-.card-grid--hl {
-  border-color: rgba(129, 140, 248, 0.55);
+.card-grid--active {
+  transform: scale(1.05);
+  z-index: 2;
+  border-color: rgba(167, 139, 250, 0.65);
   box-shadow:
-    0 0 0 1px rgba(129, 140, 248, 0.25),
-    0 16px 36px rgba(0, 0, 0, 0.45),
-    0 0 24px rgba(129, 140, 248, 0.15);
+    0 0 0 2px rgba(167, 139, 250, 0.35),
+    0 0 36px rgba(167, 139, 250, 0.5),
+    0 16px 40px rgba(0, 0, 0, 0.5);
+  animation: gridSpotlightPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes gridSpotlightPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px rgba(167, 139, 250, 0.3),
+      0 0 28px rgba(167, 139, 250, 0.4),
+      0 16px 40px rgba(0, 0, 0, 0.5);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px rgba(199, 210, 254, 0.55),
+      0 0 48px rgba(167, 139, 250, 0.65),
+      0 16px 40px rgba(0, 0, 0, 0.55);
+  }
 }
 
 .card-grid--eliminated {
@@ -287,26 +321,28 @@ function playerIdDisplay(player) {
 }
 
 .value--revealed {
-  animation: valueReveal 0.48s ease forwards;
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+  animation: flashReveal 0.4s ease-out forwards;
   border-radius: 4px;
 }
 
-@keyframes valueReveal {
+@keyframes flashReveal {
   0% {
     opacity: 0;
-    filter: blur(10px);
+    filter: blur(8px);
     transform: scale(0.96);
+    box-shadow: none;
   }
-  55% {
+  45% {
     opacity: 1;
     filter: blur(0);
-    transform: scale(1.05);
+    transform: scale(1.06);
+    box-shadow: 0 0 25px rgba(255, 255, 255, 0.4);
   }
   100% {
     opacity: 1;
     filter: blur(0);
     transform: scale(1);
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.15);
   }
 }
 
@@ -330,7 +366,7 @@ function playerIdDisplay(player) {
   transform: scale(1);
 }
 
-/* ========== HUD (персональний overlay) ========== */
+/* ========== HUD ========== */
 .hud-root {
   position: absolute;
   inset: 0;
@@ -345,13 +381,49 @@ function playerIdDisplay(player) {
   position: absolute;
   inset: 0;
   z-index: 4;
-  background: rgba(90, 20, 30, 0.2);
-  transition: background 0.35s ease, opacity 0.35s ease;
   pointer-events: none;
+  background: transparent;
 }
 
 .hud-root--eliminated .hud-eliminated-veil {
-  background: rgba(100, 25, 35, 0.28);
+  animation:
+    elimFlashRed 0.2s ease-out forwards,
+    elimFadeOut 0.45s ease-out 0.2s forwards,
+    elimVeilShake 0.45s ease-in-out 0.2s 1;
+}
+
+@keyframes elimFlashRed {
+  0% {
+    background: rgba(255, 50, 50, 0.65);
+  }
+  100% {
+    background: rgba(180, 30, 40, 0.4);
+  }
+}
+
+@keyframes elimFadeOut {
+  0% {
+    background: rgba(180, 30, 40, 0.4);
+  }
+  100% {
+    background: rgba(150, 0, 0, 0.35);
+  }
+}
+
+@keyframes elimVeilShake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(-2px, 1px);
+  }
+  50% {
+    transform: translate(2px, -1px);
+  }
+  75% {
+    transform: translate(-1px, 1px);
+  }
 }
 
 .hud-eliminated-badge {
@@ -373,6 +445,7 @@ function playerIdDisplay(player) {
 }
 
 .hud-zones {
+  --hud-scale: 1;
   position: absolute;
   inset: 0;
   z-index: 2;
@@ -380,28 +453,29 @@ function playerIdDisplay(player) {
 }
 
 .hud-root--active .hud-zones {
+  --hud-scale: 1.05;
   animation:
     hudFloat 6s ease-in-out infinite,
-    hudPulse 1.5s ease-in-out infinite;
+    spotlightGlow 1.5s ease-in-out infinite;
 }
 
 @keyframes hudFloat {
   0%,
   100% {
-    transform: translateY(0);
+    transform: translateY(0) scale(var(--hud-scale));
   }
   50% {
-    transform: translateY(-5px);
+    transform: translateY(-5px) scale(var(--hud-scale));
   }
 }
 
-@keyframes hudPulse {
+@keyframes spotlightGlow {
   0%,
   100% {
-    filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.12));
+    filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.2));
   }
   50% {
-    filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.45));
+    filter: drop-shadow(0 0 26px rgba(167, 139, 250, 0.85));
   }
 }
 
@@ -418,11 +492,16 @@ function playerIdDisplay(player) {
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.45),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  opacity: 0;
+  animation-duration: 0.5s;
+  animation-timing-function: ease-out;
+  animation-fill-mode: forwards;
 }
 
 .hud-tl {
   top: clamp(0.75rem, 2vh, 1.5rem);
   left: clamp(0.75rem, 2vw, 1.5rem);
+  animation-name: hudInTL;
 }
 
 .hud-tr {
@@ -430,17 +509,86 @@ function playerIdDisplay(player) {
   right: clamp(0.75rem, 2vw, 1.5rem);
   text-align: right;
   padding: 0.5rem 0.85rem;
+  animation-name: hudInTR;
 }
 
 .hud-bl {
   bottom: clamp(0.75rem, 2vh, 1.75rem);
   left: clamp(0.75rem, 2vw, 1.5rem);
+  animation-name: hudInBL;
 }
 
 .hud-br {
   bottom: clamp(0.75rem, 2vh, 1.75rem);
   right: clamp(0.75rem, 2vw, 1.5rem);
   text-align: right;
+  animation-name: hudInBR;
+}
+
+@keyframes hudInTL {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes hudInTR {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes hudInBL {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes hudInBR {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hud-root--cinema .hud-block {
+  max-width: min(42vw, 430px);
+  padding: 0.72rem 0.95rem;
+  border-radius: 16px;
+}
+
+.hud-root--cinema .hud-meta-line {
+  font-size: 15px;
+}
+
+.hud-root--cinema .hud-slot {
+  font-size: clamp(2.35rem, 6vw, 3.85rem);
+}
+
+.hud-root--cinema .hud-value {
+  font-size: clamp(15px, 2.5vw, 19px);
+}
+
+.hud-root--cinema .hud-label {
+  font-size: clamp(12px, 2vw, 13px);
 }
 
 .hud-meta-line {
@@ -513,10 +661,6 @@ function playerIdDisplay(player) {
   text-align: left;
 }
 
-.hud-br .hud-label {
-  text-align: left;
-}
-
 .hud-value {
   font-size: clamp(14px, 2.2vw, 17px);
   font-weight: 700;
@@ -535,9 +679,7 @@ function playerIdDisplay(player) {
 }
 
 .hud-value.value--revealed {
-  animation: valueReveal 0.48s ease forwards;
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
+  animation: flashReveal 0.4s ease-out forwards;
   padding: 0.05rem 0.2rem;
   margin: -0.05rem -0.2rem;
 }

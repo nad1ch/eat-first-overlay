@@ -2,8 +2,36 @@ import { collection, doc, setDoc, onSnapshot, getDoc } from 'firebase/firestore'
 import { ADMIN_KEY } from '../config/access.js'
 import { db } from '../firebase.js'
 
+function gameDocRef(gameId) {
+  return doc(db, 'games', gameId)
+}
+
 function playerDocRef(gameId, playerId) {
   return doc(db, 'games', gameId, 'players', playerId)
+}
+
+/**
+ * Метадані кімнати: games/{gameId} (наприклад activePlayer для spotlight).
+ */
+export function subscribeToGameRoom(gameId, callback) {
+  return onSnapshot(
+    gameDocRef(gameId),
+    (snapshot) => {
+      callback(snapshot.exists() ? snapshot.data() : {})
+    },
+    (err) => {
+      console.error('[subscribeToGameRoom]', err)
+      callback({})
+    },
+  )
+}
+
+export async function saveGameRoom(gameId, partial) {
+  await setDoc(
+    gameDocRef(gameId),
+    { ...partial, key: ADMIN_KEY },
+    { merge: true },
+  )
 }
 
 /**

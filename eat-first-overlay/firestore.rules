@@ -2,6 +2,11 @@ rules_version = '2';
 // Якщо змінюєш VITE_ADMIN_KEY — онови рядок нижче на той самий літерал (або винеси в custom claims).
 service cloud.firestore {
   match /databases/{database}/documents {
+    match /games/{gameId} {
+      allow read: if true;
+      allow write: if request.resource.data.key == "123456";
+    }
+
     match /games/{gameId}/players/{playerId} {
       allow read: if true;
       allow write: if request.resource.data.key == "123456";

@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ADMIN_KEY } from '../config/access.js'
 import { rollRandomIntoCharacter } from '../data/randomPools.js'
 import { characterState, fieldConfig, applyRemoteCharacterData, snapshotCharacter } from '../characterState'
-import { saveCharacter, fetchCharacter } from '../services/gameService'
+import { saveCharacter, fetchCharacter, subscribeToGameRoom, saveGameRoom } from '../services/gameService'
 
 const route = useRoute()
 const router = useRouter()
@@ -51,6 +51,84 @@ watch(
 )
 
 const PLAYER_SLOTS = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10']
+
+const gameRoom = ref({})
+let unsubGameRoom = null
+
+const toast = ref('')
+let toastTimer = null
+
+const personalUrlAbsolute = computed(() => {
+  const h = router.resolve(overlayHrefPersonal.value).href
+  if (typeof window === 'undefined') return h
+  return new URL(h, window.location.origin).href
+})
+
+const globalUrlAbsolute = computed(() => {
+  const h = router.resolve(overlayHrefGlobal.value).href
+  if (typeof window === 'undefined') return h
+  return new URL(h, window.location.origin).href
+})
+
+function showToast(msg) {
+  toast.value = msg
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => {
+    toast.value = ''
+  }, 2200)
+}
+
+async function copyPersonal() {
+  try {
+    await navigator.clipboard.writeText(personalUrlAbsolute.value)
+    showToast('Скопійовано')
+  } catch {
+    showToast('Не вдалося скопіювати')
+  }
+}
+
+async function copyGlobal() {
+  try {
+    await navigator.clipboard.writeText(globalUrlAbsolute.value)
+    showToast('Скопійовано')
+  } catch {
+    showToast('Не вдалося скопіювати')
+  }
+}
+
+watch(
+  [gameId, adminAccessDenied],
+  () => {
+    if (unsubGameRoom) {
+      unsubGameRoom()
+      unsubGameRoom = null
+    }
+    if (adminAccessDenied.value) {
+      gameRoom.value = {}
+      return
+    }
+    unsubGameRoom = subscribeToGameRoom(gameId.value, (d) => {
+      gameRoom.value = d && typeof d === 'object' ? d : {}
+    })
+  },
+  { immediate: true },
+)
+
+async function setSpotlightPlayer(slot) {
+  if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    if (slot === '' || slot == null) {
+      await saveGameRoom(gameId.value, { activePlayer: '' })
+      return
+    }
+    const cur = String(gameRoom.value?.activePlayer ?? '').trim()
+    const next = cur === slot ? '' : slot
+    await saveGameRoom(gameId.value, { activePlayer: next })
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
 
 let saveTimer = null
 
@@ -134,6 +212,11 @@ onMounted(() => {
 
 onUnmounted(() => {
   clearTimeout(saveTimer)
+  clearTimeout(toastTimer)
+  if (unsubGameRoom) {
+    unsubGameRoom()
+    unsubGameRoom = null
+  }
 })
 
 const playerRevealLocked = computed(
@@ -220,6 +303,28 @@ function generateRandomCharacter() {
           </div>
         </div>
         <div class="tool-row">
+          <span class="field-label">Активний гравець (spotlight на overlay)</span>
+          <p class="spotlight-hint">
+            Зараз:
+            <strong>{{ String(gameRoom.activePlayer || '').trim() || '—' }}</strong>
+          </p>
+          <div class="chip-row">
+            <button
+              v-for="slot in PLAYER_SLOTS"
+              :key="'sp-' + slot"
+              type="button"
+              class="chip chip-spotlight"
+              :class="{ active: String(gameRoom.activePlayer || '') === slot }"
+              @click="setSpotlightPlayer(slot)"
+            >
+              {{ slot }}
+            </button>
+            <button type="button" class="btn-secondary" @click="setSpotlightPlayer('')">
+              Вимкнути
+            </button>
+          </div>
+        </div>
+        <div class="tool-row">
           <label class="field-label" for="new-player">Новий персонаж (id гравця)</label>
           <div class="row-controls">
             <input
@@ -240,8 +345,37 @@ function generateRandomCharacter() {
         <RouterLink :to="overlayHrefGlobal" class="link" target="_blank">Overlay — усі гравці</RouterLink>
         <RouterLink :to="overlayHrefPersonal" class="link link-accent" target="_blank">Overlay — тільки цей гравець</RouterLink>
       </nav>
+
+      <section class="panel copy-panel" aria-label="Посилання для OBS">
+        <h2 class="panel-title">Посилання для стріму (OBS)</h2>
+        <div class="copy-line">
+          <div class="copy-info">
+            <span class="copy-emoji">🎥</span>
+            <div>
+              <span class="copy-label">Твій overlay</span>
+              <p class="copy-url">{{ personalUrlAbsolute }}</p>
+            </div>
+          </div>
+          <button type="button" class="btn-copy" @click="copyPersonal">Копіювати</button>
+        </div>
+        <div class="copy-line">
+          <div class="copy-info">
+            <span class="copy-emoji">🎬</span>
+            <div>
+              <span class="copy-label">Overlay усіх гравців</span>
+              <p class="copy-url">{{ globalUrlAbsolute }}</p>
+            </div>
+          </div>
+          <button type="button" class="btn-copy" @click="copyGlobal">Копіювати</button>
+        </div>
+      </section>
+
       <p v-if="loadError" class="error" role="alert">{{ loadError }}</p>
     </header>
+
+    <Teleport to="body">
+      <div v-if="toast" class="toast" role="status">{{ toast }}</div>
+    </Teleport>
 
     <section class="panel">
       <div class="panel-head">
@@ -589,6 +723,88 @@ function generateRandomCharacter() {
   border-color: rgba(251, 191, 36, 0.5);
 }
 
+.spotlight-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  color: rgba(148, 163, 184, 0.95);
+}
+
+.spotlight-hint strong {
+  color: #c7d2fe;
+}
+
+.chip-spotlight.active {
+  border-color: rgba(251, 191, 36, 0.55);
+  background: rgba(245, 158, 11, 0.22);
+  color: #fef3c7;
+}
+
+.copy-panel .panel-title {
+  margin-bottom: 0.85rem;
+}
+
+.copy-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.copy-line:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.copy-info {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  min-width: 0;
+  flex: 1;
+}
+
+.copy-emoji {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.copy-label {
+  display: block;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.9);
+  margin-bottom: 0.25rem;
+}
+
+.copy-url {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: #cbd5e1;
+  word-break: break-all;
+}
+
+.btn-copy {
+  flex-shrink: 0;
+  padding: 0.45rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid rgba(129, 140, 248, 0.45);
+  background: rgba(99, 102, 241, 0.2);
+  color: #e0e7ff;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.btn-copy:hover {
+  background: rgba(99, 102, 241, 0.35);
+}
+
 .panel {
   padding: 1.25rem 1.35rem;
   margin-bottom: 1.25rem;
@@ -787,5 +1003,24 @@ function generateRandomCharacter() {
 .toggle:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+</style>
+
+<style>
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99999;
+  padding: 0.55rem 1.2rem;
+  border-radius: 12px;
+  background: rgba(20, 83, 45, 0.95);
+  border: 1px solid rgba(74, 222, 128, 0.5);
+  color: #ecfdf5;
+  font-size: 0.88rem;
+  font-weight: 600;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
 }
 </style>

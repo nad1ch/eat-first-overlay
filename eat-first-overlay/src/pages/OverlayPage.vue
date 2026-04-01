@@ -2,13 +2,16 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import OverlayPlayerCard from '../components/OverlayPlayerCard.vue'
-import { subscribeToCharacter, subscribeToPlayers } from '../services/gameService'
+import {
+  subscribeToCharacter,
+  subscribeToGameRoom,
+  subscribeToPlayers,
+} from '../services/gameService'
 
 const route = useRoute()
 
 const gameId = computed(() => String(route.query.game ?? 'test1'))
 
-/** Є непорожній query → персональний режим (один гравець). */
 const personalPlayerId = computed(() => {
   const p = route.query.player
   if (p == null) return null
@@ -20,28 +23,77 @@ const isPersonal = computed(() => personalPlayerId.value != null)
 
 const players = ref([])
 const singlePlayer = ref(null)
+const gameRoom = ref({})
+/** Для cinema mode в персональному HUD — рахуємо «живих» у кімнаті. */
+const aliveForCinema = ref(0)
 
 let unsubscribe = null
+let unsubPlayersCount = null
+let unsubGameRoom = null
 
-function cleanup() {
+function cleanupPlayerSub() {
   if (unsubscribe) {
     unsubscribe()
     unsubscribe = null
   }
+  if (unsubPlayersCount) {
+    unsubPlayersCount()
+    unsubPlayersCount = null
+  }
 }
+
+function cleanupGameRoom() {
+  if (unsubGameRoom) {
+    unsubGameRoom()
+    unsubGameRoom = null
+  }
+}
+
+function setupGameRoom(gid) {
+  cleanupGameRoom()
+  unsubGameRoom = subscribeToGameRoom(gid, (data) => {
+    gameRoom.value = data && typeof data === 'object' ? data : {}
+  })
+}
+
+watch(
+  gameId,
+  (gid) => {
+    setupGameRoom(gid)
+  },
+  { immediate: true },
+)
+
+const activeSpotlightId = computed(() => {
+  const a = gameRoom.value?.activePlayer
+  if (a == null) return null
+  const s = String(a).trim()
+  return s.length ? s : null
+})
+
+const aliveInGame = computed(
+  () => players.value.filter((p) => p.eliminated !== true).length,
+)
+
+const cinemaGrid = computed(() => !isPersonal.value && aliveInGame.value === 4)
+const cinemaHud = computed(() => isPersonal.value && aliveForCinema.value === 4)
 
 watch(
   [gameId, personalPlayerId],
   () => {
-    cleanup()
+    cleanupPlayerSub()
     const gid = gameId.value
     const pid = personalPlayerId.value
+    aliveForCinema.value = 0
 
     if (pid) {
       players.value = []
       singlePlayer.value = null
       unsubscribe = subscribeToCharacter(gid, pid, (data) => {
         singlePlayer.value = data ? { id: pid, ...data } : null
+      })
+      unsubPlayersCount = subscribeToPlayers(gid, (list) => {
+        aliveForCinema.value = list.filter((p) => p.eliminated !== true).length
       })
     } else {
       singlePlayer.value = null
@@ -54,12 +106,17 @@ watch(
 )
 
 onUnmounted(() => {
-  cleanup()
+  cleanupPlayerSub()
+  cleanupGameRoom()
 })
 
 const modeLabel = computed(() =>
   isPersonal.value ? `персональний · ${personalPlayerId.value}` : 'усі гравці',
 )
+
+function isSpotlightPlayer(p) {
+  return activeSpotlightId.value != null && p.id === activeSpotlightId.value
+}
 </script>
 
 <template>
@@ -75,19 +132,24 @@ const modeLabel = computed(() =>
       </p>
     </header>
 
-    <!-- Персональний: одна картка по центру -->
     <div v-if="isPersonal" class="single-stage single-stage--hud">
       <OverlayPlayerCard
         v-if="singlePlayer"
         :player="singlePlayer"
-        :highlighted="false"
+        :highlighted="isSpotlightPlayer(singlePlayer)"
+        :cinema="cinemaHud"
         solo
       />
     </div>
 
-    <!-- Глобальний: grid -->
-    <div v-else class="grid">
-      <OverlayPlayerCard v-for="p in players" :key="p.id" :player="p" />
+    <div v-else class="grid" :class="{ 'grid--cinema': cinemaGrid }">
+      <OverlayPlayerCard
+        v-for="p in players"
+        :key="p.id"
+        :player="p"
+        :highlighted="isSpotlightPlayer(p)"
+        :cinema="cinemaGrid"
+      />
     </div>
   </div>
 </template>
@@ -194,6 +256,12 @@ const modeLabel = computed(() =>
   margin: 0 auto;
   align-content: end;
   filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.06));
+}
+
+.grid--cinema {
+  gap: 1.35rem 1.5rem;
+  max-width: 1280px;
+  padding-bottom: 0.5rem;
 }
 
 @media (min-width: 900px) {
