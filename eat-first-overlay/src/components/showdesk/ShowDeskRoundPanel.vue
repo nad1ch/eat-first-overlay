@@ -1,51 +1,56 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed } from 'vue'
 
 const props = defineProps({
   gameRoom: { type: Object, default: () => ({}) },
 })
 
-const emit = defineEmits(['next-round', 'reset-round', 'set-round'])
-
-const draft = ref(1)
-
-watch(
-  () => props.gameRoom?.round,
-  (r) => {
-    const n = Math.floor(Number(r) || 1)
-    draft.value = n >= 1 && n <= 8 ? n : 1
-  },
-  { immediate: true },
-)
-
-function applySetRound() {
-  const n = Math.floor(Number(draft.value) || 1)
-  emit('set-round', n)
-}
+const emit = defineEmits(['reset-round', 'set-round', 'round-delta'])
 
 const roundNow = computed(() =>
   Math.min(8, Math.max(1, Math.floor(Number(props.gameRoom?.round) || 1))),
 )
+
+const canDec = computed(() => roundNow.value > 1)
+const canInc = computed(() => roundNow.value < 8)
 </script>
 
 <template>
   <section class="rp">
     <h2 class="rp-title">РАУНД</h2>
-    <p class="rp-now">
-      <span class="rp-now__big">ROUND {{ roundNow }} / 8</span>
-    </p>
-    <div class="rp-row">
-      <button type="button" class="rp-btn rp-btn--next" @click="emit('next-round')">➕ Next round</button>
-      <button type="button" class="rp-btn rp-btn--reset" @click="emit('reset-round')">🔄 Reset round</button>
+    <div class="rp-stepper">
+      <button
+        type="button"
+        class="rp-step"
+        :disabled="!canDec"
+        @click="emit('round-delta', -1)"
+      >
+        −
+      </button>
+      <span class="rp-stepper__mid">ROUND {{ roundNow }}</span>
+      <button
+        type="button"
+        class="rp-step"
+        :disabled="!canInc"
+        @click="emit('round-delta', 1)"
+      >
+        +
+      </button>
     </div>
-    <div class="rp-set">
-      <label class="rp-lab">✏️ Set round</label>
-      <div class="rp-inline">
-        <input v-model.number="draft" type="number" min="1" max="8" class="rp-inp" />
-        <button type="button" class="rp-btn rp-btn--ok" @click="applySetRound">OK</button>
-      </div>
-      <p class="rp-hint">При зміні раунду голоси очищаються. Вибуті та персонажі не чіпаються.</p>
+    <div class="rp-chips">
+      <button
+        v-for="n in 8"
+        :key="'r' + n"
+        type="button"
+        class="rp-chip"
+        :class="{ on: roundNow === n }"
+        @click="emit('set-round', n)"
+      >
+        {{ n }}
+      </button>
     </div>
+    <button type="button" class="rp-btn rp-btn--reset" @click="emit('reset-round')">На раунд 1</button>
+    <p class="rp-hint">При зміні раунду голоси очищаються. Фаза не змінюється.</p>
   </section>
 </template>
 
@@ -67,7 +72,7 @@ const roundNow = computed(() =>
 }
 
 .rp-title {
-  margin: 0 0 0.5rem;
+  margin: 0 0 0.65rem;
   font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.2em;
@@ -76,26 +81,77 @@ const roundNow = computed(() =>
   font-family: 'Orbitron', sans-serif;
 }
 
-.rp-now {
-  margin: 0 0 0.65rem;
-  font-size: 0.78rem;
-  color: rgba(226, 232, 240, 0.85);
+.rp-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  margin-bottom: 0.75rem;
 }
 
-.rp-now__big {
-  display: block;
+.rp-step {
+  min-width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 12px;
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  background: rgba(88, 28, 135, 0.45);
+  color: #faf5ff;
+  transition: transform 0.12s ease;
+}
+
+.rp-step:hover:not(:disabled) {
+  transform: scale(1.05);
+}
+
+.rp-step:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.rp-stepper__mid {
   font-family: 'Orbitron', sans-serif;
   font-size: 1.05rem;
   font-weight: 900;
   letter-spacing: 0.12em;
   color: #e9d5ff;
+  min-width: 8.5rem;
+  text-align: center;
 }
 
-.rp-row {
+.rp-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
-  margin-bottom: 0.85rem;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.rp-chip {
+  min-width: 2.15rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  font-family: 'Orbitron', sans-serif;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.35);
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.rp-chip:hover {
+  transform: scale(1.05);
+}
+
+.rp-chip.on {
+  border-color: rgba(74, 222, 128, 0.55);
+  background: rgba(22, 101, 52, 0.4);
+  color: #bbf7d0;
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.2);
 }
 
 .rp-btn {
@@ -112,59 +168,15 @@ const roundNow = computed(() =>
   transform: translateY(-1px);
 }
 
-.rp-btn--next {
-  background: rgba(22, 101, 52, 0.4);
-  border-color: rgba(74, 222, 128, 0.4);
-  color: #bbf7d0;
-}
-
 .rp-btn--reset {
+  width: 100%;
   background: rgba(80, 20, 30, 0.5);
   border-color: rgba(248, 113, 113, 0.35);
   color: #fecaca;
 }
 
-.rp-set {
-  padding-top: 0.35rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.rp-lab {
-  display: block;
-  margin-bottom: 0.35rem;
-  font-size: 0.6rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: rgba(196, 181, 253, 0.4);
-}
-
-.rp-inline {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  align-items: center;
-}
-
-.rp-inp {
-  width: 4.5rem;
-  padding: 0.4rem 0.5rem;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(0, 0, 0, 0.4);
-  color: #f1f5f9;
-  font-family: 'Orbitron', sans-serif;
-  font-size: 0.85rem;
-}
-
-.rp-btn--ok {
-  background: rgba(88, 28, 135, 0.55);
-  border-color: rgba(168, 85, 247, 0.55);
-  color: #faf5ff;
-}
-
 .rp-hint {
-  margin: 0.5rem 0 0;
+  margin: 0.55rem 0 0;
   font-size: 0.62rem;
   line-height: 1.45;
   color: rgba(148, 163, 184, 0.7);

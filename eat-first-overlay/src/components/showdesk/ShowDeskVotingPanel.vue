@@ -12,7 +12,7 @@ const props = defineProps({
 const emit = defineEmits([
   'nominate',
   'voting-target',
-  'voting-toggle',
+  'voting-start',
   'clear-votes',
   'remove-vote',
   'stop-voting',
@@ -38,6 +38,14 @@ const lines = computed(() =>
 
 const targetPlayerId = computed(() => String(props.gameRoom?.voting?.targetPlayer ?? '').trim())
 
+const votingActive = computed(() => Boolean(props.gameRoom?.voting?.active))
+
+const roundNow = computed(() =>
+  Math.min(8, Math.max(1, Math.floor(Number(props.gameRoom?.round) || 1))),
+)
+
+const canStart = computed(() => Boolean(targetPlayerId.value) && !votingActive.value)
+
 const countFor = computed(() => props.votesLive.filter((v) => v.choice !== 'against').length)
 
 const countAgainst = computed(() => props.votesLive.filter((v) => v.choice === 'against').length)
@@ -46,15 +54,29 @@ const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
 </script>
 
 <template>
-  <section class="vp" :class="{ 'vp--active': gameRoom.voting?.active }">
+  <section class="vp" :class="{ 'vp--active': votingActive }">
     <h2 class="vp-title">ГОЛОСУВАННЯ</h2>
 
-    <p v-if="allPlayersVoted && gameRoom.voting?.active" class="vp-all-voted">ВСІ ПРОГОЛОСУВАЛИ</p>
-
-    <div class="vp-target" :class="{ 'vp-target--dim': !gameRoom.voting?.active }">
-      <span class="vp-target__lab">TARGET</span>
-      <span class="vp-target__val">{{ targetPlayerId || '—' }}</span>
+    <div class="vp-scene" :class="{ 'vp-scene--on': votingActive }">
+      <p class="vp-scene__state">
+        {{ votingActive ? '🟢 ГОЛОСУВАННЯ АКТИВНЕ' : '⚪ ГОТОВІ ДО ГОЛОСУВАННЯ' }}
+      </p>
+      <p class="vp-scene__line"><span class="vp-scene__k">TARGET</span> {{ targetPlayerId || '—' }}</p>
+      <p class="vp-scene__line"><span class="vp-scene__k">ROUND</span> {{ roundNow }}</p>
+      <div class="vp-scene__row">
+        <button
+          type="button"
+          class="vp-go"
+          :disabled="!canStart"
+          @click="emit('voting-start')"
+        >
+          ▶ ПОЧАТИ
+        </button>
+        <button type="button" class="vp-stop" @click="emit('stop-voting')">■ ЗУПИНИТИ</button>
+      </div>
     </div>
+
+    <p v-if="allPlayersVoted && votingActive" class="vp-all-voted">ВСІ ПРОГОЛОСУВАЛИ</p>
 
     <div class="vp-block">
       <span class="vp-lab">Номінація</span>
@@ -76,11 +98,7 @@ const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
 
     <div class="vp-block">
       <span class="vp-lab">Ціль голосування</span>
-      <p class="vp-mini">
-        {{ gameRoom.voting?.active ? 'активне' : 'вимкнено' }}
-        ·
-        <strong>{{ targetPlayerId || '—' }}</strong>
-      </p>
+      <p class="vp-mini">Оберіть слот перед «ПОЧАТИ»</p>
       <div class="vp-chips">
         <button
           v-for="slot in playerSlots"
@@ -93,15 +111,9 @@ const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
           {{ slotNum(slot) }}
         </button>
       </div>
-      <div class="vp-row">
-        <button type="button" class="vp-btn vp-btn--toggle" @click="emit('voting-toggle')">
-          {{ gameRoom.voting?.active ? 'Вимкнути голосування' : 'Увімкнути голосування' }}
-        </button>
-        <button type="button" class="vp-btn vp-btn--stop" @click="emit('stop-voting')">Stop voting</button>
-      </div>
     </div>
 
-    <div class="vp-block vp-block--live" :class="{ glow: gameRoom.voting?.active }">
+    <div class="vp-block vp-block--live" :class="{ glow: votingActive }">
       <span class="vp-lab vp-lab--live">Голосування (live)</span>
       <p v-if="showLiveScore" class="vp-score">
         <span class="vp-score__n">👍 {{ countFor }}</span>
@@ -141,6 +153,92 @@ const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
   transform: translateY(-2px);
 }
 
+.vp-scene {
+  margin: 0 0 0.85rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.vp-scene--on {
+  border-color: rgba(74, 222, 128, 0.35);
+  background: rgba(22, 101, 52, 0.2);
+  box-shadow: 0 0 18px rgba(74, 222, 128, 0.08);
+}
+
+.vp-scene__state {
+  margin: 0 0 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  font-family: 'Orbitron', sans-serif;
+  color: #e2e8f0;
+}
+
+.vp-scene__line {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-family: 'Orbitron', sans-serif;
+  color: #cbd5e1;
+}
+
+.vp-scene__k {
+  display: inline-block;
+  min-width: 4.5rem;
+  margin-right: 0.35rem;
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  color: rgba(148, 163, 184, 0.85);
+}
+
+.vp-scene__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.6rem;
+}
+
+.vp-go {
+  padding: 0.45rem 0.85rem;
+  border-radius: 10px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  border: 1px solid rgba(74, 222, 128, 0.5);
+  background: rgba(22, 101, 52, 0.45);
+  color: #bbf7d0;
+  transition: transform 0.12s ease;
+}
+
+.vp-go:hover:not(:disabled) {
+  transform: scale(1.05);
+}
+
+.vp-go:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.vp-stop {
+  padding: 0.45rem 0.85rem;
+  border-radius: 10px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  background: rgba(80, 20, 30, 0.55);
+  color: #fecaca;
+  transition: transform 0.12s ease;
+}
+
+.vp-stop:hover {
+  transform: scale(1.05);
+}
+
 .vp-block--live.glow {
   border-color: rgba(56, 189, 248, 0.35);
   box-shadow: 0 0 24px rgba(56, 189, 248, 0.12);
@@ -168,40 +266,6 @@ const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
   background: rgba(22, 101, 52, 0.35);
   border: 1px solid rgba(74, 222, 128, 0.35);
   font-family: 'Orbitron', sans-serif;
-}
-
-.vp-target {
-  margin: 0 0 0.85rem;
-  padding: 0.55rem 0.75rem;
-  border-radius: 12px;
-  background: rgba(12, 74, 110, 0.45);
-  border: 1px solid rgba(56, 189, 248, 0.4);
-  box-shadow: 0 0 18px rgba(56, 189, 248, 0.12);
-}
-
-.vp-target--dim {
-  opacity: 0.55;
-  box-shadow: none;
-  border-color: rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.25);
-}
-
-.vp-target__lab {
-  display: block;
-  margin-bottom: 0.2rem;
-  font-size: 0.55rem;
-  font-weight: 800;
-  letter-spacing: 0.28em;
-  color: rgba(125, 211, 252, 0.75);
-  font-family: 'Orbitron', sans-serif;
-}
-
-.vp-target__val {
-  font-size: 1.35rem;
-  font-weight: 900;
-  font-family: 'Orbitron', sans-serif;
-  color: #e0f2fe;
-  letter-spacing: 0.06em;
 }
 
 .vp-score {
@@ -302,13 +366,6 @@ const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
   line-height: 1;
 }
 
-.vp-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  margin-top: 0.5rem;
-}
-
 .vp-btn {
   padding: 0.42rem 0.75rem;
   border-radius: 10px;
@@ -321,18 +378,6 @@ const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
 
 .vp-btn:hover {
   transform: translateY(-1px);
-}
-
-.vp-btn--toggle {
-  background: rgba(30, 58, 138, 0.45);
-  border-color: rgba(96, 165, 250, 0.45);
-  color: #dbeafe;
-}
-
-.vp-btn--stop {
-  background: rgba(80, 20, 30, 0.5);
-  border-color: rgba(248, 113, 113, 0.35);
-  color: #fecaca;
 }
 
 .vp-btn--clear {

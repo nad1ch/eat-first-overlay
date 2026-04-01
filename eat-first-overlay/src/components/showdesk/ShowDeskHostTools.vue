@@ -1,9 +1,12 @@
 <script setup>
-defineProps({
+import { computed } from 'vue'
+
+const props = defineProps({
   gameRoom: { type: Object, default: () => ({}) },
   playerSlots: { type: Array, default: () => [] },
   speakingDuration: { type: [Number, String], default: 30 },
   phaseOptions: { type: Array, default: () => [] },
+  roomRound: { type: Number, default: 1 },
 })
 
 const emit = defineEmits([
@@ -28,43 +31,44 @@ function slotNum(slot) {
   if (m) return m[1]
   return s.replace(/^p/i, '') || s
 }
+
+const speakerSlot = computed(() => String(props.gameRoom?.currentSpeaker ?? '').trim())
+
+const speakerLine = computed(() => (speakerSlot.value ? `[${speakerSlot.value}]` : '— НІХТО —'))
+
+const phaseLabel = computed(() => String(props.gameRoom?.gamePhase || 'intro'))
 </script>
 
 <template>
-  <section class="cc cc--compact">
+  <section class="cc">
     <h2 class="cc-title">LIVE</h2>
 
-    <div class="cc-grid cc-grid--compact">
-      <div class="cc-block cc-block--actions">
-        <span class="cc-lab">Шоу</span>
+    <div class="cc-pult">
+      <aside class="cc-pult__state">
+        <p class="cc-state-k">СТАН</p>
+        <div class="cc-stat">
+          <span class="cc-stat__k">PHASE</span>
+          <b class="cc-stat__v">{{ phaseLabel }}</b>
+        </div>
+        <div class="cc-stat">
+          <span class="cc-stat__k">ROUND</span>
+          <b class="cc-stat__v">{{ roomRound }}</b>
+        </div>
+        <div class="cc-stat cc-stat--speaker">
+          <span class="cc-stat__k">🎤 SPEAKER</span>
+          <b class="cc-stat__v cc-stat__v--wide">{{ speakerLine }}</b>
+          <button type="button" class="cc-clear" @click="emit('clear-timer')">✖ CLEAR</button>
+        </div>
+      </aside>
+
+      <div class="cc-pult__act">
+        <span class="cc-lab">Кнопки</span>
         <div class="cc-btns">
           <button type="button" class="cc-btn cc-btn--go" @click="emit('start-round')">Start</button>
           <button type="button" class="cc-btn cc-btn--pause" @click="emit('pause-show')">Pause</button>
           <button type="button" class="cc-btn cc-btn--reset" @click="emit('reset-room')">Reset</button>
         </div>
-      </div>
-
-      <div class="cc-block">
-        <span class="cc-lab">🎤 Speaker</span>
-        <div class="cc-chips cc-chips--speaker">
-          <button
-            v-for="slot in playerSlots"
-            :key="'spk-' + slot"
-            type="button"
-            class="chip"
-            :class="{ on: String(gameRoom.currentSpeaker || '').trim() === slot }"
-            @click="emit('set-speaker', slot)"
-          >
-            {{ slotNum(slot) }}
-          </button>
-          <button type="button" class="cc-btn cc-btn--next" title="Наступний живий гравець + таймер 30s" @click="emit('next-speaker')">
-            Next ▶
-          </button>
-        </div>
-      </div>
-
-      <div class="cc-block">
-        <span class="cc-lab">⏱ Timer</span>
+        <span class="cc-lab cc-lab--mt">Timer</span>
         <div class="cc-row">
           <div class="cc-chips">
             <button
@@ -86,9 +90,35 @@ function slotNum(slot) {
           </div>
         </div>
         <p class="cc-hint">
-          {{ String(gameRoom.currentSpeaker || '').trim() || '—' }}
+          {{ speakerSlot || '—' }}
           <span v-if="gameRoom.timerPaused" class="cc-paused">· пауза</span>
         </p>
+      </div>
+    </div>
+
+    <div class="cc-footer">
+      <div class="cc-block">
+        <span class="cc-lab">Обрати спікера</span>
+        <div class="cc-chips cc-chips--speaker">
+          <button
+            v-for="slot in playerSlots"
+            :key="'spk-' + slot"
+            type="button"
+            class="chip"
+            :class="{ on: speakerSlot === slot }"
+            @click="emit('set-speaker', slot)"
+          >
+            {{ slotNum(slot) }}
+          </button>
+          <button
+            type="button"
+            class="cc-btn cc-btn--next"
+            title="Наступний живий гравець + таймер 30s"
+            @click="emit('next-speaker')"
+          >
+            Next ▶
+          </button>
+        </div>
       </div>
 
       <div class="cc-block">
@@ -116,7 +146,7 @@ function slotNum(slot) {
             :key="ph"
             type="button"
             class="chip chip--phase"
-            :class="{ on: String(gameRoom.gamePhase || 'intro') === ph }"
+            :class="{ on: phaseLabel === ph }"
             @click="emit('set-phase', ph)"
           >
             {{ ph }}
@@ -138,7 +168,7 @@ function slotNum(slot) {
 }
 
 .cc-title {
-  margin: 0 0 0.85rem;
+  margin: 0 0 0.75rem;
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.2em;
@@ -147,64 +177,104 @@ function slotNum(slot) {
   font-family: 'Orbitron', sans-serif;
 }
 
-.cc-grid {
+.cc-pult {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 0.85rem 1rem;
-  align-items: start;
+  margin-bottom: 0.85rem;
 }
 
 @media (min-width: 720px) {
-  .cc-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .cc-pult {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    align-items: start;
   }
 }
 
-@media (min-width: 1000px) {
-  .cc-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
+.cc-pult__state {
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(168, 85, 247, 0.18);
 }
 
-.cc--compact .cc-title {
-  margin-bottom: 0.55rem;
-  font-size: 0.68rem;
+.cc-state-k {
+  margin: 0 0 0.5rem;
+  font-size: 0.55rem;
+  font-weight: 900;
+  letter-spacing: 0.22em;
+  color: rgba(196, 181, 253, 0.45);
+  font-family: 'Orbitron', sans-serif;
 }
 
-.cc-grid--compact {
-  gap: 0.5rem 0.65rem;
+.cc-stat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.5rem;
+  margin-bottom: 0.4rem;
 }
 
-@media (min-width: 640px) {
-  .cc-grid--compact {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+.cc-stat--speaker {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4rem;
 }
 
-@media (min-width: 1100px) {
-  .cc-grid--compact {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
+.cc-stat__k {
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: rgba(148, 163, 184, 0.85);
+  min-width: 5.5rem;
 }
 
-.cc-block--actions {
-  grid-column: 1 / -1;
+.cc-stat__v {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #e9d5ff;
 }
 
-@media (min-width: 640px) {
-  .cc-block--actions {
-    grid-column: 1 / -1;
-  }
+.cc-stat__v--wide {
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
 }
 
-@media (min-width: 1100px) {
-  .cc-block--actions {
-    grid-column: span 1;
-  }
+.cc-clear {
+  align-self: flex-start;
+  padding: 0.32rem 0.55rem;
+  border-radius: 8px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  background: rgba(80, 20, 30, 0.45);
+  color: #fecaca;
+  transition: transform 0.12s ease;
+}
+
+.cc-clear:hover {
+  transform: scale(1.05);
+}
+
+.cc-pult__act {
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.cc-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .cc-block--phase {
-  grid-column: 1 / -1;
+  padding-bottom: 0.15rem;
 }
 
 .cc-lab {
@@ -215,6 +285,10 @@ function slotNum(slot) {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: rgba(196, 181, 253, 0.45);
+}
+
+.cc-lab--mt {
+  margin-top: 0.45rem;
 }
 
 .cc-btns,

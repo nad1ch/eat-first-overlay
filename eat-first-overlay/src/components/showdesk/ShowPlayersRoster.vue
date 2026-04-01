@@ -153,12 +153,14 @@ const playersSorted = computed(() => {
 }
 
 .pcard--vote-target:not(.elim):not(.speak) {
-  border-color: rgba(56, 189, 248, 0.55);
-  box-shadow: 0 0 20px rgba(56, 189, 248, 0.28);
+  border: 2px solid rgba(239, 68, 68, 0.7);
+  box-shadow:
+    0 0 25px rgba(239, 68, 68, 0.3),
+    inset 0 0 10px rgba(239, 68, 68, 0.2);
 }
 
 .pcard--vote-target:not(.elim) .st {
-  color: rgba(125, 211, 252, 0.88);
+  color: rgba(252, 165, 165, 0.95);
 }
 
 .pcard.speak:not(.elim) {

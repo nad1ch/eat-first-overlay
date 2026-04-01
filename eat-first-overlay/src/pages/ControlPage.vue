@@ -41,7 +41,6 @@ import {
   subscribeToVotes,
   clearAllVotes,
   deleteVoteDoc,
-  nextRoomRound,
   resetRoomRoundCounter,
   setRoomRound,
   clearAllHands,
@@ -372,7 +371,7 @@ async function adminClearTimer() {
   try {
     loadError.value = null
     await clearSpeakingTimer(gameId.value)
-    showToast('Таймер знято')
+    showToast('Спікера знято')
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -468,15 +467,17 @@ async function hostVotingTarget(slot) {
   }
 }
 
-async function hostVotingToggle() {
+async function hostVotingStart() {
   if (!isAdmin.value) return
+  const tp = String(gameRoom.value?.voting?.targetPlayer ?? '').trim()
+  if (!tp) {
+    showToast('Оберіть ціль голосування')
+    return
+  }
   try {
     loadError.value = null
-    const v = gameRoom.value?.voting
-    const curActive = Boolean(v?.active)
-    const tp = String(v?.targetPlayer ?? '').trim() || 'p1'
-    await setRoomVoting(gameId.value, !curActive, !curActive ? tp : '')
-    showToast(!curActive ? 'Голосування відкрито' : 'Голосування вимкнено')
+    await setRoomVoting(gameId.value, true, tp)
+    showToast('Голосування почалось')
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -517,12 +518,15 @@ async function hostRemoveVote(voterId) {
   }
 }
 
-async function hostNextRound() {
+async function hostRoundDelta(d) {
   if (!isAdmin.value) return
+  const cur = roomRoundLive.value
+  const next = Math.min(8, Math.max(1, cur + Number(d)))
+  if (next === cur) return
   try {
     loadError.value = null
-    await nextRoomRound(gameId.value)
-    showToast('Наступний раунд')
+    await setRoomRound(gameId.value, next)
+    showToast('Раунд змінено')
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -533,7 +537,7 @@ async function hostResetRound() {
   try {
     loadError.value = null
     await resetRoomRoundCounter(gameId.value)
-    showToast('Раунд 1 · голоси очищено')
+    showToast('Раунд змінено')
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -544,7 +548,7 @@ async function hostSetRound(n) {
   try {
     loadError.value = null
     await setRoomRound(gameId.value, n)
-    showToast(`Раунд ${Math.min(8, Math.max(1, Math.floor(Number(n) || 1)))}`)
+    showToast('Раунд змінено')
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -823,12 +827,13 @@ function rerollActiveCardOnly() {
     </div>
 
     <template v-if="isAdmin">
-      <section class="admin-zone admin-zone--live" aria-label="Live">
+      <section class="admin-zone admin-zone--live admin-card" aria-label="Live">
         <h2 class="zone-kicker zone-kicker--section">LIVE</h2>
         <div class="desk-sticky-bar">
           <ShowDeskHostTools
             :game-room="gameRoom"
             :player-slots="PLAYER_SLOTS"
+            :room-round="roomRoundLive"
             v-model:speaking-duration="speakingDuration"
             :phase-options="PHASE_OPTIONS"
             @start-round="controlStartRound"
@@ -901,7 +906,7 @@ function rerollActiveCardOnly() {
       </section>
 
       <section
-        class="admin-zone admin-zone--players"
+        class="admin-zone admin-zone--players admin-card"
         :class="{ 'admin-zone--nominated-active': nominatedPlayerActive }"
         aria-label="Гравці"
       >
@@ -931,7 +936,7 @@ function rerollActiveCardOnly() {
       </section>
 
       <section
-        class="admin-zone admin-zone--voting"
+        class="admin-zone admin-zone--voting admin-card"
         :class="{ 'admin-zone--glow': gameRoom.voting?.active }"
         aria-label="Голосування"
       >
@@ -942,17 +947,17 @@ function rerollActiveCardOnly() {
           :all-players-voted="allPlayersVoted"
           @nominate="hostNominate"
           @voting-target="hostVotingTarget"
-          @voting-toggle="hostVotingToggle"
+          @voting-start="hostVotingStart"
           @clear-votes="hostClearVotes"
           @remove-vote="hostRemoveVote"
           @stop-voting="hostStopVoting"
         />
       </section>
 
-      <section class="admin-zone admin-zone--round" aria-label="Раунд">
+      <section class="admin-zone admin-zone--round admin-card" aria-label="Раунд">
         <ShowDeskRoundPanel
           :game-room="gameRoom"
-          @next-round="hostNextRound"
+          @round-delta="hostRoundDelta"
           @reset-round="hostResetRound"
           @set-round="hostSetRound"
         />
@@ -979,12 +984,12 @@ function rerollActiveCardOnly() {
             <button type="button" class="icon-btn" title="Перегенерувати" @click="rerollIdentity">🎲</button>
             <button
               type="button"
-              class="icon-btn"
+              class="reveal-pill"
               :class="{ active: characterState.identityRevealed }"
               title="Показати на оверлеї"
               @click="characterState.identityRevealed = !characterState.identityRevealed"
             >
-              👁
+              {{ characterState.identityRevealed ? 'ВІДКРИТО' : 'ЗАКРИТО' }}
             </button>
           </div>
         </div>
@@ -1023,12 +1028,12 @@ function rerollActiveCardOnly() {
               <button type="button" class="icon-btn" title="Перегенерувати поле" @click="rerollSingleTrait(row.key)">🎲</button>
               <button
                 type="button"
-                class="icon-btn"
+                class="reveal-pill"
                 :class="{ active: characterState[row.key].revealed }"
                 title="На оверлеї"
                 @click="toggleRevealAdmin(row.key)"
               >
-                👁
+                {{ characterState[row.key].revealed ? 'ВІДКРИТО' : 'ЗАКРИТО' }}
               </button>
             </div>
           </div>
@@ -1043,11 +1048,11 @@ function rerollActiveCardOnly() {
             <button
               v-if="!playerRevealLocked"
               type="button"
-              class="icon-btn"
+              class="reveal-pill"
               :class="{ active: characterState[row.key].revealed }"
               @click="toggle(row.key)"
             >
-              👁
+              {{ characterState[row.key].revealed ? 'ВІДКРИТО' : 'ЗАКРИТО' }}
             </button>
           </div>
           <p class="trait-value-preview">
@@ -1159,6 +1164,40 @@ function rerollActiveCardOnly() {
 
 .admin-zone {
   margin-bottom: 1.1rem;
+}
+
+.admin-card {
+  border-radius: 16px;
+  padding: 12px;
+  background: rgba(10, 8, 22, 0.95);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  box-sizing: border-box;
+}
+
+.admin-zone--live.admin-card :deep(.cc) {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  margin-bottom: 0;
+}
+
+.admin-zone--players.admin-card :deep(.roster) {
+  background: transparent;
+  border: none;
+  margin-bottom: 0;
+  padding: 0.35rem 0 0;
+}
+
+.admin-zone--voting.admin-card :deep(.vp) {
+  background: transparent;
+  border: none;
+  margin-bottom: 0;
+}
+
+.admin-zone--round.admin-card :deep(.rp) {
+  background: transparent;
+  border: none;
+  margin-bottom: 0;
 }
 
 .admin-zone--live .admin-zone__header {
@@ -1577,6 +1616,34 @@ function rerollActiveCardOnly() {
   border-color: rgba(168, 85, 247, 0.6);
   box-shadow: 0 0 16px rgba(168, 85, 247, 0.35);
   background: rgba(88, 28, 135, 0.35);
+}
+
+.reveal-pill {
+  padding: 0.38rem 0.65rem;
+  border-radius: 10px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.45);
+  color: rgba(226, 232, 240, 0.85);
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s,
+    transform 0.12s;
+}
+
+.reveal-pill:hover {
+  transform: scale(1.05);
+  border-color: rgba(168, 85, 247, 0.45);
+}
+
+.reveal-pill.active {
+  border-color: rgba(168, 85, 247, 0.6);
+  box-shadow: 0 0 14px rgba(168, 85, 247, 0.3);
+  background: rgba(88, 28, 135, 0.35);
+  color: #faf5ff;
 }
 
 .traits-stack {

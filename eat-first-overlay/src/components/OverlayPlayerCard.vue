@@ -1467,6 +1467,11 @@ async function submitVote(choice) {
  * Персональний HUD: vmin/vw/vh — масштаб від розміру екрана.
  * Бічні колонки (bl/br) ширші за верхні (tl/tr).
  */
+.hud-root--solo.hud-root--eliminated {
+  background: #050308 !important;
+  opacity: 1 !important;
+}
+
 .hud-root--solo {
   --hud-edge: clamp(0.55rem, min(2vw, 2.6vh), 2.15rem);
   --hud-side-max: min(48vw, clamp(16.5rem, 44vmin, 38rem));
@@ -1741,12 +1746,24 @@ async function submitVote(choice) {
   padding: clamp(1rem, 4vw, 2rem);
   box-sizing: border-box;
   overflow: hidden;
+  background: #050308;
 }
 
 .elim-solo-screen--cut {
   animation:
     deathCutSolo 0.48s ease-out both,
-    deathFadeFinal 0.85s ease-out 0.45s both;
+    elimSoloFadeFinal 0.85s ease-out 0.45s both;
+}
+
+@keyframes elimSoloFadeFinal {
+  0% {
+    filter: brightness(1);
+    opacity: 1;
+  }
+  100% {
+    filter: brightness(0.96);
+    opacity: 1;
+  }
 }
 
 @keyframes deathCutSolo {
@@ -1781,14 +1798,6 @@ async function submitVote(choice) {
   to {
     transform: scale(1.05);
   }
-}
-
-.elim-solo-screen__base::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.15) 0%, rgba(0, 0, 0, 0.65) 100%);
-  pointer-events: none;
 }
 
 .elim-solo-screen__mark {

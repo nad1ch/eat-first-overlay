@@ -28,7 +28,7 @@ const manyHands = computed(() => raised.value.length > 3)
 <template>
   <section class="hp">
     <h3 class="hp-title">Руки</h3>
-    <p v-if="manyHands" class="hp-summary">3 руки чекають</p>
+    <p v-if="manyHands" class="hp-summary">✋ {{ raised.length }} ГРАВЦІВ ЧЕКАЮТЬ</p>
     <ul v-else-if="raised.length" class="hp-list">
       <li v-for="slot in raised" :key="slot" class="hp-li">✋ p{{ slotNum(slot) }}</li>
     </ul>
