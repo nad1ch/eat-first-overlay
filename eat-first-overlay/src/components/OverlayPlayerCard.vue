@@ -114,55 +114,58 @@ const acChipTitle = computed(() => {
     v-if="!solo"
     class="card-grid"
     :class="{
-      'card-grid--spotlight': isSpotlight,
+      'card-grid--spotlight': isSpotlight && !isEliminated(player),
       'card-grid--timer': isTimerTarget,
       'card-grid--eliminated': isEliminated(player),
       'card-grid--cinema': cinema,
     }"
   >
-    <Transition name="badge-pop">
-      <div v-if="isEliminated(player)" class="eliminated-badge" aria-hidden="true">ВИБУВ</div>
-    </Transition>
-    <div v-if="showSpeakerTimer" class="card-grid-timer" aria-hidden="true">
-      <div class="timer-ring-wrap">
-        <span class="timer-ring" :style="timerRingStyle" />
-        <span class="timer-num">⏱ {{ speakerTimeLeft }}s</span>
+    <div v-if="isEliminated(player)" class="card-elim-screen">
+      <img class="card-elim-screen__art" src="/overlay-eliminated.svg" alt="" />
+      <p class="card-elim-screen__title">ВИБУВ</p>
+      <p class="card-elim-screen__slot">Гравець {{ playerIdDisplay(player) }}</p>
+      <p class="card-elim-screen__hint">Слот закритий</p>
+    </div>
+
+    <template v-else>
+      <div v-if="showSpeakerTimer" class="card-grid-timer" aria-hidden="true">
+        <div class="timer-ring-wrap">
+          <span class="timer-ring" :style="timerRingStyle" />
+          <span class="timer-num">⏱ {{ speakerTimeLeft }}s</span>
+        </div>
       </div>
-    </div>
-    <div
-      class="card-grid-body"
-      :class="{ 'card-grid-body--eliminated': isEliminated(player) }"
-    >
-      <p class="card-grid-id">{{ playerIdDisplay(player) }}</p>
-      <h2 class="card-grid-name">
-        <span v-if="!identityRevealed(player)" class="placeholder">•••</span>
-        <span v-else>{{ displayNameLine(player).text }}</span>
-      </h2>
-      <p class="card-grid-meta">
-        <span v-if="!identityRevealed(player)" class="placeholder">••• · •••</span>
-        <span v-else>{{ displayAgeGenderLine(player).text }}</span>
-      </p>
-      <ul class="stats">
-        <li v-for="row in fieldConfig" :key="row.key">
-          <span
-            :key="valueRevealKey(player, row.key)"
-            class="stat-cell"
-            :class="{
-              'stat-cell--open': chunkFor(player, row.key).revealed,
-              'stat-cell--wave': chunkFor(player, row.key).revealed,
-              'stat-cell--drama': drama && chunkFor(player, row.key).revealed,
-            }"
-          >
-            <template v-if="!chunkFor(player, row.key).revealed">
-              {{ labelByKey[row.key] }}
-            </template>
-            <template v-else>
-              {{ statDisplay(player, row.key).text }}
-            </template>
-          </span>
-        </li>
-      </ul>
-    </div>
+      <div class="card-grid-body">
+        <p class="card-grid-id">{{ playerIdDisplay(player) }}</p>
+        <h2 class="card-grid-name">
+          <span v-if="!identityRevealed(player)" class="placeholder">•••</span>
+          <span v-else>{{ displayNameLine(player).text }}</span>
+        </h2>
+        <p class="card-grid-meta">
+          <span v-if="!identityRevealed(player)" class="placeholder">••• · •••</span>
+          <span v-else>{{ displayAgeGenderLine(player).text }}</span>
+        </p>
+        <ul class="stats">
+          <li v-for="row in fieldConfig" :key="row.key">
+            <span
+              :key="valueRevealKey(player, row.key)"
+              class="stat-cell"
+              :class="{
+                'stat-cell--open': chunkFor(player, row.key).revealed,
+                'stat-cell--wave': chunkFor(player, row.key).revealed,
+                'stat-cell--drama': drama && chunkFor(player, row.key).revealed,
+              }"
+            >
+              <template v-if="!chunkFor(player, row.key).revealed">
+                {{ labelByKey[row.key] }}
+              </template>
+              <template v-else>
+                {{ statDisplay(player, row.key).text }}
+              </template>
+            </span>
+          </li>
+        </ul>
+      </div>
+    </template>
   </article>
 
   <div
@@ -170,26 +173,34 @@ const acChipTitle = computed(() => {
     class="hud-root hud-root--solo"
     :class="{
       'hud-root--eliminated': isEliminated(player),
-      'hud-root--spotlight': isSpotlight,
+      'hud-root--spotlight': isSpotlight && !isEliminated(player),
       'hud-root--cinema': cinema,
       'hud-root--drama': drama,
     }"
   >
-    <Transition name="badge-pop">
-      <div v-if="isEliminated(player)" class="hud-eliminated-badge" aria-hidden="true">ВИБУВ</div>
-    </Transition>
-
-    <div
-      v-if="solo && (activeCardFrom(player).title || activeCardFrom(player).description)"
-      class="ac-chip"
-      :class="{ 'ac-chip--used': activeCardFrom(player).used }"
-      :title="activeCardFrom(player).description || activeCardFrom(player).title"
-    >
-      <span class="ac-chip-ico">🃏</span>
-      <span class="ac-chip-t">{{ acChipTitle }}</span>
+    <div v-if="isEliminated(player)" class="elim-solo-screen">
+      <div class="elim-solo-screen__veil" aria-hidden="true" />
+      <div class="elim-solo-screen__content">
+        <img class="elim-solo-screen__art" src="/overlay-eliminated.svg" alt="" />
+        <p class="elim-solo-screen__kicker">Кого ми з’їмо першим</p>
+        <h2 class="elim-solo-screen__title">ВИБУВ</h2>
+        <p class="elim-solo-screen__sub">Ти покинув відбір. Камера для цього слоту прихована.</p>
+        <p class="elim-solo-screen__slot">Слот {{ playerIdDisplay(player) }}</p>
+      </div>
     </div>
 
-    <div class="hud-zones">
+    <template v-else>
+      <div
+        v-if="solo && (activeCardFrom(player).title || activeCardFrom(player).description)"
+        class="ac-chip"
+        :class="{ 'ac-chip--used': activeCardFrom(player).used }"
+        :title="activeCardFrom(player).description || activeCardFrom(player).title"
+      >
+        <span class="ac-chip-ico">🃏</span>
+        <span class="ac-chip-t">{{ acChipTitle }}</span>
+      </div>
+
+      <div class="hud-zones">
       <div class="hud-block hud-tl">
         <p class="hud-line hud-line--name">
           <span v-if="!identityRevealed(player)" class="hud-ph">•••</span>
@@ -245,6 +256,7 @@ const acChipTitle = computed(() => {
         </div>
       </div>
     </div>
+    </template>
   </div>
 </template>
 
@@ -265,10 +277,37 @@ const acChipTitle = computed(() => {
 
 .card-grid--spotlight {
   transform: scale(1.03);
-  border-color: rgba(168, 85, 247, 0.55);
+  border-color: rgba(168, 85, 247, 0.65);
   box-shadow:
-    0 0 0 1px rgba(168, 85, 247, 0.35),
-    0 0 24px rgba(168, 85, 247, 0.22);
+    0 0 0 2px rgba(168, 85, 247, 0.4),
+    0 0 32px rgba(168, 85, 247, 0.35);
+  animation: spotlightCardPulse 2.8s ease-in-out infinite;
+}
+
+.card-grid--spotlight::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  pointer-events: none;
+  z-index: 1;
+  box-shadow:
+    inset 0 0 0 2px rgba(168, 85, 247, 0.5),
+    inset 0 0 80px rgba(168, 85, 247, 0.2);
+}
+
+@keyframes spotlightCardPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px rgba(168, 85, 247, 0.35),
+      0 0 28px rgba(168, 85, 247, 0.28);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px rgba(168, 85, 247, 0.55),
+      0 0 40px rgba(168, 85, 247, 0.42);
+  }
 }
 
 .card-grid--timer {
@@ -291,14 +330,14 @@ const acChipTitle = computed(() => {
   position: absolute;
   top: 0.45rem;
   right: 0.45rem;
-  z-index: 3;
+  z-index: 4;
   pointer-events: none;
 }
 
 .timer-ring-wrap {
   position: relative;
-  width: 52px;
-  height: 52px;
+  width: 62px;
+  height: 62px;
   display: grid;
   place-items: center;
 }
@@ -313,7 +352,7 @@ const acChipTitle = computed(() => {
 .timer-num {
   position: relative;
   z-index: 1;
-  font-size: 0.62rem;
+  font-size: 0.72rem;
   font-weight: 800;
   color: #faf5ff;
   font-family: 'Orbitron', sans-serif;
@@ -321,55 +360,82 @@ const acChipTitle = computed(() => {
 }
 
 .card-grid-body {
-  padding: 0.85rem 0.95rem 1rem;
-}
-
-.card-grid-body--eliminated {
-  opacity: 0.42;
-  filter: grayscale(0.9);
+  position: relative;
+  z-index: 2;
+  padding: 1rem 1.05rem 1.1rem;
 }
 
 .card-grid--eliminated {
-  border-color: rgba(185, 28, 28, 0.45);
-  background: rgba(28, 10, 16, 0.92);
+  border-color: rgba(127, 29, 29, 0.65);
+  background: rgba(18, 6, 10, 0.98);
+  min-height: 200px;
 }
 
-.eliminated-badge {
-  position: absolute;
-  top: 0.45rem;
-  left: 0.45rem;
+.card-elim-screen {
+  position: relative;
   z-index: 2;
-  padding: 0.15rem 0.4rem;
-  border-radius: 6px;
-  font-size: 0.58rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1rem 0.75rem 1.15rem;
+  min-height: 220px;
+  box-sizing: border-box;
+}
+
+.card-elim-screen__art {
+  width: min(72%, 160px);
+  height: auto;
+  border-radius: 16px;
+  margin-bottom: 0.5rem;
+  filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.5));
+}
+
+.card-elim-screen__title {
+  margin: 0;
+  font-family: Orbitron, sans-serif;
+  font-size: clamp(1rem, 3.5vw, 1.25rem);
+  font-weight: 900;
+  letter-spacing: 0.2em;
   color: #fecaca;
-  background: rgba(70, 12, 18, 0.9);
-  border: 1px solid rgba(248, 113, 113, 0.35);
-  pointer-events: none;
+  text-shadow: 0 0 20px rgba(248, 113, 113, 0.35);
+}
+
+.card-elim-screen__slot {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: rgba(226, 232, 240, 0.88);
+}
+
+.card-elim-screen__hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.68rem;
+  color: rgba(196, 181, 253, 0.45);
+  letter-spacing: 0.06em;
 }
 
 .card-grid-id {
-  margin: 0 0 0.2rem;
-  font-size: 0.62rem;
+  margin: 0 0 0.25rem;
+  font-size: 0.72rem;
   letter-spacing: 0.14em;
   color: rgba(196, 181, 253, 0.55);
   font-family: 'Orbitron', sans-serif;
 }
 
 .card-grid-name {
-  margin: 0 0 0.15rem;
-  font-size: clamp(0.95rem, 2vw, 1.05rem);
+  margin: 0 0 0.2rem;
+  font-size: clamp(1.05rem, 2.4vw, 1.25rem);
   font-weight: 700;
   color: #f5f3ff;
   line-height: 1.2;
 }
 
 .card-grid-meta {
-  margin: 0 0 0.55rem;
-  font-size: 0.8rem;
-  color: rgba(226, 232, 240, 0.88);
+  margin: 0 0 0.65rem;
+  font-size: clamp(0.88rem, 2vw, 1rem);
+  color: rgba(226, 232, 240, 0.9);
 }
 
 .placeholder {
@@ -383,7 +449,7 @@ const acChipTitle = computed(() => {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.45rem;
 }
 
 .stats li {
@@ -392,15 +458,15 @@ const acChipTitle = computed(() => {
 
 .stat-cell {
   display: block;
-  padding: 0.38rem 0.5rem;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.28);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  font-size: 0.72rem;
+  padding: 0.48rem 0.6rem;
+  border-radius: 11px;
+  background: rgba(0, 0, 0, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: clamp(0.8rem, 2.1vw, 0.95rem);
   font-weight: 600;
-  color: rgba(196, 181, 253, 0.75);
+  color: rgba(196, 181, 253, 0.82);
   text-align: right;
-  line-height: 1.35;
+  line-height: 1.4;
   transition:
     color 0.2s ease,
     border-color 0.2s ease;
@@ -462,24 +528,109 @@ const acChipTitle = computed(() => {
 }
 
 .hud-root--spotlight .hud-block {
-  border-color: rgba(168, 85, 247, 0.42);
-  box-shadow: 0 0 18px rgba(168, 85, 247, 0.12);
+  border-color: rgba(168, 85, 247, 0.65);
+  box-shadow:
+    inset 0 0 28px rgba(168, 85, 247, 0.16),
+    0 0 0 1px rgba(168, 85, 247, 0.45),
+    0 0 26px rgba(168, 85, 247, 0.32);
+  animation: hudSpotPulse 2.6s ease-in-out infinite;
 }
 
-.hud-eliminated-badge {
+@keyframes hudSpotPulse {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 0 22px rgba(168, 85, 247, 0.12),
+      0 0 0 1px rgba(168, 85, 247, 0.38),
+      0 0 20px rgba(168, 85, 247, 0.22);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 36px rgba(168, 85, 247, 0.22),
+      0 0 0 1px rgba(168, 85, 247, 0.55),
+      0 0 34px rgba(168, 85, 247, 0.4);
+  }
+}
+
+.hud-root--spotlight .hud-stat-inner {
+  border-color: rgba(168, 85, 247, 0.32);
+  box-shadow: inset 0 0 14px rgba(168, 85, 247, 0.08);
+}
+
+.elim-solo-screen {
   position: absolute;
-  top: 0.4rem;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 8;
-  padding: 0.2rem 0.55rem;
-  border-radius: 8px;
-  font-size: 0.62rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  padding: clamp(1rem, 4vw, 2rem);
+  box-sizing: border-box;
+}
+
+.elim-solo-screen__veil {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 85% 70% at 50% 45%, rgba(30, 10, 20, 0.55), rgba(4, 2, 10, 0.97)),
+    rgba(4, 2, 10, 0.96);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.elim-solo-screen__content {
+  position: relative;
+  z-index: 1;
+  max-width: min(92vw, 400px);
+  text-align: center;
+}
+
+.elim-solo-screen__art {
+  width: min(72vw, 260px);
+  height: auto;
+  margin: 0 auto 1rem;
+  display: block;
+  border-radius: 20px;
+  filter: drop-shadow(0 12px 40px rgba(0, 0, 0, 0.55));
+}
+
+.elim-solo-screen__kicker {
+  margin: 0 0 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(196, 181, 253, 0.5);
+  font-family: 'Orbitron', sans-serif;
+}
+
+.elim-solo-screen__title {
+  margin: 0;
+  font-family: 'Orbitron', sans-serif;
+  font-size: clamp(1.75rem, 6vw, 2.5rem);
+  font-weight: 900;
+  letter-spacing: 0.16em;
   color: #fecaca;
-  background: rgba(50, 10, 14, 0.88);
-  border: 1px solid rgba(248, 113, 113, 0.35);
+  text-shadow:
+    0 0 28px rgba(248, 113, 113, 0.35),
+    0 2px 12px rgba(0, 0, 0, 0.6);
+}
+
+.elim-solo-screen__sub {
+  margin: 0.85rem 0 0;
+  font-size: clamp(0.88rem, 2.4vw, 1.05rem);
+  line-height: 1.5;
+  color: rgba(226, 232, 240, 0.88);
+}
+
+.elim-solo-screen__slot {
+  margin: 1rem 0 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-family: 'Orbitron', sans-serif;
+  letter-spacing: 0.12em;
+  color: rgba(196, 181, 253, 0.65);
 }
 
 .ac-chip {
@@ -490,12 +641,12 @@ const acChipTitle = computed(() => {
   z-index: 7;
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  max-width: min(88vw, 320px);
-  padding: 0.28rem 0.55rem 0.28rem 0.4rem;
+  gap: 0.45rem;
+  max-width: min(90vw, 380px);
+  padding: 0.4rem 0.75rem 0.4rem 0.55rem;
   border-radius: 999px;
-  background: rgba(10, 6, 22, 0.92);
-  border: 1px solid rgba(168, 85, 247, 0.38);
+  background: rgba(10, 6, 22, 0.94);
+  border: 1px solid rgba(168, 85, 247, 0.42);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
@@ -507,12 +658,12 @@ const acChipTitle = computed(() => {
 }
 
 .ac-chip-ico {
-  font-size: 0.75rem;
+  font-size: 0.9rem;
   line-height: 1;
 }
 
 .ac-chip-t {
-  font-size: 0.68rem;
+  font-size: clamp(0.78rem, 2vw, 0.9rem);
   font-weight: 700;
   color: #ede9fe;
   white-space: nowrap;
@@ -528,36 +679,36 @@ const acChipTitle = computed(() => {
 
 .hud-block {
   position: absolute;
-  padding: 0.42rem 0.55rem;
-  border-radius: 12px;
-  background: rgba(8, 6, 20, 0.93);
+  padding: 0.58rem 0.72rem;
+  border-radius: 14px;
+  background: rgba(8, 6, 20, 0.94);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(168, 85, 247, 0.28);
+  border: 1px solid rgba(168, 85, 247, 0.32);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-  max-width: min(40vw, 280px);
+  max-width: min(48vw, 340px);
 }
 
 .hud-tl {
-  top: clamp(0.45rem, 1.2vh, 1rem);
-  left: clamp(0.45rem, 1.2vw, 1rem);
+  top: clamp(0.5rem, 1.4vh, 1.1rem);
+  left: clamp(0.5rem, 1.4vw, 1.1rem);
 }
 
 .hud-tr {
-  top: clamp(0.45rem, 1.2vh, 1rem);
-  right: clamp(0.45rem, 1.2vw, 1rem);
+  top: clamp(0.5rem, 1.4vh, 1.1rem);
+  right: clamp(0.5rem, 1.4vw, 1.1rem);
   text-align: right;
-  max-width: min(38vw, 220px);
+  max-width: min(44vw, 260px);
 }
 
 .hud-bl {
-  bottom: clamp(0.45rem, 1.2vh, 1rem);
-  left: clamp(0.45rem, 1.2vw, 1rem);
+  bottom: clamp(0.5rem, 1.4vh, 1.1rem);
+  left: clamp(0.5rem, 1.4vw, 1.1rem);
 }
 
 .hud-br {
-  bottom: clamp(0.45rem, 1.2vh, 1rem);
-  right: clamp(0.45rem, 1.2vw, 1rem);
+  bottom: clamp(0.5rem, 1.4vh, 1.1rem);
+  right: clamp(0.5rem, 1.4vw, 1.1rem);
   text-align: right;
 }
 
@@ -568,14 +719,14 @@ const acChipTitle = computed(() => {
 }
 
 .hud-line--name {
-  font-size: clamp(0.95rem, 2.2vw, 1.15rem);
+  font-size: clamp(1.08rem, 2.8vw, 1.38rem);
   font-weight: 700;
 }
 
 .hud-line--sub {
-  margin-top: 0.2rem;
-  font-size: clamp(0.78rem, 1.8vw, 0.88rem);
-  color: rgba(226, 232, 240, 0.9);
+  margin-top: 0.25rem;
+  font-size: clamp(0.9rem, 2.2vw, 1.05rem);
+  color: rgba(226, 232, 240, 0.92);
 }
 
 .hud-ph {
@@ -584,12 +735,12 @@ const acChipTitle = computed(() => {
 }
 
 .hud-slot {
-  font-size: clamp(1.6rem, 4.5vw, 2.5rem);
+  font-size: clamp(1.85rem, 5.2vw, 2.85rem);
   font-weight: 900;
   color: #faf5ff;
   font-family: 'Orbitron', sans-serif;
   line-height: 1;
-  text-shadow: 0 0 14px rgba(168, 85, 247, 0.25);
+  text-shadow: 0 0 18px rgba(168, 85, 247, 0.32);
 }
 
 .hud-timer-stack {
@@ -600,8 +751,8 @@ const acChipTitle = computed(() => {
 
 .hud-ring-wrap {
   position: relative;
-  width: 56px;
-  height: 56px;
+  width: 74px;
+  height: 74px;
   display: grid;
   place-items: center;
 }
@@ -616,7 +767,7 @@ const acChipTitle = computed(() => {
 .hud-timer-label {
   position: relative;
   z-index: 1;
-  font-size: 0.65rem;
+  font-size: 0.78rem;
   font-weight: 800;
   font-family: 'Orbitron', sans-serif;
   color: #fff;
@@ -624,7 +775,7 @@ const acChipTitle = computed(() => {
 }
 
 .hud-stat {
-  margin-bottom: 0.32rem;
+  margin-bottom: 0.4rem;
 }
 
 .hud-stat:last-child {
@@ -633,14 +784,14 @@ const acChipTitle = computed(() => {
 
 .hud-stat-inner {
   display: block;
-  padding: 0.32rem 0.45rem;
-  border-radius: 10px;
-  background: rgba(10, 6, 22, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: clamp(0.68rem, 1.6vw, 0.78rem);
+  padding: 0.45rem 0.58rem;
+  border-radius: 11px;
+  background: rgba(10, 6, 22, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: clamp(0.82rem, 2.1vw, 0.98rem);
   font-weight: 600;
-  color: rgba(196, 181, 253, 0.78);
-  line-height: 1.3;
+  color: rgba(196, 181, 253, 0.82);
+  line-height: 1.35;
 }
 
 .hud-br .hud-stat-inner {
