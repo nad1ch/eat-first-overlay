@@ -20,8 +20,6 @@ const emit = defineEmits([
   'pause-timer',
   'resume-timer',
   'clear-timer',
-  'spotlight',
-  'spotlight-clear',
   'next-speaker',
 ])
 
@@ -38,12 +36,11 @@ const phaseLabel = computed(() => String(props.gameRoom?.gamePhase || 'intro'))
 
 const votingOn = computed(() => Boolean(props.gameRoom?.voting?.active))
 
-/** Один рядок: PHASE · ROUND n · SPEAKER … · VOTING … */
 const statusRibbon = computed(() => {
   const ph = phaseLabel.value.toUpperCase()
-  const sp = speakerSlot.value ? `SPEAKER ${speakerSlot.value}` : 'SPEAKER —'
+  const sp = speakerSlot.value || '—'
   const v = votingOn.value ? 'VOTING ON' : 'VOTING OFF'
-  return `${ph} · ROUND ${props.roomRound} · ${sp} · ${v}`
+  return `${ph} · R${props.roomRound} · ${sp} · ${v}`
 })
 </script>
 
@@ -108,24 +105,7 @@ const statusRibbon = computed(() => {
           >
             Next ▶
           </button>
-          <button type="button" class="cc-clear" @click="emit('clear-timer')">✖ CLEAR</button>
-        </div>
-      </div>
-
-      <div class="cc-block">
-        <span class="cc-lab">⭐ Spotlight</span>
-        <div class="cc-chips">
-          <button
-            v-for="slot in playerSlots"
-            :key="'sp-' + slot"
-            type="button"
-            class="chip chip--gold"
-            :class="{ on: String(gameRoom.activePlayer || '') === slot }"
-            @click="emit('spotlight', slot)"
-          >
-            {{ slotNum(slot) }}
-          </button>
-          <button type="button" class="cc-btn cc-btn--ghost cc-btn--xs" @click="emit('spotlight-clear')">×</button>
+          <button type="button" class="cc-clear" title="Зняти спікера" @click="emit('clear-timer')">✖</button>
         </div>
       </div>
 

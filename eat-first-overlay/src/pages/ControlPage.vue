@@ -41,7 +41,6 @@ import {
   subscribeToVotes,
   clearAllVotes,
   deleteVoteDoc,
-  resetRoomRoundCounter,
   setRoomRound,
   clearAllHands,
 } from '../services/gameService'
@@ -229,17 +228,16 @@ const raisedHandsCount = computed(() => {
   return Object.keys(h).filter((k) => h[k] === true).length
 })
 
-/** Sticky рядок для ведучого: фаза, раунд, спікер, ціль, голосування, руки */
+/** Sticky рядок: фаза, раунд, спікер, ціль, голосування, руки */
 const hostSummaryLine = computed(() => {
   const ph = String(gameRoom.value?.gamePhase || 'intro').toUpperCase()
   const r = roomRoundLive.value
-  const sp = String(gameRoom.value?.currentSpeaker ?? '').trim()
-  const spTxt = sp ? sp.toUpperCase() : '—'
+  const sp = String(gameRoom.value?.currentSpeaker ?? '').trim() || '—'
   const tg = String(gameRoom.value?.voting?.targetPlayer ?? '').trim()
-  const tgTxt = tg ? tg.toUpperCase() : '—'
-  const v = gameRoom.value?.voting?.active ? 'ON' : 'OFF'
+  const tgTxt = tg ? `TARGET ${tg}` : 'TARGET —'
+  const v = gameRoom.value?.voting?.active ? 'VOTING ON' : 'VOTING OFF'
   const hc = raisedHandsCount.value
-  return `${ph} · R${r} · SPEAKER ${spTxt} · TARGET ${tgTxt} · VOTING ${v} · HANDS ${hc}`
+  return `${ph} · R${r} · ${sp} · ${tgTxt} · ${v} · ✋ ${hc}`
 })
 
 watch(
@@ -456,30 +454,63 @@ async function toggleMyHand() {
   }
 }
 
-async function hostNominate(slot) {
+async function onRosterHostCommand({ type, playerId: pid }) {
   if (!isAdmin.value) return
-  const s = String(slot ?? '').trim()
+  const p = String(pid ?? '').trim()
+  if (!p) return
   try {
     loadError.value = null
-    const cur = String(gameRoom.value?.nominatedPlayer ?? '').trim()
-    const next = s === '' || cur === s ? '' : s
-    const byHostSlot = next ? String(playerId.value ?? '').trim() : ''
-    await setNominatedPlayer(gameId.value, next, byHostSlot)
-    showToast(next ? 'Номінація виставлена' : 'Номінацію знято')
+    switch (type) {
+      case 'speaker':
+        timerSpeakerSlot.value = p
+        await saveGameRoom(gameId.value, { currentSpeaker: p })
+        showToast(p)
+        break
+      case 'nominate':
+        await setNominatedPlayer(gameId.value, p, '')
+        showToast('Номінація виставлена')
+        break
+      case 'vote-target': {
+        const active = Boolean(gameRoom.value?.voting?.active)
+        await setRoomVoting(gameId.value, active, p)
+        showToast('Ціль обрано')
+        break
+      }
+      case 'spotlight': {
+        await setSpotlightPlayer(p)
+        break
+      }
+      case 'reset':
+        await hostResetPlayerRoles(p)
+        break
+      default:
+        break
+    }
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
 }
 
-async function hostVotingTarget(slot) {
+async function hostResetPlayerRoles(pid) {
   if (!isAdmin.value) return
-  const s = String(slot ?? '').trim()
-  if (!s) return
+  const p = String(pid ?? '').trim()
+  if (!p) return
   try {
     loadError.value = null
-    const active = Boolean(gameRoom.value?.voting?.active)
-    await setRoomVoting(gameId.value, active, s)
-    showToast('Ціль обрано')
+    const gr = gameRoom.value
+    if (String(gr?.nominatedPlayer ?? '').trim() === p) {
+      await setNominatedPlayer(gameId.value, '', '')
+    }
+    if (String(gr?.voting?.targetPlayer ?? '').trim() === p) {
+      await setRoomVoting(gameId.value, false, '')
+    }
+    if (String(gr?.currentSpeaker ?? '').trim() === p) {
+      await clearSpeakingTimer(gameId.value)
+    }
+    if (String(gr?.activePlayer ?? '').trim() === p) {
+      await saveGameRoom(gameId.value, { activePlayer: '' })
+    }
+    showToast('Скинуто')
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -501,17 +532,6 @@ async function hostVotingStart() {
   }
 }
 
-async function hostStopVoting() {
-  if (!isAdmin.value) return
-  try {
-    loadError.value = null
-    await setRoomVoting(gameId.value, false, '')
-    showToast('Голосування зупинено')
-  } catch (e) {
-    loadError.value = e instanceof Error ? e.message : String(e)
-  }
-}
-
 async function hostFinishVoting() {
   if (!isAdmin.value) return
   try {
@@ -519,17 +539,6 @@ async function hostFinishVoting() {
     await setRoomVoting(gameId.value, false, '')
     await clearAllVotes(gameId.value)
     showToast('Голосування завершено')
-  } catch (e) {
-    loadError.value = e instanceof Error ? e.message : String(e)
-  }
-}
-
-async function hostClearVotes() {
-  if (!isAdmin.value) return
-  try {
-    loadError.value = null
-    await clearAllVotes(gameId.value)
-    showToast('Голоси очищено')
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -556,28 +565,6 @@ async function hostRoundDelta(d) {
   try {
     loadError.value = null
     await setRoomRound(gameId.value, next)
-    showToast('Раунд змінено')
-  } catch (e) {
-    loadError.value = e instanceof Error ? e.message : String(e)
-  }
-}
-
-async function hostResetRound() {
-  if (!isAdmin.value) return
-  try {
-    loadError.value = null
-    await resetRoomRoundCounter(gameId.value)
-    showToast('Раунд змінено')
-  } catch (e) {
-    loadError.value = e instanceof Error ? e.message : String(e)
-  }
-}
-
-async function hostSetRound(n) {
-  if (!isAdmin.value) return
-  try {
-    loadError.value = null
-    await setRoomRound(gameId.value, n)
     showToast('Раунд змінено')
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
@@ -624,11 +611,6 @@ async function adminNextSpeaker() {
 function rerollSingleTrait(fieldKey) {
   if (!isAdmin.value) return
   characterState[fieldKey].value = rollFieldValue(fieldKey, scenarioForRolls.value)
-}
-
-function toggleRevealAdmin(fieldKey) {
-  if (!isAdmin.value) return
-  characterState[fieldKey].revealed = !characterState[fieldKey].revealed
 }
 
 function rerollIdentity() {
@@ -821,11 +803,6 @@ const playerRevealLocked = computed(
   () => !isAdmin.value && Boolean(characterState.eliminated),
 )
 
-function toggle(key) {
-  if (playerRevealLocked.value) return
-  characterState[key].revealed = !characterState[key].revealed
-}
-
 function toggleEliminated() {
   if (!isAdmin.value) return
   characterState.eliminated = !characterState.eliminated
@@ -875,8 +852,6 @@ function rerollActiveCardOnly() {
             @pause-timer="adminPauseTimerOnly"
             @resume-timer="adminResumeTimer"
             @clear-timer="adminClearTimer"
-            @spotlight="setSpotlightPlayer"
-            @spotlight-clear="setSpotlightPlayer('')"
             @next-speaker="adminNextSpeaker"
           />
         </div>
@@ -950,7 +925,9 @@ function rerollActiveCardOnly() {
           :voting-target-id="String(gameRoom.voting?.targetPlayer || '')"
           :voting-active="Boolean(gameRoom.voting?.active)"
           :nominated-player-id="String(gameRoom.nominatedPlayer || '')"
-          @select="goToPlayer"
+          :use-action-menu="true"
+          @open-editor="goToPlayer"
+          @host-command="onRosterHostCommand"
         />
         <aside class="side-tools side-tools--inline">
           <label class="field-label">Game id</label>
@@ -973,26 +950,16 @@ function rerollActiveCardOnly() {
       >
         <ShowDeskVotingPanel
           :game-room="gameRoom"
-          :player-slots="PLAYER_SLOTS"
           :votes-live="votesLiveRound"
           :all-players-voted="allPlayersVoted"
-          @nominate="hostNominate"
-          @voting-target="hostVotingTarget"
           @voting-start="hostVotingStart"
-          @clear-votes="hostClearVotes"
           @remove-vote="hostRemoveVote"
-          @stop-voting="hostStopVoting"
           @voting-finish="hostFinishVoting"
         />
       </section>
 
       <section class="admin-zone admin-zone--round admin-card" aria-label="Раунд">
-        <ShowDeskRoundPanel
-          :game-room="gameRoom"
-          @round-delta="hostRoundDelta"
-          @reset-round="hostResetRound"
-          @set-round="hostSetRound"
-        />
+        <ShowDeskRoundPanel :game-room="gameRoom" @round-delta="hostRoundDelta" />
       </section>
     </template>
 
@@ -1016,15 +983,24 @@ function rerollActiveCardOnly() {
             <button type="button" class="icon-btn icon-btn--reroll" title="Перегенерувати" @click="rerollIdentity">
               🎲
             </button>
-            <button
-              type="button"
-              class="reveal-pill"
-              :class="{ active: characterState.identityRevealed }"
-              title="Показати на оверлеї"
-              @click="characterState.identityRevealed = !characterState.identityRevealed"
-            >
-              {{ characterState.identityRevealed ? 'ВІДКРИТО' : 'ЗАКРИТО' }}
-            </button>
+            <div class="reveal-pair">
+              <button
+                type="button"
+                class="reveal-btn"
+                :class="{ 'reveal-btn--green': characterState.identityRevealed }"
+                @click="characterState.identityRevealed = true"
+              >
+                ВІДКРИТО
+              </button>
+              <button
+                type="button"
+                class="reveal-btn"
+                :class="{ 'reveal-btn--red': !characterState.identityRevealed }"
+                @click="characterState.identityRevealed = false"
+              >
+                ЗАКРИТО
+              </button>
+            </div>
           </div>
         </div>
         <div class="meta-grid">
@@ -1047,11 +1023,13 @@ function rerollActiveCardOnly() {
         <div class="trait-toolbar">
           <span class="trait-label">Профіль</span>
         </div>
-        <template v-if="characterState.identityRevealed">
-          <p class="pv-line"><span class="mk">Ім’я</span> {{ characterState.name || '—' }}</p>
-          <p class="pv-line"><span class="mk">Вік · гендер</span> {{ characterState.age || '—' }} · {{ characterState.gender || '—' }}</p>
-        </template>
-        <p v-else class="pv-hidden">••••••</p>
+        <Transition name="stat-reveal" mode="out-in">
+          <div v-if="characterState.identityRevealed" key="id-on" class="identity-reveal-block">
+            <p class="pv-line"><span class="mk">Ім’я</span> {{ characterState.name || '—' }}</p>
+            <p class="pv-line"><span class="mk">Вік · гендер</span> {{ characterState.age || '—' }} · {{ characterState.gender || '—' }}</p>
+          </div>
+          <p v-else key="id-off" class="pv-hidden">••••••</p>
+        </Transition>
       </div>
 
       <div v-if="isAdmin" class="traits-stack">
@@ -1067,15 +1045,24 @@ function rerollActiveCardOnly() {
               >
                 🎲
               </button>
-              <button
-                type="button"
-                class="reveal-pill"
-                :class="{ active: characterState[row.key].revealed }"
-                title="На оверлеї"
-                @click="toggleRevealAdmin(row.key)"
-              >
-                {{ characterState[row.key].revealed ? 'ВІДКРИТО' : 'ЗАКРИТО' }}
-              </button>
+              <div class="reveal-pair">
+                <button
+                  type="button"
+                  class="reveal-btn"
+                  :class="{ 'reveal-btn--green': characterState[row.key].revealed }"
+                  @click="characterState[row.key].revealed = true"
+                >
+                  ВІДКРИТО
+                </button>
+                <button
+                  type="button"
+                  class="reveal-btn"
+                  :class="{ 'reveal-btn--red': !characterState[row.key].revealed }"
+                  @click="characterState[row.key].revealed = false"
+                >
+                  ЗАКРИТО
+                </button>
+              </div>
             </div>
           </div>
           <input v-model="characterState[row.key].value" type="text" class="input trait-value-input" />
@@ -1086,19 +1073,35 @@ function rerollActiveCardOnly() {
         <div v-for="row in fieldConfig" :key="row.key" class="trait-block trait-block--player">
           <div class="trait-toolbar">
             <span class="trait-label">{{ row.label }}</span>
-            <button
-              v-if="!playerRevealLocked"
-              type="button"
-              class="reveal-pill"
-              :class="{ active: characterState[row.key].revealed }"
-              @click="toggle(row.key)"
-            >
-              {{ characterState[row.key].revealed ? 'ВІДКРИТО' : 'ЗАКРИТО' }}
-            </button>
+            <div v-if="!playerRevealLocked" class="reveal-pair reveal-pair--player">
+              <button
+                type="button"
+                class="reveal-btn"
+                :class="{ 'reveal-btn--green': characterState[row.key].revealed }"
+                @click="characterState[row.key].revealed = true"
+              >
+                ВІДКРИТО
+              </button>
+              <button
+                type="button"
+                class="reveal-btn"
+                :class="{ 'reveal-btn--red': !characterState[row.key].revealed }"
+                @click="characterState[row.key].revealed = false"
+              >
+                ЗАКРИТО
+              </button>
+            </div>
           </div>
-          <p class="trait-value-preview">
-            {{ characterState[row.key].revealed ? (characterState[row.key].value || '—') : '••••••' }}
-          </p>
+          <Transition name="stat-reveal" mode="out-in">
+            <p
+              v-if="characterState[row.key].revealed"
+              :key="'open-' + row.key"
+              class="trait-value-preview trait-value-preview--on"
+            >
+              {{ characterState[row.key].value || '—' }}
+            </p>
+            <p v-else :key="'shut-' + row.key" class="trait-value-preview trait-value-preview--off">••••••</p>
+          </Transition>
         </div>
       </div>
 
@@ -1189,18 +1192,19 @@ function rerollActiveCardOnly() {
   top: 0;
   z-index: 60;
   margin: 0 -1.25rem 0.55rem;
-  padding: 0.42rem 1.25rem;
-  background: rgba(4, 3, 14, 0.97);
-  border-bottom: 1px solid rgba(45, 212, 191, 0.22);
-  font-size: 0.6rem;
+  padding: 0.52rem 1.25rem;
+  background: rgba(3, 2, 12, 0.98);
+  border-bottom: 1px solid rgba(45, 212, 191, 0.38);
+  font-size: 0.72rem;
   font-weight: 800;
-  letter-spacing: 0.05em;
-  line-height: 1.35;
-  color: #e2e8f0;
+  letter-spacing: 0.06em;
+  line-height: 1.4;
+  color: #f8fafc;
+  text-shadow: 0 0 24px rgba(45, 212, 191, 0.12);
   font-family: 'Orbitron', sans-serif;
   overflow-x: auto;
   white-space: nowrap;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.45);
 }
 
 .admin-dock {
@@ -1722,31 +1726,87 @@ function rerollActiveCardOnly() {
   box-shadow: 0 4px 14px rgba(251, 191, 36, 0.15);
 }
 
-.reveal-pill {
-  padding: 0.38rem 0.65rem;
+.reveal-pair {
+  display: inline-flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.reveal-pair--player {
+  justify-content: flex-end;
+}
+
+.reveal-btn {
+  padding: 0.34rem 0.55rem;
   border-radius: 10px;
-  font-size: 0.62rem;
-  font-weight: 800;
+  font-size: 0.58rem;
+  font-weight: 900;
   letter-spacing: 0.08em;
   cursor: pointer;
-  border: 1px solid rgba(248, 113, 113, 0.38);
-  background: rgba(60, 22, 28, 0.5);
-  color: #fecaca;
+  border: 1px solid rgba(71, 85, 105, 0.55);
+  background: rgba(15, 23, 42, 0.65);
+  color: rgba(203, 213, 225, 0.75);
   transition:
-    border-color 0.15s,
-    box-shadow 0.15s,
-    transform 0.12s;
+    transform 0.12s ease,
+    box-shadow 0.2s ease,
+    border-color 0.15s ease;
 }
 
-.reveal-pill:hover {
-  transform: scale(1.05) translateY(-1px);
+.reveal-btn:hover {
+  transform: scale(1.05);
 }
 
-.reveal-pill.active {
-  border-color: rgba(74, 222, 128, 0.5);
-  box-shadow: 0 0 12px rgba(74, 222, 128, 0.2);
-  background: rgba(22, 101, 52, 0.4);
+.reveal-btn--green {
+  border-color: rgba(74, 222, 128, 0.55);
+  background: rgba(22, 101, 52, 0.42);
   color: #bbf7d0;
+  box-shadow: 0 0 14px rgba(74, 222, 128, 0.28);
+}
+
+.reveal-btn--red {
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(60, 22, 28, 0.55);
+  color: #fecaca;
+  box-shadow: 0 0 12px rgba(248, 113, 113, 0.15);
+}
+
+.stat-reveal-enter-active {
+  animation: revealStat 0.48s ease both;
+}
+
+.stat-reveal-leave-active {
+  animation: hideStat 0.34s ease both;
+}
+
+@keyframes revealStat {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+    filter: blur(6px);
+  }
+  60% {
+    transform: scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes hideStat {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.95);
+    filter: blur(4px);
+  }
+}
+
+.identity-reveal-block {
+  margin-top: 0.15rem;
 }
 
 .traits-stack {

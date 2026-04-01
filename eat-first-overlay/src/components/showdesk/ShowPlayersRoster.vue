@@ -1,9 +1,8 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 const props = defineProps({
   players: { type: Array, default: () => [] },
-  /** games/{id}.hands — підняті руки йдуть першими в сітці */
   handsMap: { type: Object, default: () => ({}) },
   currentPlayerId: { type: String, default: '' },
   spotlightPlayerId: { type: String, default: '' },
@@ -11,9 +10,13 @@ const props = defineProps({
   votingTargetId: { type: String, default: '' },
   votingActive: { type: Boolean, default: false },
   nominatedPlayerId: { type: String, default: '' },
+  /** Клік по картці → меню дій (ведучий) */
+  useActionMenu: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['select'])
+const emit = defineEmits(['open-editor', 'host-command'])
+
+const menuPlayerId = ref(null)
 
 function cardActive(p) {
   const ac = p.activeCard
@@ -75,12 +78,57 @@ const playersSorted = computed(() => {
   })
   return list
 })
+
+const menuPlayer = computed(() => {
+  const id = menuPlayerId.value
+  if (!id) return null
+  return props.players.find((p) => String(p.id) === id) || null
+})
+
+function onCardClick(p) {
+  if (props.useActionMenu) {
+    menuPlayerId.value = String(p.id)
+    return
+  }
+  emit('open-editor', p.id)
+}
+
+function closeMenu() {
+  menuPlayerId.value = null
+}
+
+function openEditor() {
+  const id = menuPlayerId.value
+  closeMenu()
+  if (id) emit('open-editor', id)
+}
+
+function cmd(type) {
+  const id = menuPlayerId.value
+  if (!id) return
+  emit('host-command', { type, playerId: id })
+  closeMenu()
+}
+
+const menuEliminated = computed(() => menuPlayer.value?.eliminated === true)
+
+const spotlightOnMenuPlayer = computed(
+  () =>
+    Boolean(menuPlayerId.value) &&
+    String(props.spotlightPlayerId || '').trim() === String(menuPlayerId.value),
+)
 </script>
 
 <template>
   <section class="roster">
     <h2 class="block-title">Гравці</h2>
-    <p class="roster-hint">Клік — редактор. Спікер / таймер / spotlight — у Control Center.</p>
+    <p class="roster-hint">
+      {{
+        useActionMenu
+          ? 'Клік по гравцю — дії: спікер, номінація, ціль голосу, редактор.'
+          : 'Клік — відкрити картку.'
+      }}
+    </p>
     <div class="roster-grid">
       <button
         v-for="p in playersSorted"
@@ -99,7 +147,7 @@ const playersSorted = computed(() => {
             p.eliminated !== true &&
             String(speakerId || '').trim() !== p.id,
         }"
-        @click="emit('select', p.id)"
+        @click="onCardClick(p)"
       >
         <span v-if="p.eliminated === true" class="elim-badge" aria-hidden="true">ВИБУВ</span>
         <div v-else-if="showBadgesRow(p)" class="pcard-badges">
@@ -115,6 +163,30 @@ const playersSorted = computed(() => {
         <span v-if="cardActive(p)" class="card-ico" title="Є активна карта">🃏</span>
       </button>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="useActionMenu && menuPlayerId"
+        class="rpm-backdrop"
+        role="presentation"
+        @click.self="closeMenu"
+      >
+        <div class="rpm" role="dialog" aria-modal="true" aria-labelledby="rpm-title" @click.stop>
+          <p id="rpm-title" class="rpm__title">{{ menuPlayerId }}</p>
+          <button type="button" class="rpm__btn" @click="openEditor">📝 Редактор</button>
+          <template v-if="!menuEliminated">
+            <button type="button" class="rpm__btn" @click="cmd('speaker')">🎤 Зробити спікером</button>
+            <button type="button" class="rpm__btn" @click="cmd('nominate')">⚖️ Виставити</button>
+            <button type="button" class="rpm__btn" @click="cmd('vote-target')">🗳️ Зробити ціллю голосування</button>
+            <button type="button" class="rpm__btn rpm__btn--soft" @click="cmd('spotlight')">
+              {{ spotlightOnMenuPlayer ? '⭐ Зняти spotlight' : '⭐ Spotlight' }}
+            </button>
+          </template>
+          <button type="button" class="rpm__btn rpm__btn--danger" @click="cmd('reset')">❌ Скинути</button>
+          <button type="button" class="rpm__close" @click="closeMenu">Закрити</button>
+        </div>
+      </div>
+    </Teleport>
   </section>
 </template>
 
@@ -334,5 +406,86 @@ const playersSorted = computed(() => {
   font-size: 0.75rem;
   line-height: 1;
   filter: drop-shadow(0 0 6px rgba(168, 85, 247, 0.5));
+}
+
+.rpm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+}
+
+.rpm {
+  width: min(100%, 280px);
+  padding: 1rem 1rem 0.75rem;
+  border-radius: 16px;
+  background: rgba(10, 8, 22, 0.98);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+}
+
+.rpm__title {
+  margin: 0 0 0.75rem;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.15rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #e9d5ff;
+  text-align: center;
+}
+
+.rpm__btn {
+  display: block;
+  width: 100%;
+  margin-bottom: 0.4rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(30, 27, 55, 0.95);
+  color: #e2e8f0;
+  transition:
+    transform 0.1s ease,
+    border-color 0.15s;
+}
+
+.rpm__btn:hover {
+  transform: scale(1.02);
+  border-color: rgba(168, 85, 247, 0.45);
+}
+
+.rpm__btn--soft {
+  font-size: 0.72rem;
+  opacity: 0.92;
+}
+
+.rpm__btn--danger {
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fecaca;
+}
+
+.rpm__close {
+  display: block;
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: rgba(148, 163, 184, 0.9);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.rpm__close:hover {
+  color: #e2e8f0;
 }
 </style>

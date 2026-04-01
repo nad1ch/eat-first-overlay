@@ -148,20 +148,20 @@ watch(
   { immediate: true },
 )
 
-/** Короткий банер при переході фази на discussion (ритм шоу) */
+/** Банер лише при зміні раунду в кімнаті (не прив’язано до фази) */
 const roundBannerVisible = ref(false)
-const roundBannerIndex = ref(0)
 let roundBannerTimer = null
-const lastSeenPhase = ref('')
+const lastSeenRoundBanner = ref(null)
 
 watch(
-  () => String(gameRoom.value?.gamePhase ?? 'intro'),
-  (ph) => {
-    const prev = lastSeenPhase.value
-    lastSeenPhase.value = ph
-    if (ph !== 'discussion' || prev === ph) return
-    if (prev === '') return
-    roundBannerIndex.value += 1
+  () => Math.min(8, Math.max(1, Math.floor(Number(gameRoom.value?.round) || 1))),
+  (r) => {
+    if (lastSeenRoundBanner.value === null) {
+      lastSeenRoundBanner.value = r
+      return
+    }
+    if (r === lastSeenRoundBanner.value) return
+    lastSeenRoundBanner.value = r
     if (roundBannerTimer) clearTimeout(roundBannerTimer)
     roundBannerVisible.value = true
     roundBannerTimer = setTimeout(() => {
@@ -429,7 +429,7 @@ onUnmounted(() => {
         role="status"
         aria-live="polite"
       >
-        <p class="round-banner__n">РАУНД {{ roundBannerIndex }}</p>
+        <p class="round-banner__n">РАУНД {{ roomRound }}</p>
         <p class="round-banner__t">ВІДКРИВАЄМО КАРТУ</p>
       </div>
     </Teleport>
