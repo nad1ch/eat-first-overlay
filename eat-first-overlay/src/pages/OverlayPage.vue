@@ -8,6 +8,7 @@ import {
   subscribeToGameRoom,
   subscribeToPlayers,
   subscribeToVotes,
+  nominationsFromRoom,
 } from '../services/gameService'
 import { millisFromFirestore } from '../utils/firestoreTime.js'
 
@@ -226,6 +227,24 @@ const votingTargetId = computed(() => String(gameRoom.value?.voting?.targetPlaye
 const nominatedPlayerId = computed(() => String(gameRoom.value?.nominatedPlayer ?? '').trim())
 const nominatedById = computed(() => String(gameRoom.value?.nominatedBy ?? '').trim())
 
+function slotNumFromId(id) {
+  const s = String(id ?? '')
+  const m = s.match(/^p(\d+)$/i)
+  if (m) return m[1]
+  return s.replace(/^p/i, '') || s
+}
+
+function nominatorsLineFor(pid) {
+  const id = String(pid ?? '')
+  const list = nominationsFromRoom(gameRoom.value)
+  const nums = list.filter((x) => String(x.target) === id).map((x) => slotNumFromId(x.by))
+  if (nums.length) return nums.join(', ')
+  const n = nominatedPlayerId.value
+  const b = nominatedById.value
+  if (n === id && b) return slotNumFromId(b)
+  return ''
+}
+
 const roomRound = computed(() =>
   Math.min(8, Math.max(1, Math.floor(Number(gameRoom.value?.round) || 1))),
 )
@@ -384,6 +403,7 @@ onUnmounted(() => {
         :game-id="gameId"
         :nominated-player-id="nominatedPlayerId"
         :nominated-by-id="nominatedById"
+        :nominators-line="nominatorsLineFor(singlePlayer.id)"
         :room-round="roomRound"
         :votes-received="votesForTarget(singlePlayer.id)"
         :has-voted-this-round="personalHasVotedThisRound"
@@ -411,6 +431,7 @@ onUnmounted(() => {
         :game-id="gameId"
         :nominated-player-id="nominatedPlayerId"
         :nominated-by-id="nominatedById"
+        :nominators-line="nominatorsLineFor(p.id)"
         :room-round="roomRound"
         :votes-received="votesForTarget(p.id)"
         :has-voted-this-round="false"

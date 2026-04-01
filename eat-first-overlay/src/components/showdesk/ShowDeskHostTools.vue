@@ -3,7 +3,6 @@ import { computed } from 'vue'
 
 const props = defineProps({
   gameRoom: { type: Object, default: () => ({}) },
-  playerSlots: { type: Array, default: () => [] },
   speakingDuration: { type: [Number, String], default: 30 },
   phaseOptions: { type: Array, default: () => [] },
   roomRound: { type: Number, default: 1 },
@@ -15,7 +14,6 @@ const emit = defineEmits([
   'pause-show',
   'reset-room',
   'set-phase',
-  'set-speaker',
   'start-timer',
   'pause-timer',
   'resume-timer',
@@ -30,15 +28,13 @@ function slotNum(slot) {
   return s.replace(/^p/i, '') || s
 }
 
-const speakerSlot = computed(() => String(props.gameRoom?.currentSpeaker ?? '').trim())
-
 const phaseLabel = computed(() => String(props.gameRoom?.gamePhase || 'intro'))
 
 const votingOn = computed(() => Boolean(props.gameRoom?.voting?.active))
 
 const statusRibbon = computed(() => {
   const ph = phaseLabel.value.toUpperCase()
-  const sp = speakerSlot.value || '—'
+  const sp = String(props.gameRoom?.currentSpeaker ?? '').trim() || '—'
   const v = votingOn.value ? 'VOTING ON' : 'VOTING OFF'
   return `${ph} · R${props.roomRound} · ${sp} · ${v}`
 })
@@ -84,31 +80,6 @@ const statusRibbon = computed(() => {
     </div>
 
     <div class="cc-footer">
-      <div class="cc-block cc-block--speaker">
-        <span class="cc-lab">Спікер</span>
-        <div class="cc-speaker-row">
-          <button
-            v-for="slot in playerSlots"
-            :key="'spk-' + slot"
-            type="button"
-            class="chip chip--speaker"
-            :class="{ 'chip--speaker-active': speakerSlot === slot }"
-            @click="emit('set-speaker', slot)"
-          >
-            {{ slotNum(slot) }}
-          </button>
-          <button
-            type="button"
-            class="cc-btn cc-btn--next"
-            title="Наступний живий гравець + таймер 30s"
-            @click="emit('next-speaker')"
-          >
-            Next ▶
-          </button>
-          <button type="button" class="cc-clear" title="Зняти спікера" @click="emit('clear-timer')">✖</button>
-        </div>
-      </div>
-
       <div class="cc-block cc-block--phase">
         <span class="cc-lab">Фаза</span>
         <div class="cc-chips">
@@ -186,10 +157,6 @@ const statusRibbon = computed(() => {
   padding-bottom: 0.15rem;
 }
 
-.cc-block--speaker {
-  margin-bottom: 0.15rem;
-}
-
 .cc-lab {
   display: block;
   margin-bottom: 0.35rem;
@@ -215,13 +182,6 @@ const statusRibbon = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
-}
-
-.cc-speaker-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem;
 }
 
 .cc-btn {
@@ -300,23 +260,6 @@ const statusRibbon = computed(() => {
   transform: scale(1.04);
 }
 
-.cc-clear {
-  padding: 0.32rem 0.55rem;
-  border-radius: 8px;
-  font-size: 0.65rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  border: 1px solid rgba(248, 113, 113, 0.4);
-  background: rgba(80, 20, 30, 0.45);
-  color: #fecaca;
-  transition: transform 0.12s ease;
-}
-
-.cc-clear:hover {
-  transform: scale(1.05);
-}
-
 .chip {
   min-width: 2rem;
   padding: 0.3rem 0.5rem;
@@ -333,16 +276,6 @@ const statusRibbon = computed(() => {
 
 .chip:hover {
   transform: scale(1.06);
-}
-
-.chip--speaker-active {
-  border-color: #c4b5fd !important;
-  background: linear-gradient(155deg, rgba(139, 92, 246, 0.5), rgba(76, 29, 149, 0.88)) !important;
-  color: #fff !important;
-  box-shadow:
-    0 0 22px rgba(167, 139, 250, 0.45),
-    0 0 0 2px rgba(255, 255, 255, 0.14);
-  transform: scale(1.08);
 }
 
 .chip.on {

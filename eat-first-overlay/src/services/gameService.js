@@ -139,6 +139,7 @@ export async function resetGameRoomControls(gameId) {
       round: 1,
       nominatedPlayer: deleteField(),
       nominatedBy: deleteField(),
+      nominations: deleteField(),
       hands: deleteField(),
       voting: deleteField(),
       key: ADMIN_KEY,
@@ -193,17 +194,54 @@ export async function deleteVoteDoc(gameId, voterId) {
   await deleteDoc(doc(db, 'games', gameId, 'votes', v))
 }
 
-/** Номінація + хто ініціював (slot p1… або ''). */
+/** Нормалізовані номінації: [{ target: 'p3', by: 'p1' }, …] */
+export function normalizeNominations(raw) {
+  if (!Array.isArray(raw)) return []
+  const out = []
+  for (const x of raw) {
+    const target = String(x?.target ?? '').trim()
+    const by = String(x?.by ?? '').trim()
+    if (target && by) out.push({ target, by })
+  }
+  return out
+}
+
+/** Для UI: з масиву або з legacy nominatedPlayer / nominatedBy */
+export function nominationsFromRoom(gr) {
+  const raw = normalizeNominations(gr?.nominations)
+  if (raw.length) return raw
+  const t = String(gr?.nominatedPlayer ?? '').trim()
+  const b = String(gr?.nominatedBy ?? '').trim()
+  if (t && b) return [{ target: t, by: b }]
+  return []
+}
+
+/** Записати номінації; прибирає legacy-поля. */
+export async function setGameNominations(gameId, list) {
+  const next = normalizeNominations(list)
+  await saveGameRoom(gameId, {
+    nominations: next,
+    nominatedPlayer: deleteField(),
+    nominatedBy: deleteField(),
+  })
+}
+
+/** Номінація + хто ініціював (slot p1… або '') — legacy, краще nominations[]. */
 export async function setNominatedPlayer(gameId, playerId, nominatedBySlot) {
   const p = String(playerId ?? '').trim()
   const by = String(nominatedBySlot ?? '').trim()
   if (!p) {
-    await saveGameRoom(gameId, { nominatedPlayer: '', nominatedBy: deleteField() })
+    await saveGameRoom(gameId, {
+      nominatedPlayer: '',
+      nominatedBy: deleteField(),
+      nominations: deleteField(),
+    })
     return
   }
   await saveGameRoom(gameId, {
     nominatedPlayer: p,
     nominatedBy: by || deleteField(),
+    nominations: deleteField(),
   })
 }
 

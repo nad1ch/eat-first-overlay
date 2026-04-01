@@ -35,7 +35,8 @@ import {
   resetGameRoomControls,
   setGamePhase,
   regenerateAllPlayersRandom,
-  setNominatedPlayer,
+  setGameNominations,
+  nominationsFromRoom,
   setRoomVoting,
   setGameHandRaised,
   subscribeToVotes,
@@ -48,9 +49,9 @@ import { millisFromFirestore } from '../utils/firestoreTime.js'
 import ShowDeskHeader from '../components/showdesk/ShowDeskHeader.vue'
 import ShowDeskHostTools from '../components/showdesk/ShowDeskHostTools.vue'
 import ShowDeskHandsPanel from '../components/showdesk/ShowDeskHandsPanel.vue'
-import ShowDeskVotingPanel from '../components/showdesk/ShowDeskVotingPanel.vue'
-import ShowDeskRoundPanel from '../components/showdesk/ShowDeskRoundPanel.vue'
+import ShowDeskHostGameBar from '../components/showdesk/ShowDeskHostGameBar.vue'
 import ShowPlayersRoster from '../components/showdesk/ShowPlayersRoster.vue'
+import { playRevealFlipSound } from '../utils/voteUiSound.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -219,9 +220,15 @@ const allPlayersVoted = computed(
     votesLiveRound.value.length === aliveCount.value,
 )
 
-const nominatedPlayerActive = computed(() =>
-  Boolean(String(gameRoom.value?.nominatedPlayer ?? '').trim()),
-)
+const nominationsList = computed(() => nominationsFromRoom(gameRoom.value))
+
+const nominatedPlayerActive = computed(() => nominationsList.value.length > 0)
+
+const selectedDeskPlayerId = ref('')
+
+watch(gameId, () => {
+  selectedDeskPlayerId.value = ''
+})
 
 const raisedHandsCount = computed(() => {
   const h = gameRoom.value?.hands || {}
@@ -419,19 +426,6 @@ async function setSpotlightPlayer(slot) {
   }
 }
 
-async function setRoomSpeaker(slot) {
-  if (!isAdmin.value) return
-  const s = String(slot ?? '').trim()
-  if (!s) return
-  try {
-    loadError.value = null
-    timerSpeakerSlot.value = s
-    await saveGameRoom(gameId.value, { currentSpeaker: s })
-  } catch (e) {
-    loadError.value = e instanceof Error ? e.message : String(e)
-  }
-}
-
 function eliminatedBySlot() {
   const m = Object.create(null)
   for (const p of allPlayers.value) {
@@ -454,6 +448,33 @@ async function toggleMyHand() {
   }
 }
 
+function revealIdentity(open) {
+  if (open) playRevealFlipSound(0.09)
+  characterState.identityRevealed = open
+}
+
+function revealTrait(key, open) {
+  if (open) playRevealFlipSound(0.09)
+  if (characterState[key]) characterState[key].revealed = open
+}
+
+async function hostToggleNomination({ target, by }) {
+  if (!isAdmin.value) return
+  const t = String(target ?? '').trim()
+  const b = String(by ?? '').trim()
+  if (!t || !b) return
+  try {
+    loadError.value = null
+    const cur = nominationsFromRoom(gameRoom.value)
+    const exists = cur.some((x) => x.target === t && x.by === b)
+    const next = exists ? cur.filter((x) => !(x.target === t && x.by === b)) : [...cur, { target: t, by: b }]
+    await setGameNominations(gameId.value, next)
+    showToast(exists ? 'Номінацію знято' : 'Номінація')
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
 async function onRosterHostCommand({ type, playerId: pid }) {
   if (!isAdmin.value) return
   const p = String(pid ?? '').trim()
@@ -461,15 +482,19 @@ async function onRosterHostCommand({ type, playerId: pid }) {
   try {
     loadError.value = null
     switch (type) {
-      case 'speaker':
-        timerSpeakerSlot.value = p
-        await saveGameRoom(gameId.value, { currentSpeaker: p })
-        showToast(p)
+      case 'speaker': {
+        const cur = String(gameRoom.value?.currentSpeaker ?? '').trim()
+        if (cur === p) {
+          await clearSpeakingTimer(gameId.value)
+          await saveGameRoom(gameId.value, { currentSpeaker: '' })
+          showToast('Спікера знято')
+        } else {
+          timerSpeakerSlot.value = p
+          await saveGameRoom(gameId.value, { currentSpeaker: p })
+          showToast(p)
+        }
         break
-      case 'nominate':
-        await setNominatedPlayer(gameId.value, p, '')
-        showToast('Номінація виставлена')
-        break
+      }
       case 'vote-target': {
         const active = Boolean(gameRoom.value?.voting?.active)
         await setRoomVoting(gameId.value, active, p)
@@ -498,8 +523,11 @@ async function hostResetPlayerRoles(pid) {
   try {
     loadError.value = null
     const gr = gameRoom.value
-    if (String(gr?.nominatedPlayer ?? '').trim() === p) {
-      await setNominatedPlayer(gameId.value, '', '')
+    const list = nominationsFromRoom(gr)
+    const next = list.filter((x) => x.target !== p && x.by !== p)
+    const legacyNom = String(gr?.nominatedPlayer ?? '').trim() === p && list.length === 0
+    if (next.length !== list.length || legacyNom) {
+      await setGameNominations(gameId.value, next)
     }
     if (String(gr?.voting?.targetPlayer ?? '').trim() === p) {
       await setRoomVoting(gameId.value, false, '')
@@ -835,11 +863,25 @@ function rerollActiveCardOnly() {
 
     <template v-if="isAdmin">
       <div class="host-summary-bar" role="status">{{ hostSummaryLine }}</div>
+      <section
+        class="admin-zone admin-zone--gamebar admin-card"
+        :class="{ 'admin-zone--glow': gameRoom.voting?.active }"
+        aria-label="Раунд і голосування"
+      >
+        <ShowDeskHostGameBar
+          :game-room="gameRoom"
+          :votes-live="votesLiveRound"
+          :all-players-voted="allPlayersVoted"
+          @round-delta="hostRoundDelta"
+          @voting-start="hostVotingStart"
+          @remove-vote="hostRemoveVote"
+          @voting-finish="hostFinishVoting"
+        />
+      </section>
       <section class="admin-zone admin-zone--live admin-card admin-zone--live-priority" aria-label="Live">
         <div class="admin-dock">
           <ShowDeskHostTools
             :game-room="gameRoom"
-            :player-slots="PLAYER_SLOTS"
             :room-round="roomRoundLive"
             v-model:speaking-duration="speakingDuration"
             :phase-options="PHASE_OPTIONS"
@@ -847,7 +889,6 @@ function rerollActiveCardOnly() {
             @pause-show="controlPauseShow"
             @reset-room="controlReset"
             @set-phase="setPhase"
-            @set-speaker="setRoomSpeaker"
             @start-timer="adminStartSpeakingTimer"
             @pause-timer="adminPauseTimerOnly"
             @resume-timer="adminResumeTimer"
@@ -917,6 +958,7 @@ function rerollActiveCardOnly() {
       >
         <h2 class="zone-kicker">ГРАВЦІ</h2>
         <ShowPlayersRoster
+          v-model:selected-player-id="selectedDeskPlayerId"
           :players="allPlayers"
           :hands-map="gameRoom.hands || {}"
           :current-player-id="playerId"
@@ -924,10 +966,12 @@ function rerollActiveCardOnly() {
           :speaker-id="String(gameRoom.currentSpeaker || '')"
           :voting-target-id="String(gameRoom.voting?.targetPlayer || '')"
           :voting-active="Boolean(gameRoom.voting?.active)"
-          :nominated-player-id="String(gameRoom.nominatedPlayer || '')"
-          :use-action-menu="true"
+          :nominations="nominationsList"
+          :player-slots="PLAYER_SLOTS"
+          :use-host-panel="true"
           @open-editor="goToPlayer"
           @host-command="onRosterHostCommand"
+          @toggle-nomination="hostToggleNomination"
         />
         <aside class="side-tools side-tools--inline">
           <label class="field-label">Game id</label>
@@ -943,24 +987,6 @@ function rerollActiveCardOnly() {
         </aside>
       </section>
 
-      <section
-        class="admin-zone admin-zone--voting admin-card"
-        :class="{ 'admin-zone--glow': gameRoom.voting?.active }"
-        aria-label="Голосування"
-      >
-        <ShowDeskVotingPanel
-          :game-room="gameRoom"
-          :votes-live="votesLiveRound"
-          :all-players-voted="allPlayersVoted"
-          @voting-start="hostVotingStart"
-          @remove-vote="hostRemoveVote"
-          @voting-finish="hostFinishVoting"
-        />
-      </section>
-
-      <section class="admin-zone admin-zone--round admin-card" aria-label="Раунд">
-        <ShowDeskRoundPanel :game-room="gameRoom" @round-delta="hostRoundDelta" />
-      </section>
     </template>
 
     <div v-else class="player-hero">
@@ -988,7 +1014,7 @@ function rerollActiveCardOnly() {
                 type="button"
                 class="reveal-btn"
                 :class="{ 'reveal-btn--green': characterState.identityRevealed }"
-                @click="characterState.identityRevealed = true"
+                @click="revealIdentity(true)"
               >
                 ВІДКРИТО
               </button>
@@ -996,7 +1022,7 @@ function rerollActiveCardOnly() {
                 type="button"
                 class="reveal-btn"
                 :class="{ 'reveal-btn--red': !characterState.identityRevealed }"
-                @click="characterState.identityRevealed = false"
+                @click="revealIdentity(false)"
               >
                 ЗАКРИТО
               </button>
@@ -1050,7 +1076,7 @@ function rerollActiveCardOnly() {
                   type="button"
                   class="reveal-btn"
                   :class="{ 'reveal-btn--green': characterState[row.key].revealed }"
-                  @click="characterState[row.key].revealed = true"
+                  @click="revealTrait(row.key, true)"
                 >
                   ВІДКРИТО
                 </button>
@@ -1058,7 +1084,7 @@ function rerollActiveCardOnly() {
                   type="button"
                   class="reveal-btn"
                   :class="{ 'reveal-btn--red': !characterState[row.key].revealed }"
-                  @click="characterState[row.key].revealed = false"
+                  @click="revealTrait(row.key, false)"
                 >
                   ЗАКРИТО
                 </button>
@@ -1078,7 +1104,7 @@ function rerollActiveCardOnly() {
                 type="button"
                 class="reveal-btn"
                 :class="{ 'reveal-btn--green': characterState[row.key].revealed }"
-                @click="characterState[row.key].revealed = true"
+                @click="revealTrait(row.key, true)"
               >
                 ВІДКРИТО
               </button>
@@ -1086,7 +1112,7 @@ function rerollActiveCardOnly() {
                 type="button"
                 class="reveal-btn"
                 :class="{ 'reveal-btn--red': !characterState[row.key].revealed }"
-                @click="characterState[row.key].revealed = false"
+                @click="revealTrait(row.key, false)"
               >
                 ЗАКРИТО
               </button>
@@ -1277,7 +1303,8 @@ function rerollActiveCardOnly() {
   color: rgba(196, 181, 253, 0.48);
 }
 
-.admin-zone--voting.admin-zone--glow {
+.admin-zone--voting.admin-zone--glow,
+.admin-zone--gamebar.admin-zone--glow {
   border-radius: 16px;
   padding: 0.15rem;
   border: 1px solid rgba(56, 189, 248, 0.35);
@@ -1781,15 +1808,16 @@ function rerollActiveCardOnly() {
 @keyframes revealStat {
   0% {
     opacity: 0;
-    transform: translateY(6px) scale(0.96);
-    filter: blur(6px);
+    transform: perspective(400px) rotateX(-12deg) translateY(8px) scale(0.94);
+    filter: blur(5px);
   }
-  60% {
-    transform: scale(1.04);
+  55% {
+    transform: perspective(400px) rotateX(4deg) scale(1.02);
+    filter: blur(0);
   }
   100% {
     opacity: 1;
-    transform: scale(1);
+    transform: perspective(400px) rotateX(0deg) scale(1);
     filter: blur(0);
   }
 }
@@ -1797,10 +1825,12 @@ function rerollActiveCardOnly() {
 @keyframes hideStat {
   0% {
     opacity: 1;
+    transform: perspective(400px) rotateX(0deg) scale(1);
+    filter: blur(0);
   }
   100% {
     opacity: 0;
-    transform: scale(0.95);
+    transform: perspective(400px) rotateX(10deg) scale(0.93);
     filter: blur(4px);
   }
 }

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 
 const props = defineProps({
   players: { type: Array, default: () => [] },
@@ -9,14 +9,22 @@ const props = defineProps({
   speakerId: { type: String, default: '' },
   votingTargetId: { type: String, default: '' },
   votingActive: { type: Boolean, default: false },
-  nominatedPlayerId: { type: String, default: '' },
-  /** Клік по картці → меню дій (ведучий) */
-  useActionMenu: { type: Boolean, default: false },
+  /** Нормалізовані номінації [{ target, by }] */
+  nominations: { type: Array, default: () => [] },
+  /** Вибраний слот для панелі дій */
+  selectedPlayerId: { type: String, default: '' },
+  /** Режим ведучого: сітка + панель без модалки */
+  useHostPanel: { type: Boolean, default: false },
+  /** Слоти для чипів «хто виставляє» */
+  playerSlots: { type: Array, default: () => [] },
 })
 
-const emit = defineEmits(['open-editor', 'host-command'])
-
-const menuPlayerId = ref(null)
+const emit = defineEmits([
+  'open-editor',
+  'host-command',
+  'update:selectedPlayerId',
+  'toggle-nomination',
+])
 
 function cardActive(p) {
   const ac = p.activeCard
@@ -29,6 +37,16 @@ function slotNum(id) {
   const m = s.match(/^p(\d+)$/i)
   if (m) return m[1]
   return s.replace(/^p/i, '') || s
+}
+
+function nominatorsFor(pid) {
+  const id = String(pid ?? '')
+  return props.nominations.filter((n) => String(n.target) === id).map((n) => slotNum(n.by))
+}
+
+function nominatorsLine(pid) {
+  const nums = nominatorsFor(pid)
+  return nums.length ? nums.join(', ') : ''
 }
 
 function statusLine(p) {
@@ -54,8 +72,7 @@ function isVoteTargetCard(p) {
 }
 
 function isNominatedCard(p) {
-  const n = String(props.nominatedPlayerId || '').trim()
-  return p.eliminated !== true && Boolean(n) && String(p.id) === n
+  return p.eliminated !== true && nominatorsFor(p.id).length > 0
 }
 
 function showBadgesRow(p) {
@@ -79,44 +96,64 @@ const playersSorted = computed(() => {
   return list
 })
 
-const menuPlayer = computed(() => {
-  const id = menuPlayerId.value
+const selectedPlayer = computed(() => {
+  const id = String(props.selectedPlayerId || '').trim()
   if (!id) return null
   return props.players.find((p) => String(p.id) === id) || null
 })
 
+const selectedEliminated = computed(() => selectedPlayer.value?.eliminated === true)
+
+const spotlightOnSelected = computed(
+  () =>
+    Boolean(props.selectedPlayerId) &&
+    String(props.spotlightPlayerId || '').trim() === String(props.selectedPlayerId),
+)
+
+const speakerOnSelected = computed(
+  () =>
+    Boolean(props.selectedPlayerId) &&
+    String(props.speakerId || '').trim() === String(props.selectedPlayerId),
+)
+
 function onCardClick(p) {
-  if (props.useActionMenu) {
-    menuPlayerId.value = String(p.id)
+  if (props.useHostPanel) {
+    const id = String(p.id)
+    emit('update:selectedPlayerId', props.selectedPlayerId === id ? '' : id)
     return
   }
   emit('open-editor', p.id)
 }
 
-function closeMenu() {
-  menuPlayerId.value = null
-}
-
-function openEditor() {
-  const id = menuPlayerId.value
-  closeMenu()
+function openEditorSelected() {
+  const id = props.selectedPlayerId
   if (id) emit('open-editor', id)
 }
 
 function cmd(type) {
-  const id = menuPlayerId.value
+  const id = String(props.selectedPlayerId || '').trim()
   if (!id) return
   emit('host-command', { type, playerId: id })
-  closeMenu()
 }
 
-const menuEliminated = computed(() => menuPlayer.value?.eliminated === true)
+function pairActive(bySlot) {
+  const t = String(props.selectedPlayerId || '').trim()
+  const b = String(bySlot || '').trim()
+  if (!t || !b) return false
+  return props.nominations.some((n) => String(n.target) === t && String(n.by) === b)
+}
 
-const spotlightOnMenuPlayer = computed(
-  () =>
-    Boolean(menuPlayerId.value) &&
-    String(props.spotlightPlayerId || '').trim() === String(menuPlayerId.value),
-)
+function toggleNom(bySlot) {
+  const target = String(props.selectedPlayerId || '').trim()
+  const by = String(bySlot || '').trim()
+  if (!target || !by || selectedEliminated.value) return
+  emit('toggle-nomination', { target, by })
+}
+
+const aliveSlotsForNom = computed(() => {
+  const dead = new Set(props.players.filter((p) => p.eliminated === true).map((p) => String(p.id)))
+  return props.playerSlots.filter((s) => !dead.has(String(s)))
+})
 </script>
 
 <template>
@@ -124,69 +161,90 @@ const spotlightOnMenuPlayer = computed(
     <h2 class="block-title">Гравці</h2>
     <p class="roster-hint">
       {{
-        useActionMenu
-          ? 'Клік по гравцю — дії: спікер, номінація, ціль голосу, редактор.'
+        useHostPanel
+          ? 'Ліворуч — слоти. Клік виділяє; усі дії — у панелі справа.'
           : 'Клік — відкрити картку.'
       }}
     </p>
-    <div class="roster-grid">
-      <button
-        v-for="p in playersSorted"
-        :key="p.id"
-        type="button"
-        class="pcard"
-        :class="{
-          on: p.id === currentPlayerId,
-          elim: p.eliminated === true,
-          speak: String(speakerId || '').trim() === p.id,
-          spot: String(spotlightPlayerId || '').trim() === p.id,
-          'pcard--hand': handUp(p),
-          'pcard--vote-target':
-            votingActive &&
-            String(votingTargetId || '').trim() === p.id &&
-            p.eliminated !== true &&
-            String(speakerId || '').trim() !== p.id,
-        }"
-        @click="onCardClick(p)"
-      >
-        <span v-if="p.eliminated === true" class="elim-badge" aria-hidden="true">ВИБУВ</span>
-        <div v-else-if="showBadgesRow(p)" class="pcard-badges">
-          <span v-if="isSpeak(p)" class="pcb pcb--speak">ГОВОРИТЬ</span>
-          <template v-else>
-            <span v-if="isVoteTargetCard(p)" class="pcb pcb--target">ЦІЛЬ</span>
-            <span v-if="isNominatedCard(p)" class="pcb pcb--nom">НОМІНОВАНИЙ</span>
-            <span v-if="handUp(p)" class="pcb pcb--hand">РУКА</span>
-          </template>
-        </div>
-        <span class="num">{{ slotNum(p.id) }}</span>
-        <span class="st">{{ statusLine(p) }}</span>
-        <span v-if="cardActive(p)" class="card-ico" title="Є активна карта">🃏</span>
-      </button>
-    </div>
 
-    <Teleport to="body">
-      <div
-        v-if="useActionMenu && menuPlayerId"
-        class="rpm-backdrop"
-        role="presentation"
-        @click.self="closeMenu"
-      >
-        <div class="rpm" role="dialog" aria-modal="true" aria-labelledby="rpm-title" @click.stop>
-          <p id="rpm-title" class="rpm__title">{{ menuPlayerId }}</p>
-          <button type="button" class="rpm__btn" @click="openEditor">📝 Редактор</button>
-          <template v-if="!menuEliminated">
-            <button type="button" class="rpm__btn" @click="cmd('speaker')">🎤 Зробити спікером</button>
-            <button type="button" class="rpm__btn" @click="cmd('nominate')">⚖️ Виставити</button>
-            <button type="button" class="rpm__btn" @click="cmd('vote-target')">🗳️ Зробити ціллю голосування</button>
-            <button type="button" class="rpm__btn rpm__btn--soft" @click="cmd('spotlight')">
-              {{ spotlightOnMenuPlayer ? '⭐ Зняти spotlight' : '⭐ Spotlight' }}
+    <div class="roster-shell" :class="{ 'roster-shell--panel': useHostPanel }">
+      <div class="roster-grid">
+        <button
+          v-for="p in playersSorted"
+          :key="p.id"
+          type="button"
+          class="pcard"
+          :class="{
+            on: p.id === currentPlayerId,
+            pick: useHostPanel && String(selectedPlayerId) === String(p.id),
+            elim: p.eliminated === true,
+            speak: String(speakerId || '').trim() === p.id,
+            spot: String(spotlightPlayerId || '').trim() === p.id,
+            'pcard--hand': handUp(p),
+            'pcard--vote-target':
+              votingActive &&
+              String(votingTargetId || '').trim() === p.id &&
+              p.eliminated !== true &&
+              String(speakerId || '').trim() !== p.id,
+          }"
+          @click="onCardClick(p)"
+        >
+          <span v-if="p.eliminated === true" class="elim-badge" aria-hidden="true">ВИБУВ</span>
+          <div v-else-if="showBadgesRow(p)" class="pcard-badges">
+            <span v-if="isSpeak(p)" class="pcb pcb--speak">ГОВОРИТЬ</span>
+            <template v-else>
+              <span v-if="isVoteTargetCard(p)" class="pcb pcb--target">ЦІЛЬ</span>
+              <template v-if="isNominatedCard(p)">
+                <span class="pcb pcb--nom">НОМІН.</span>
+                <span class="pcb pcb--nom-who">{{ nominatorsLine(p.id) }}</span>
+              </template>
+              <span v-if="handUp(p)" class="pcb pcb--hand">РУКА</span>
+            </template>
+          </div>
+          <span class="num">{{ slotNum(p.id) }}</span>
+          <span class="st">{{ statusLine(p) }}</span>
+          <span v-if="cardActive(p)" class="card-ico" title="Є активна карта">🃏</span>
+        </button>
+      </div>
+
+      <aside v-if="useHostPanel" class="act-panel">
+        <template v-if="selectedPlayer">
+          <p class="act-panel__id">{{ selectedPlayerId }}</p>
+          <button type="button" class="act-btn act-btn--soft" @click="openEditorSelected">📝 Редактор</button>
+
+          <template v-if="!selectedEliminated">
+            <button v-if="!speakerOnSelected" type="button" class="act-btn" @click="cmd('speaker')">
+              🎤 Спікер
+            </button>
+            <button v-else type="button" class="act-btn" @click="cmd('speaker')">✖ Забрати спікера</button>
+
+            <p class="act-sub">⚖️ Номінувати</p>
+            <p class="act-micro">Вибери хто виставляє:</p>
+            <div class="act-chips">
+              <button
+                v-for="slot in aliveSlotsForNom"
+                :key="'nom-' + slot"
+                type="button"
+                class="nchip"
+                :class="{ 'nchip--on': pairActive(slot), 'nchip--self': String(slot) === String(selectedPlayerId) }"
+                :disabled="String(slot) === String(selectedPlayerId)"
+                @click="toggleNom(slot)"
+              >
+                {{ slotNum(slot) }}
+              </button>
+            </div>
+
+            <button type="button" class="act-btn" @click="cmd('vote-target')">🗳️ Ціль голосування</button>
+            <button type="button" class="act-btn act-btn--soft" @click="cmd('spotlight')">
+              {{ spotlightOnSelected ? '⭐ Зняти spotlight' : '⭐ Spotlight' }}
             </button>
           </template>
-          <button type="button" class="rpm__btn rpm__btn--danger" @click="cmd('reset')">❌ Скинути</button>
-          <button type="button" class="rpm__close" @click="closeMenu">Закрити</button>
-        </div>
-      </div>
-    </Teleport>
+
+          <button type="button" class="act-btn act-btn--danger" @click="cmd('reset')">❌ Скинути</button>
+        </template>
+        <p v-else class="act-empty">Оберіть слот зліва</p>
+      </aside>
+    </div>
   </section>
 </template>
 
@@ -213,6 +271,23 @@ const spotlightOnMenuPlayer = computed(
   font-size: 0.65rem;
   line-height: 1.35;
   color: rgba(196, 181, 253, 0.4);
+}
+
+.roster-shell {
+  display: block;
+}
+
+.roster-shell--panel {
+  display: grid;
+  grid-template-columns: 1fr minmax(200px, 38%);
+  gap: 0.75rem;
+  align-items: start;
+}
+
+@media (max-width: 720px) {
+  .roster-shell--panel {
+    grid-template-columns: 1fr;
+  }
 }
 
 .roster-grid {
@@ -260,6 +335,17 @@ const spotlightOnMenuPlayer = computed(
   font-size: 0.42rem;
 }
 
+.pcb--nom-who {
+  color: #fef3c7;
+  background: rgba(55, 35, 10, 0.55);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  font-size: 0.4rem;
+  font-weight: 800;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .pcb--hand {
   color: rgba(226, 232, 240, 0.85);
   background: rgba(30, 41, 59, 0.85);
@@ -296,6 +382,11 @@ const spotlightOnMenuPlayer = computed(
 .pcard.on {
   border-color: rgba(168, 85, 247, 0.65);
   box-shadow: 0 0 18px rgba(168, 85, 247, 0.25);
+}
+
+.pcard.pick:not(.elim) {
+  border-color: rgba(52, 211, 153, 0.55);
+  box-shadow: 0 0 20px rgba(45, 212, 191, 0.22);
 }
 
 .pcard--hand:not(.elim) {
@@ -408,44 +499,86 @@ const spotlightOnMenuPlayer = computed(
   filter: drop-shadow(0 0 6px rgba(168, 85, 247, 0.5));
 }
 
-.rpm-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(6px);
+.act-panel {
+  position: sticky;
+  top: 0.5rem;
+  padding: 0.75rem 0.8rem;
+  border-radius: 14px;
+  background: rgba(6, 4, 18, 0.95);
+  border: 1px solid rgba(168, 85, 247, 0.28);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
 }
 
-.rpm {
-  width: min(100%, 280px);
-  padding: 1rem 1rem 0.75rem;
-  border-radius: 16px;
-  background: rgba(10, 8, 22, 0.98);
-  border: 1px solid rgba(168, 85, 247, 0.35);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
-}
-
-.rpm__title {
-  margin: 0 0 0.75rem;
+.act-panel__id {
+  margin: 0 0 0.6rem;
   font-family: 'Orbitron', sans-serif;
-  font-size: 1.15rem;
+  font-size: 1.1rem;
   font-weight: 900;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   color: #e9d5ff;
   text-align: center;
 }
 
-.rpm__btn {
+.act-sub {
+  margin: 0.65rem 0 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #fde68a;
+}
+
+.act-micro {
+  margin: 0 0 0.35rem;
+  font-size: 0.58rem;
+  font-weight: 600;
+  color: rgba(148, 163, 184, 0.85);
+}
+
+.act-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.55rem;
+}
+
+.nchip {
+  min-width: 2.1rem;
+  padding: 0.28rem 0.4rem;
+  border-radius: 8px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 800;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.4);
+  color: #cbd5e1;
+  transition: transform 0.1s ease;
+}
+
+.nchip:hover:not(:disabled) {
+  transform: scale(1.06);
+  border-color: rgba(251, 191, 36, 0.4);
+}
+
+.nchip--on {
+  border-color: rgba(251, 191, 36, 0.65);
+  background: rgba(120, 53, 15, 0.55);
+  color: #fef3c7;
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.2);
+}
+
+.nchip:disabled,
+.nchip--self {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.act-btn {
   display: block;
   width: 100%;
-  margin-bottom: 0.4rem;
-  padding: 0.55rem 0.65rem;
+  margin-bottom: 0.38rem;
+  padding: 0.48rem 0.55rem;
   border-radius: 10px;
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   font-weight: 700;
   text-align: left;
   cursor: pointer;
@@ -457,35 +590,26 @@ const spotlightOnMenuPlayer = computed(
     border-color 0.15s;
 }
 
-.rpm__btn:hover {
-  transform: scale(1.02);
+.act-btn:hover {
+  transform: scale(1.01);
   border-color: rgba(168, 85, 247, 0.45);
 }
 
-.rpm__btn--soft {
-  font-size: 0.72rem;
-  opacity: 0.92;
+.act-btn--soft {
+  font-size: 0.7rem;
+  opacity: 0.95;
 }
 
-.rpm__btn--danger {
+.act-btn--danger {
   border-color: rgba(248, 113, 113, 0.35);
   color: #fecaca;
 }
 
-.rpm__close {
-  display: block;
-  width: 100%;
-  margin-top: 0.35rem;
-  padding: 0.45rem;
-  font-size: 0.68rem;
-  font-weight: 600;
-  color: rgba(148, 163, 184, 0.9);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-}
-
-.rpm__close:hover {
-  color: #e2e8f0;
+.act-empty {
+  margin: 0;
+  font-size: 0.72rem;
+  color: rgba(148, 163, 184, 0.75);
+  text-align: center;
+  padding: 1.2rem 0.25rem;
 }
 </style>

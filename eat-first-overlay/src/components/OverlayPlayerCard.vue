@@ -27,8 +27,10 @@ const props = defineProps({
   voteInteractive: { type: Boolean, default: false },
   gameId: { type: String, default: '' },
   nominatedPlayerId: { type: String, default: '' },
-  /** Хто ініціював номінацію (slot p1…) */
+  /** Хто ініціював номінацію (slot p1…) — legacy */
   nominatedById: { type: String, default: '' },
+  /** Рядок «1, 3» з масиву nominations або legacy */
+  nominatorsLine: { type: String, default: '' },
   roomRound: { type: Number, default: 1 },
   /** Голоси проти цього гравця в поточному раунді: { id, choice } */
   votesReceived: { type: Array, default: () => [] },
@@ -179,7 +181,11 @@ const voteTargetDisplay = computed(() => playerIdDisplay({ id: votingTargetNorm.
 
 const voteHintLine = computed(() => `ГОЛОС ПРОТИ ${voteTargetDisplay.value}`)
 
+const nominatorsLineNorm = computed(() => String(props.nominatorsLine ?? '').trim())
+
 const isNominated = computed(() => {
+  if (isEliminated(props.player)) return false
+  if (nominatorsLineNorm.value) return true
   const n = String(props.nominatedPlayerId ?? '').trim()
   return Boolean(n && props.player?.id === n)
 })
@@ -189,6 +195,8 @@ const nominatedByLabel = computed(() => {
   if (!n) return ''
   return playerIdDisplay({ id: n })
 })
+
+const nominatorsUi = computed(() => nominatorsLineNorm.value || nominatedByLabel.value)
 
 const countFor = computed(
   () => (Array.isArray(props.votesReceived) ? props.votesReceived : []).filter((v) => v.choice !== 'against').length,
@@ -409,9 +417,11 @@ async function submitVote(choice) {
       <div class="card-grid-body">
         <div class="card-grid-id-row">
           <p class="card-grid-id">{{ playerIdDisplay(player) }}</p>
-          <span v-if="isNominated" class="nominee-badge">НА ГОЛОСУВАННІ</span>
         </div>
-        <p v-if="isNominated && nominatedByLabel" class="nominee-by">Виставив: {{ nominatedByLabel }}</p>
+        <template v-if="isNominated">
+          <p class="nominee-nom-label">НОМІН.</p>
+          <p v-if="nominatorsUi" class="nominee-nom-who">{{ nominatorsUi }}</p>
+        </template>
         <h2 class="card-grid-name">
           <span v-if="!identityRevealed(player)" class="placeholder">•••</span>
           <span v-else>{{ displayNameLine(player).text }}</span>
@@ -558,12 +568,14 @@ async function submitVote(choice) {
         <div class="hud-tr-top">
           <span class="hud-slot-wrap">
             <span class="hud-slot">{{ playerIdDisplay(player) }}</span>
-            <span v-if="isNominated" class="nominee-badge nominee-badge--hud">НА ГОЛОСУВАННІ</span>
           </span>
           <span v-if="isTimerTarget" class="hud-speak-badge">ГОВОРИШ</span>
         </div>
-        <p v-if="solo && isNominated" class="nominee-solo-kicker">ТИ НА ГОЛОСУВАННІ</p>
-        <p v-if="solo && isNominated && nominatedByLabel" class="nominee-by nominee-by--hud">Виставив: {{ nominatedByLabel }}</p>
+        <template v-if="solo && isNominated">
+          <p class="nominee-solo-kicker">ТИ НА ГОЛОСУВАННІ</p>
+          <p class="nominee-nom-label nominee-nom-label--hud">НОМІН.</p>
+          <p v-if="nominatorsUi" class="nominee-nom-who nominee-nom-who--hud">{{ nominatorsUi }}</p>
+        </template>
         <div v-if="showSpeakerTimer" class="hud-timer-stack">
           <div
             class="hud-ring-wrap"
@@ -1051,6 +1063,35 @@ async function submitVote(choice) {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 
+.nominee-nom-label {
+  margin: 0.1rem 0 0;
+  font-size: clamp(0.42rem, min(1.2vw, 1.3vh), 0.52rem);
+  font-weight: 900;
+  letter-spacing: 0.22em;
+  color: rgba(253, 230, 138, 0.95);
+}
+
+.nominee-nom-who {
+  margin: 0.05rem 0 0.2rem;
+  font-family: Orbitron, sans-serif;
+  font-size: clamp(0.55rem, min(1.5vw, 1.6vh), 0.72rem);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: rgba(254, 243, 199, 0.98);
+}
+
+.nominee-nom-label--hud {
+  text-align: right;
+  margin-left: auto;
+  max-width: 11rem;
+}
+
+.nominee-nom-who--hud {
+  text-align: right;
+  margin-left: auto;
+  max-width: 11rem;
+}
+
 .nominee-by {
   margin: 0.15rem 0 0;
   font-size: clamp(0.48rem, min(1.35vw, 1.45vh), 0.58rem);
@@ -1177,32 +1218,23 @@ async function submitVote(choice) {
   padding: 1.25rem 1rem;
   min-height: 220px;
   box-sizing: border-box;
+  background: #050308;
+  opacity: 1;
 }
 
 .card-elim-screen::before {
   content: '';
   position: absolute;
-  inset: -8%;
+  inset: 0;
   z-index: 0;
-  background: radial-gradient(ellipse at center, #1c0d14 0%, #050308 65%);
-  transform: scale(1);
-  transform-origin: center center;
-  animation: elimCardBgZoom 6s ease-in-out forwards;
+  background: #050308;
+  opacity: 1;
   pointer-events: none;
 }
 
 .card-elim-screen > * {
   position: relative;
   z-index: 1;
-}
-
-@keyframes elimCardBgZoom {
-  from {
-    transform: scale(1);
-  }
-  to {
-    transform: scale(1.05);
-  }
 }
 
 .card-elim-screen--cut {
@@ -1235,8 +1267,8 @@ async function submitVote(choice) {
     opacity: 1;
   }
   100% {
-    filter: brightness(0.96);
-    opacity: 0.98;
+    filter: brightness(1);
+    opacity: 1;
   }
 }
 
