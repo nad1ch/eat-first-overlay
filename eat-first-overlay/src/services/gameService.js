@@ -133,7 +133,64 @@ export async function resetGameRoomControls(gameId) {
       timerPaused: false,
       timerRemainingFrozen: deleteField(),
       gamePhase: 'intro',
+      nominatedPlayer: deleteField(),
+      hands: deleteField(),
+      voting: deleteField(),
       key: ADMIN_KEY,
+    },
+    { merge: true },
+  )
+}
+
+/** Номінація: кого «судять» на оверлеї (легка червона рамка). */
+export async function setNominatedPlayer(gameId, playerId) {
+  const p = String(playerId ?? '').trim()
+  await saveGameRoom(gameId, { nominatedPlayer: p })
+}
+
+/** Голосування на кімнаті: { active, targetPlayer }. */
+export async function setRoomVoting(gameId, active, targetPlayer) {
+  const tp = String(targetPlayer ?? '').trim()
+  await saveGameRoom(gameId, {
+    voting: {
+      active: Boolean(active),
+      targetPlayer: tp,
+    },
+  })
+}
+
+/**
+ * Піднята рука гравця: games/{gameId}.hands.{playerId}
+ * @param {boolean} raised
+ */
+export async function setGameHandRaised(gameId, playerId, raised) {
+  const pid = String(playerId ?? '').trim()
+  if (!pid) return
+  await setDoc(
+    gameDocRef(gameId),
+    {
+      [`hands.${pid}`]: Boolean(raised),
+      key: ADMIN_KEY,
+    },
+    { merge: true },
+  )
+}
+
+/**
+ * Голос з персонального оверлею: games/{gameId}/votes/{voterPlayerId}
+ * @param {'for' | 'against'} choice
+ */
+export async function saveVote(gameId, voterPlayerId, targetPlayer, choice) {
+  const voter = String(voterPlayerId ?? '').trim()
+  const target = String(targetPlayer ?? '').trim()
+  if (!voter || !target) return
+  const c = choice === 'against' ? 'against' : 'for'
+  await setDoc(
+    doc(db, 'games', gameId, 'votes', voter),
+    {
+      choice: c,
+      targetPlayer: target,
+      at: Timestamp.now(),
     },
     { merge: true },
   )

@@ -35,6 +35,9 @@ import {
   resetGameRoomControls,
   setGamePhase,
   regenerateAllPlayersRandom,
+  setNominatedPlayer,
+  setRoomVoting,
+  setGameHandRaised,
 } from '../services/gameService'
 import { millisFromFirestore } from '../utils/firestoreTime.js'
 import ShowDeskHeader from '../components/showdesk/ShowDeskHeader.vue'
@@ -362,6 +365,96 @@ async function setRoomSpeaker(slot) {
   }
 }
 
+function eliminatedBySlot() {
+  const m = Object.create(null)
+  for (const p of allPlayers.value) {
+    m[String(p.id)] = p.eliminated === true
+  }
+  return m
+}
+
+/** Наступний живий у порядку p1…p10 + старт таймера 30s */
+const myHandRaised = computed(() => gameRoom.value?.hands?.[playerId.value] === true)
+
+async function toggleMyHand() {
+  try {
+    loadError.value = null
+    const next = !myHandRaised.value
+    await setGameHandRaised(gameId.value, playerId.value, next)
+    showToast(next ? '✋ Руку піднято' : 'Руку опущено')
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function hostNominate(slot) {
+  if (!isAdmin.value) return
+  const s = String(slot ?? '').trim()
+  try {
+    loadError.value = null
+    const cur = String(gameRoom.value?.nominatedPlayer ?? '').trim()
+    const next = s === '' || cur === s ? '' : s
+    await setNominatedPlayer(gameId.value, next)
+    showToast(next ? `Номінація: ${next}` : 'Номінацію знято')
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function hostVotingTarget(slot) {
+  if (!isAdmin.value) return
+  const s = String(slot ?? '').trim()
+  if (!s) return
+  try {
+    loadError.value = null
+    const active = Boolean(gameRoom.value?.voting?.active)
+    await setRoomVoting(gameId.value, active, s)
+    showToast(`Голосування → ${s}`)
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function hostVotingToggle() {
+  if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    const v = gameRoom.value?.voting
+    const curActive = Boolean(v?.active)
+    const tp = String(v?.targetPlayer ?? '').trim() || 'p1'
+    await setRoomVoting(gameId.value, !curActive, !curActive ? tp : '')
+    showToast(!curActive ? 'Голосування увімкнено' : 'Голосування вимкнено')
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function adminNextSpeaker() {
+  if (!isAdmin.value) return
+  const elim = eliminatedBySlot()
+  const slots = PLAYER_SLOTS
+  const cur = String(gameRoom.value?.currentSpeaker ?? '').trim()
+  let from = 0
+  if (cur && slots.includes(cur)) from = slots.indexOf(cur) + 1
+
+  for (let step = 0; step < slots.length; step++) {
+    const slot = slots[(from + step) % slots.length]
+    if (elim[slot] !== true) {
+      try {
+        loadError.value = null
+        speakingDuration.value = 30
+        timerSpeakerSlot.value = slot
+        await startSpeakingTimer(gameId.value, slot, 30)
+        showToast(`Next: ${slot} · 30s`)
+      } catch (e) {
+        loadError.value = e instanceof Error ? e.message : String(e)
+      }
+      return
+    }
+  }
+  showToast('Немає активних гравців')
+}
+
 function rerollSingleTrait(fieldKey) {
   if (!isAdmin.value) return
   characterState[fieldKey].value = rollFieldValue(fieldKey, scenarioForRolls.value)
@@ -614,9 +707,13 @@ function rerollActiveCardOnly() {
             @pause-timer="adminPauseTimerOnly"
             @resume-timer="adminResumeTimer"
             @clear-timer="adminClearTimer"
-            @spotlight="setSpotlightPlayer"
-            @spotlight-clear="setSpotlightPlayer('')"
-          />
+        @spotlight="setSpotlightPlayer"
+        @spotlight-clear="setSpotlightPlayer('')"
+        @next-speaker="adminNextSpeaker"
+            @nominate="hostNominate"
+            @voting-target="hostVotingTarget"
+            @voting-toggle="hostVotingToggle"
+      />
         </div>
         <ShowDeskHeader
           class="admin-zone__header"
@@ -659,6 +756,9 @@ function rerollActiveCardOnly() {
     <div v-else class="player-hero">
       <h1 class="player-title">{{ GAME_TITLE }}</h1>
       <p class="player-phase">Фаза: {{ String(gameRoom.gamePhase || 'intro') }}</p>
+      <button type="button" class="btn-hand" :class="{ up: myHandRaised }" @click="toggleMyHand">
+        {{ myHandRaised ? '✋ Опустити руку' : '✋ Підняти руку' }}
+      </button>
     </div>
 
     <p v-if="loadError" class="error">{{ loadError }}</p>
@@ -995,6 +1095,32 @@ function rerollActiveCardOnly() {
   margin: 0.5rem 0 0;
   font-size: 0.8rem;
   color: rgba(196, 181, 253, 0.55);
+}
+
+.btn-hand {
+  margin-top: 1rem;
+  padding: 0.55rem 1rem;
+  border-radius: 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: rgba(60, 40, 8, 0.4);
+  color: #fef3c7;
+  transition:
+    transform 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.btn-hand:hover {
+  transform: scale(1.03);
+  border-color: rgba(251, 191, 36, 0.55);
+}
+
+.btn-hand.up {
+  border-color: rgba(74, 222, 128, 0.45);
+  background: rgba(22, 101, 52, 0.35);
+  color: #bbf7d0;
 }
 
 .side-tools {

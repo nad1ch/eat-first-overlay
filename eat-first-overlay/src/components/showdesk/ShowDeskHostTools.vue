@@ -19,6 +19,10 @@ const emit = defineEmits([
   'clear-timer',
   'spotlight',
   'spotlight-clear',
+  'next-speaker',
+  'nominate',
+  'voting-target',
+  'voting-toggle',
 ])
 
 function slotNum(slot) {
@@ -45,7 +49,7 @@ function slotNum(slot) {
 
       <div class="cc-block">
         <span class="cc-lab">🎤 Speaker</span>
-        <div class="cc-chips">
+        <div class="cc-chips cc-chips--speaker">
           <button
             v-for="slot in playerSlots"
             :key="'spk-' + slot"
@@ -55,6 +59,9 @@ function slotNum(slot) {
             @click="emit('set-speaker', slot)"
           >
             {{ slotNum(slot) }}
+          </button>
+          <button type="button" class="cc-btn cc-btn--next" title="Наступний живий гравець + таймер 30s" @click="emit('next-speaker')">
+            Next ▶
           </button>
         </div>
       </div>
@@ -119,6 +126,51 @@ function slotNum(slot) {
           </button>
         </div>
       </div>
+
+      <div class="cc-block cc-block--nominate">
+        <span class="cc-lab">Номінація</span>
+        <p class="cc-mini">Червона рамка на оверлеї · кого «судять»</p>
+        <div class="cc-chips">
+          <button
+            v-for="slot in playerSlots"
+            :key="'nom-' + slot"
+            type="button"
+            class="chip chip--red"
+            :class="{ on: String(gameRoom.nominatedPlayer || '').trim() === slot }"
+            @click="emit('nominate', slot)"
+          >
+            {{ slotNum(slot) }}
+          </button>
+          <button type="button" class="cc-btn cc-btn--ghost cc-btn--xs" @click="emit('nominate', '')">×</button>
+        </div>
+      </div>
+
+      <div class="cc-block cc-block--voting">
+        <span class="cc-lab">Голосування</span>
+        <p class="cc-mini">
+          Ціль:
+          <strong>{{ String(gameRoom.voting?.targetPlayer || '').trim() || '—' }}</strong>
+          ·
+          {{ gameRoom.voting?.active ? 'активне' : 'вимкнено' }}
+        </p>
+        <div class="cc-chips">
+          <button
+            v-for="slot in playerSlots"
+            :key="'vt-' + slot"
+            type="button"
+            class="chip chip--vote"
+            :class="{ on: String(gameRoom.voting?.targetPlayer || '').trim() === slot }"
+            @click="emit('voting-target', slot)"
+          >
+            {{ slotNum(slot) }}
+          </button>
+        </div>
+        <div class="cc-btns cc-btns--tight">
+          <button type="button" class="cc-btn cc-btn--vote-on" @click="emit('voting-toggle')">
+            {{ gameRoom.voting?.active ? 'Вимкнути голосування' : 'Увімкнути голосування' }}
+          </button>
+        </div>
+      </div>
     </div>
   </section>
 </template>
@@ -174,6 +226,46 @@ function slotNum(slot) {
 
 .cc-block--phase {
   grid-column: 1 / -1;
+}
+
+.cc-block--nominate,
+.cc-block--voting {
+  grid-column: 1 / -1;
+}
+
+.cc-mini {
+  margin: 0 0 0.4rem;
+  font-size: 0.65rem;
+  line-height: 1.4;
+  color: rgba(186, 181, 200, 0.78);
+}
+
+.cc-mini strong {
+  color: #e2e8f0;
+  font-weight: 600;
+}
+
+.cc-btns--tight {
+  margin-top: 0.45rem;
+}
+
+.chip--red.on {
+  border-color: rgba(248, 113, 113, 0.55);
+  background: rgba(127, 29, 29, 0.45);
+  box-shadow: 0 0 12px rgba(220, 38, 38, 0.25);
+  color: #fecaca;
+}
+
+.chip--vote.on {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(12, 74, 110, 0.4);
+  color: #e0f2fe;
+}
+
+.cc-btn--vote-on {
+  background: rgba(30, 58, 138, 0.45);
+  border-color: rgba(96, 165, 250, 0.45);
+  color: #dbeafe;
 }
 
 .cc-lab {
@@ -254,6 +346,27 @@ function slotNum(slot) {
   display: flex;
   flex-wrap: wrap;
   gap: 0.3rem;
+}
+
+.cc-chips--speaker {
+  align-items: center;
+}
+
+.cc-btn--next {
+  padding: 0.3rem 0.55rem;
+  border-radius: 10px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  border: 1px solid rgba(74, 222, 128, 0.45);
+  background: rgba(22, 101, 52, 0.35);
+  color: #bbf7d0;
+  transition: transform 0.12s ease;
+}
+
+.cc-btn--next:hover {
+  transform: scale(1.04);
 }
 
 .chip {

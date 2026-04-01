@@ -107,23 +107,27 @@ const globalOverlayUrl = computed(() => {
       </div>
     </div>
 
-    <div class="cta-grid">
-      <button type="button" class="cta cta--obs" @click="goGlobalOverlay">
-        <span class="cta-ico">🌐</span>
-        <span class="cta-t">Глобальний оверлей</span>
-        <span class="cta-d">Сітка всіх гравців у одному джерелі браузера</span>
-      </button>
-      <button type="button" class="cta cta--play" @click="goPlayerControl">
-        <span class="cta-ico">🎮</span>
-        <span class="cta-t">Увійти в гру</span>
-        <span class="cta-d">Панель гравця · картки та активна карта</span>
-      </button>
-      <button type="button" class="cta cta--host" @click="goAdmin">
-        <span class="cta-ico">🎛️</span>
-        <span class="cta-t">Admin / ведучий</span>
-        <span class="cta-d">Пульт шоу (потрібен ключ доступу)</span>
-      </button>
-    </div>
+    <section class="roles" aria-labelledby="roles-title">
+      <h2 id="roles-title" class="roles-title">Хто ти зараз?</h2>
+      <p class="roles-hint">Три входи — без зайвого тексту в ефірі.</p>
+      <div class="cta-grid">
+        <button type="button" class="cta cta--play" @click="goPlayerControl">
+          <span class="cta-ico" aria-hidden="true">🎤</span>
+          <span class="cta-t">Я гравець</span>
+          <span class="cta-d">Панель слоту · карти · активна карта</span>
+        </button>
+        <button type="button" class="cta cta--host" @click="goAdmin">
+          <span class="cta-ico" aria-hidden="true">🎮</span>
+          <span class="cta-t">Я ведучий</span>
+          <span class="cta-d">Пульт шоу · таймер · фази (ключ доступу)</span>
+        </button>
+        <button type="button" class="cta cta--obs" @click="goGlobalOverlay">
+          <span class="cta-ico" aria-hidden="true">🎥</span>
+          <span class="cta-t">OBS · оверлей</span>
+          <span class="cta-d">Глобальна сітка або джерело для сцени</span>
+        </button>
+      </div>
+    </section>
 
     <section class="obs-hint" aria-labelledby="obs-hint-title">
       <h2 id="obs-hint-title" class="obs-hint__title">OBS · швидкий старт</h2>
@@ -186,10 +190,33 @@ const globalOverlayUrl = computed(() => {
 
 .join-hero,
 .game-bar,
-.cta-grid,
+.roles,
 .cards-wrap {
   position: relative;
   z-index: 1;
+}
+
+.roles {
+  margin-bottom: 1.75rem;
+}
+
+.roles-title {
+  margin: 0 0 0.35rem;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-family: Orbitron, sans-serif;
+  color: rgba(196, 181, 253, 0.55);
+}
+
+.roles-hint {
+  margin: 0 0 1rem;
+  text-align: center;
+  font-size: 0.78rem;
+  color: rgba(186, 181, 200, 0.72);
+  line-height: 1.4;
 }
 
 .join-hero {
@@ -228,9 +255,9 @@ const globalOverlayUrl = computed(() => {
   margin-bottom: 1.5rem;
   padding: 1rem 1.15rem;
   border-radius: 16px;
-  background: rgba(10, 8, 22, 0.82);
-  border: 1px solid rgba(168, 85, 247, 0.2);
-  backdrop-filter: blur(10px);
+  background: rgba(10, 8, 22, 0.94);
+  border: 1px solid rgba(168, 85, 247, 0.24);
+  box-shadow: 0 0 24px rgba(168, 85, 247, 0.06);
 }
 
 .lbl {
@@ -276,7 +303,6 @@ const globalOverlayUrl = computed(() => {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(15.5rem, 1fr));
   gap: 0.75rem;
-  margin-bottom: 1.75rem;
 }
 
 .obs-hint {
@@ -286,8 +312,8 @@ const globalOverlayUrl = computed(() => {
   padding: 1.1rem 1.2rem 1.2rem;
   border-radius: 16px;
   border: 1px solid rgba(56, 189, 248, 0.22);
-  background: rgba(8, 12, 28, 0.72);
-  backdrop-filter: blur(10px);
+  background: rgba(8, 12, 28, 0.9);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.06);
 }
 
 .obs-hint__title {

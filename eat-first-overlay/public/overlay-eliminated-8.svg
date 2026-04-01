@@ -2,5 +2,5 @@
   <rect width="400" height="280" fill="#050308"/>
   <path d="M200 88 L200 168" stroke="#a855f7" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
   <path d="M168 200 Q200 176 232 200" fill="none" stroke="#a855f7" stroke-width="2" opacity="0.5"/>
-  <text x="200" y="132" text-anchor="middle" fill="#a855f7" font-family="system-ui,sans-serif" font-size="14" font-weight="700" letter-spacing="0.1em"> "/#</text>
+  <text x="200" y="132" text-anchor="middle" fill="#a855f7" font-family="system-ui,sans-serif" font-size="14" font-weight="700" letter-spacing="0.1em">НЕ ДОТЯГНУВ</text>
 </svg>

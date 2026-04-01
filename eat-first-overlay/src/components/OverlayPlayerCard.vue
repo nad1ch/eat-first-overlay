@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { fieldConfig } from '../characterState'
+import { saveVote } from '../services/gameService'
 
 const HUD_LEFT = ['profession', 'health', 'phobia']
 const HUD_RIGHT = ['luggage', 'fact', 'quirk']
@@ -18,6 +19,14 @@ const props = defineProps({
   speakerTimeLeft: { type: Number, default: undefined },
   speakerTimerTotal: { type: Number, default: 30 },
   drama: { type: Boolean, default: false },
+  /** Голосування з gameRoom.voting */
+  votingActive: { type: Boolean, default: false },
+  votingTargetId: { type: String, default: '' },
+  /** Тільки персональний оверлей: кнопки голосу активні */
+  voteInteractive: { type: Boolean, default: false },
+  gameId: { type: String, default: '' },
+  nominatedPlayerId: { type: String, default: '' },
+  handRaised: { type: Boolean, default: false },
 })
 
 const labelByKey = computed(() =>
@@ -147,6 +156,34 @@ const showActiveCardChip = computed(() => {
   if (ac.used) return false
   return Boolean(ac.title || ac.description)
 })
+
+const votingTargetNorm = computed(() => String(props.votingTargetId ?? '').trim())
+const votingShown = computed(
+  () => props.votingActive && votingTargetNorm.value.length > 0 && !isEliminated(props.player),
+)
+
+const isNominated = computed(() => {
+  const n = String(props.nominatedPlayerId ?? '').trim()
+  return Boolean(n && props.player?.id === n)
+})
+
+const voteBusy = ref(false)
+
+async function submitVote(choice) {
+  if (!props.voteInteractive || voteBusy.value) return
+  const gid = String(props.gameId ?? '').trim()
+  const voter = String(props.player?.id ?? '').trim()
+  const target = votingTargetNorm.value
+  if (!gid || !voter || !target) return
+  voteBusy.value = true
+  try {
+    await saveVote(gid, voter, target, choice)
+  } catch (e) {
+    console.error('[saveVote]', e)
+  } finally {
+    voteBusy.value = false
+  }
+}
 </script>
 
 <template>
@@ -160,6 +197,7 @@ const showActiveCardChip = computed(() => {
       'card-grid--cinema': cinema,
       'card-grid--dimmed': dimmed && !isEliminated(player),
       'card-grid--speaker': isTimerTarget && !isEliminated(player),
+      'card-grid--nominated': isNominated && !isEliminated(player),
     }"
   >
     <div v-if="isEliminated(player)" class="card-elim-screen card-elim-screen--cut">
@@ -170,6 +208,9 @@ const showActiveCardChip = computed(() => {
     </div>
 
     <template v-else>
+      <span v-if="handRaised" class="hand-badge hand-badge--grid" aria-hidden="true" title="Піднята рука"
+        >✋</span
+      >
       <div v-if="showSpeakerTimer" class="card-grid-timer" aria-hidden="true">
         <p v-if="isTimerTarget" class="card-speak-badge">ГОВОРИШ</p>
         <div class="timer-ring-wrap" :class="{ 'timer-ring-wrap--urgent': timerUrgent }">
@@ -210,6 +251,31 @@ const showActiveCardChip = computed(() => {
           </li>
         </ul>
       </div>
+      <div v-if="votingShown" class="vote-strip vote-strip--grid" aria-label="Голосування">
+        <p class="vote-strip__title">ГОЛОСУВАННЯ</p>
+        <div class="vote-strip__row">
+          <button
+            v-if="voteInteractive"
+            type="button"
+            class="vote-btn"
+            :disabled="voteBusy"
+            @click="submitVote('for')"
+          >
+            👍 <span class="vote-btn__lbl">за</span>
+          </button>
+          <span v-else class="vote-fake">👍</span>
+          <button
+            v-if="voteInteractive"
+            type="button"
+            class="vote-btn"
+            :disabled="voteBusy"
+            @click="submitVote('against')"
+          >
+            👎 <span class="vote-btn__lbl">проти</span>
+          </button>
+          <span v-else class="vote-fake">👎</span>
+        </div>
+      </div>
     </template>
   </article>
 
@@ -222,6 +288,7 @@ const showActiveCardChip = computed(() => {
       'hud-root--speaker': isTimerTarget && !isEliminated(player),
       'hud-root--cinema': cinema,
       'hud-root--drama': drama,
+      'hud-root--nominated': isNominated && !isEliminated(player),
     }"
   >
     <div v-if="isEliminated(player)" class="elim-solo-screen elim-solo-screen--cut">
@@ -236,6 +303,7 @@ const showActiveCardChip = computed(() => {
     </div>
 
     <template v-else>
+      <span v-if="handRaised" class="hand-badge hand-badge--solo" aria-hidden="true" title="Піднята рука">✋</span>
       <div
         v-if="solo && showActiveCardChip"
         class="ac-chip"
@@ -314,6 +382,37 @@ const showActiveCardChip = computed(() => {
         </div>
       </div>
     </div>
+
+      <div
+        v-if="votingShown"
+        class="vote-strip vote-strip--solo"
+        :class="{ 'vote-strip--interactive': voteInteractive }"
+        aria-label="Голосування"
+      >
+        <p class="vote-strip__title">ГОЛОСУВАННЯ</p>
+        <div class="vote-strip__row">
+          <button
+            v-if="voteInteractive"
+            type="button"
+            class="vote-btn"
+            :disabled="voteBusy"
+            @click="submitVote('for')"
+          >
+            👍 <span class="vote-btn__lbl">за</span>
+          </button>
+          <span v-else class="vote-fake">👍</span>
+          <button
+            v-if="voteInteractive"
+            type="button"
+            class="vote-btn"
+            :disabled="voteBusy"
+            @click="submitVote('against')"
+          >
+            👎 <span class="vote-btn__lbl">проти</span>
+          </button>
+          <span v-else class="vote-fake">👎</span>
+        </div>
+      </div>
     </template>
   </div>
 </template>
@@ -355,21 +454,16 @@ const showActiveCardChip = computed(() => {
 
 /* Spotlight: окремо від спікера — статична фіолетова рамка + м’яке світіння */
 .card-grid--spotlight:not(.card-grid--speaker) {
-  transform: scale(1.01);
-  border-color: rgba(168, 85, 247, 0.55);
+  transform: scale(1.008);
+  border-color: rgba(168, 85, 247, 0.5);
   box-shadow:
-    0 0 0 1px rgba(168, 85, 247, 0.45),
-    0 0 24px rgba(168, 85, 247, 0.22);
+    0 0 0 1px rgba(168, 85, 247, 0.35),
+    0 4px 16px rgba(168, 85, 247, 0.12);
 }
 
-.card-grid--spotlight:not(.card-grid--speaker)::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 14px;
-  pointer-events: none;
-  z-index: 1;
-  box-shadow: inset 0 0 0 1px rgba(168, 85, 247, 0.35);
+.card-grid--nominated:not(.card-grid--eliminated) {
+  border: 1px solid rgba(220, 38, 38, 0.5);
+  box-shadow: 0 0 18px rgba(220, 38, 38, 0.25);
 }
 
 .card-grid--dimmed {
@@ -380,33 +474,15 @@ const showActiveCardChip = computed(() => {
     filter 0.45s ease;
 }
 
-/* Спікер у глобальній сітці — помітніший, без агресивного scale */
-.card-grid--speaker {
+/* Спікер: лише легка рамка — центр кадру не зафарбовуємо */
+.card-grid--speaker:not(.card-grid--eliminated) {
   opacity: 1;
   filter: none;
   z-index: 2;
-  transform: scale(1.025);
-  box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.35),
-    0 0 20px rgba(168, 85, 247, 0.38),
-    0 0 36px rgba(168, 85, 247, 0.2);
-  animation: speakerCardGlow 2.5s ease-in-out infinite;
-}
-
-@keyframes speakerCardGlow {
-  0%,
-  100% {
-    box-shadow:
-      0 8px 24px rgba(0, 0, 0, 0.35),
-      0 0 18px rgba(168, 85, 247, 0.32),
-      0 0 32px rgba(168, 85, 247, 0.16);
-  }
-  50% {
-    box-shadow:
-      0 8px 24px rgba(0, 0, 0, 0.35),
-      0 0 26px rgba(168, 85, 247, 0.48),
-      0 0 40px rgba(168, 85, 247, 0.24);
-  }
+  transform: none;
+  outline: 1px solid rgba(168, 85, 247, 0.28);
+  outline-offset: -1px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
 }
 
 .card-speak-badge {
@@ -472,6 +548,11 @@ const showActiveCardChip = computed(() => {
   mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 3px));
 }
 
+.card-grid--speaker:not(.card-grid--eliminated) .timer-ring-wrap:not(.timer-ring-wrap--urgent) .timer-ring {
+  animation: speakerRingPulse 1.6s ease-in-out infinite;
+  transform-origin: center;
+}
+
 .timer-num {
   position: relative;
   z-index: 1;
@@ -486,6 +567,131 @@ const showActiveCardChip = computed(() => {
   position: relative;
   z-index: 2;
   padding: var(--cg-pad-y) var(--cg-pad-x);
+}
+
+.hand-badge {
+  display: inline-grid;
+  place-items: center;
+  font-size: clamp(0.85rem, min(2.4vw, 2.6vh), 1.05rem);
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
+.hand-badge--grid {
+  position: absolute;
+  top: 0.4rem;
+  left: 0.4rem;
+  z-index: 5;
+  padding: 0.15rem 0.28rem;
+  border-radius: 8px;
+  background: rgba(8, 6, 18, 0.88);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.hand-badge--solo {
+  position: fixed;
+  top: max(0.55rem, env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(8, 6, 18, 0.9);
+  border: 1px solid rgba(251, 191, 36, 0.38);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.vote-strip {
+  pointer-events: none;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.vote-strip--grid {
+  position: relative;
+  z-index: 3;
+  margin-top: 0.35rem;
+  padding: 0.35rem 0.45rem 0.45rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+}
+
+.vote-strip--solo {
+  position: fixed;
+  left: 50%;
+  bottom: max(0.65rem, env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 12;
+  padding: 0.35rem 0.65rem 0.5rem;
+  min-width: min(92vw, 16rem);
+  background: transparent;
+}
+
+.vote-strip--interactive {
+  pointer-events: auto;
+}
+
+.vote-strip__title {
+  margin: 0 0 0.28rem;
+  font-family: Orbitron, sans-serif;
+  font-size: clamp(0.52rem, min(1.5vw, 1.65vh), 0.62rem);
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  color: rgba(226, 232, 240, 0.88);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
+}
+
+.vote-strip__row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+}
+
+.vote-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 12px;
+  font-size: clamp(0.78rem, min(2.2vw, 2.4vh), 0.95rem);
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(12, 8, 24, 0.82);
+  color: #f1f5f9;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+.vote-btn:hover:not(:disabled) {
+  transform: scale(1.04);
+  border-color: rgba(168, 85, 247, 0.45);
+}
+
+.vote-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.vote-btn__lbl {
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.vote-fake {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.3rem 0.5rem;
+  font-size: clamp(0.85rem, min(2.4vw, 2.6vh), 1rem);
+  opacity: 0.75;
+  filter: grayscale(0.2);
 }
 
 .card-grid--eliminated {
@@ -509,7 +715,9 @@ const showActiveCardChip = computed(() => {
 }
 
 .card-elim-screen--cut {
-  animation: deathCutCard 0.48s ease-out both;
+  animation:
+    deathCutCard 0.48s ease-out both,
+    deathFadeFinal 0.85s ease-out 0.45s both;
 }
 
 @keyframes deathCutCard {
@@ -527,6 +735,17 @@ const showActiveCardChip = computed(() => {
     transform: scale(1);
     filter: brightness(1);
     opacity: 1;
+  }
+}
+
+@keyframes deathFadeFinal {
+  0% {
+    filter: brightness(1);
+    opacity: 1;
+  }
+  100% {
+    filter: brightness(0.96);
+    opacity: 0.98;
   }
 }
 
@@ -631,6 +850,8 @@ const showActiveCardChip = computed(() => {
 }
 
 .stat-cell--open {
+  position: relative;
+  overflow: hidden;
   color: #f1f5f9;
   border-color: rgba(168, 85, 247, 0.28);
   text-align: right;
@@ -646,6 +867,35 @@ const showActiveCardChip = computed(() => {
 
 .stat-cell.value--revealed {
   animation: revealWave 0.55s ease-out, revealFlash 0.5s ease;
+}
+
+.stat-cell.value--revealed::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    120deg,
+    transparent 0%,
+    rgba(168, 85, 247, 0.28) 45%,
+    transparent 90%
+  );
+  background-size: 220% 100%;
+  background-position: -100% 0;
+  animation: revealSheen 0.65s ease-out forwards;
+}
+
+@keyframes revealSheen {
+  0% {
+    background-position: -100% 0;
+    opacity: 1;
+  }
+  100% {
+    background-position: 200% 0;
+    opacity: 0;
+  }
 }
 
 @keyframes revealFlash {
@@ -751,46 +1001,29 @@ const showActiveCardChip = computed(() => {
   border-color: rgba(168, 85, 247, 0.26);
 }
 
-/* Легкий «дихаючий» фокус для спікера + слабкий центральний градієнт */
-.hud-root--solo.hud-root--speaker:not(.hud-root--eliminated) {
-  animation: speakerBreath 2.5s ease-in-out infinite;
-  transform-origin: center center;
+/* Спікер: тільки легкий outline по краю кадру — без градієнта в центрі */
+.hud-root--solo.hud-root--speaker:not(.hud-root--eliminated):not(.hud-root--nominated) {
+  outline: 1px solid rgba(168, 85, 247, 0.25);
+  outline-offset: 2px;
 }
 
-@keyframes speakerBreath {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.015);
-  }
-}
-
-.hud-root--solo.hud-root--speaker:not(.hud-root--eliminated)::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  background: radial-gradient(circle at center, rgba(168, 85, 247, 0.07), transparent 60%);
-}
-
-.hud-root--solo.hud-root--speaker:not(.hud-root--eliminated)::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  background: radial-gradient(circle at center, rgba(168, 85, 247, 0.12), transparent 70%);
-}
-
-.hud-root--solo.hud-root--speaker:not(.hud-root--eliminated) .hud-block {
+.hud-root--solo.hud-root--speaker:not(.hud-root--eliminated):not(.hud-root--nominated) .hud-block {
   box-shadow:
     0 2px 14px rgba(0, 0, 0, 0.28),
-    0 0 0 1px rgba(168, 85, 247, 0.28),
-    0 0 12px rgba(168, 85, 247, 0.22),
-    0 0 28px rgba(168, 85, 247, 0.12);
+    0 0 0 1px rgba(168, 85, 247, 0.22),
+    0 0 14px rgba(168, 85, 247, 0.1);
+}
+
+.hud-root--solo.hud-root--nominated:not(.hud-root--eliminated) {
+  outline: 1px solid rgba(220, 38, 38, 0.45);
+  outline-offset: 2px;
+}
+
+.hud-root--solo.hud-root--nominated:not(.hud-root--eliminated) .hud-block {
+  border-color: rgba(220, 38, 38, 0.35);
+  box-shadow:
+    0 2px 14px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(220, 38, 38, 0.12);
 }
 
 .hud-tr-top {
@@ -806,12 +1039,11 @@ const showActiveCardChip = computed(() => {
   font-size: clamp(0.52rem, min(1.55vw, 1.75vh), 0.65rem);
   font-weight: 800;
   letter-spacing: 0.12em;
-  color: rgba(250, 245, 255, 0.9);
-  background: rgba(168, 85, 247, 0.2);
-  border: 1px solid rgba(168, 85, 247, 0.32);
+  color: rgba(250, 245, 255, 0.92);
+  background: rgba(24, 12, 40, 0.92);
+  border: 1px solid rgba(168, 85, 247, 0.4);
   line-height: 1;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 0 14px rgba(168, 85, 247, 0.2);
 }
 
 .hud-ring-wrap--urgent,
@@ -837,6 +1069,40 @@ const showActiveCardChip = computed(() => {
   animation: revealWave 0.55s ease-out, revealFlash 0.5s ease;
 }
 
+.hud-stat-inner.value--revealed::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    120deg,
+    transparent 0%,
+    rgba(168, 85, 247, 0.28) 45%,
+    transparent 90%
+  );
+  background-size: 220% 100%;
+  animation: revealSheen 0.65s ease-out forwards;
+}
+
+.hud-root--solo.hud-root--speaker:not(.hud-root--eliminated)
+  .hud-ring-wrap:not(.hud-ring-wrap--urgent):not(.timer--danger)
+  .hud-ring {
+  animation: speakerRingPulse 1.6s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@keyframes speakerRingPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+}
+
 .elim-solo-screen {
   position: absolute;
   inset: 0;
@@ -851,7 +1117,9 @@ const showActiveCardChip = computed(() => {
 }
 
 .elim-solo-screen--cut {
-  animation: deathCutSolo 0.48s ease-out both;
+  animation:
+    deathCutSolo 0.48s ease-out both,
+    deathFadeFinal 0.85s ease-out 0.45s both;
 }
 
 @keyframes deathCutSolo {
@@ -972,12 +1240,32 @@ const showActiveCardChip = computed(() => {
   align-items: center;
   gap: clamp(0.35rem, 1.5vmin, 0.55rem);
   border-radius: 999px;
-  background: rgba(10, 6, 22, 0.94);
-  border: 1px solid rgba(168, 85, 247, 0.38);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.32);
+  background: rgba(10, 6, 22, 0.98);
+  border: 1px solid rgba(168, 85, 247, 0.42);
+  box-shadow:
+    0 3px 12px rgba(0, 0, 0, 0.32),
+    0 0 18px rgba(168, 85, 247, 0.14);
   transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.ac-chip:not(.ac-chip--used) {
+  animation: cardHintPulse 3s ease-in-out infinite;
+}
+
+@keyframes cardHintPulse {
+  0%,
+  100% {
+    opacity: 0.88;
+    box-shadow:
+      0 3px 12px rgba(0, 0, 0, 0.32),
+      0 0 14px rgba(168, 85, 247, 0.1);
+  }
+  50% {
+    opacity: 1;
+    box-shadow:
+      0 3px 12px rgba(0, 0, 0, 0.32),
+      0 0 22px rgba(168, 85, 247, 0.22);
+  }
 }
 
 .ac-chip--used {
@@ -1010,11 +1298,11 @@ const showActiveCardChip = computed(() => {
 
 .hud-block {
   position: absolute;
-  background: rgba(6, 4, 16, 0.96);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(168, 85, 247, 0.32);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.38);
+  background: rgba(8, 5, 20, 0.98);
+  border: 1px solid rgba(168, 85, 247, 0.34);
+  box-shadow:
+    0 4px 18px rgba(0, 0, 0, 0.38),
+    0 0 0 1px rgba(168, 85, 247, 0.06);
   transition:
     border-color 0.35s ease,
     box-shadow 0.35s ease;
@@ -1183,6 +1471,8 @@ const showActiveCardChip = computed(() => {
 }
 
 .hud-stat-inner--open {
+  position: relative;
+  overflow: hidden;
   color: #f1f5f9;
   border-color: rgba(168, 85, 247, 0.3);
 }

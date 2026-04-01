@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 280" width="400" height="280">
   <rect width="400" height="280" fill="#050308"/>
   <path d="M200 56 L232 112 L296 120 L248 168 L260 232 L200 200 L140 232 L152 168 L104 120 L168 112 Z" fill="none" stroke="#a855f7" stroke-width="1.5" opacity="0.55"/>
-  <text x="200" y="248" text-anchor="middle" fill="#a855f7" font-family="system-ui,sans-serif" font-size="10" font-weight="700" letter-spacing="0.14em">" # !</text>
+  <text x="200" y="248" text-anchor="middle" fill="#a855f7" font-family="system-ui,sans-serif" font-size="10" font-weight="700" letter-spacing="0.14em">ТИ БУВ СЛАБКИМ</text>
 </svg>

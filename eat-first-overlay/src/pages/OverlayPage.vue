@@ -176,7 +176,10 @@ const dramaMode = computed(() => {
 /** Персональний оверлей: та сама «напруга», коли в грі лишилось 3. */
 const dramaPersonal = computed(() => isPersonal.value && aliveForCinema.value === 3)
 
-const overlayDrama = computed(() => dramaMode.value || dramaPersonal.value)
+/** Тільки глобальна сітка: на персональному оверлеї без vignette/фільтра по центру вебки */
+const overlayDrama = computed(() => dramaMode.value)
+
+const overlayPaused = computed(() => gameRoom.value?.timerPaused === true)
 
 /** У глобальній сітці затемнюємо картки, поки обраний спікер (фокус на тому, хто говорить). */
 const gridDimNonSpeakers = computed(
@@ -199,6 +202,19 @@ function cardTimerProps(p) {
   }
 }
 
+const votingActive = computed(() => gameRoom.value?.voting?.active === true)
+const votingTargetId = computed(() => String(gameRoom.value?.voting?.targetPlayer ?? '').trim())
+const nominatedPlayerId = computed(() => String(gameRoom.value?.nominatedPlayer ?? '').trim())
+
+function handsMap() {
+  const h = gameRoom.value?.hands
+  return h && typeof h === 'object' ? h : {}
+}
+
+function isHandRaised(p) {
+  return handsMap()[String(p.id)] === true
+}
+
 onUnmounted(() => {
   cleanupPlayerSub()
   cleanupGameRoom()
@@ -217,6 +233,7 @@ onUnmounted(() => {
       'overlay-root--personal': isPersonal,
       'overlay-root--global': !isPersonal,
       'overlay-root--drama': overlayDrama,
+      'overlay-root--paused': overlayPaused,
     }"
   >
     <header
@@ -240,6 +257,12 @@ onUnmounted(() => {
         :is-timer-target="isTimerPlayer(singlePlayer)"
         :cinema="cinemaHud"
         :drama="dramaPersonal"
+        :voting-active="votingActive"
+        :voting-target-id="votingTargetId"
+        :vote-interactive="true"
+        :game-id="gameId"
+        :nominated-player-id="nominatedPlayerId"
+        :hand-raised="isHandRaised(singlePlayer)"
         v-bind="cardTimerProps(singlePlayer)"
         solo
       />
@@ -255,6 +278,12 @@ onUnmounted(() => {
         :dimmed="gridDimNonSpeakers && !isTimerPlayer(p)"
         :cinema="cinemaGrid"
         :drama="dramaMode"
+        :voting-active="votingActive"
+        :voting-target-id="votingTargetId"
+        :vote-interactive="false"
+        :game-id="gameId"
+        :nominated-player-id="nominatedPlayerId"
+        :hand-raised="isHandRaised(p)"
         v-bind="cardTimerProps(p)"
       />
     </div>
@@ -305,6 +334,14 @@ onUnmounted(() => {
   animation: overlayDramaHeartbeat 1.2s ease-in-out infinite;
 }
 
+.overlay-root--paused:not(.overlay-root--drama) {
+  filter: brightness(0.7);
+}
+
+.overlay-root--drama.overlay-root--paused {
+  animation: overlayDramaHeartbeatPaused 1.2s ease-in-out infinite;
+}
+
 .overlay-root--personal.overlay-root--drama {
   animation: overlayDramaHeartbeat 1.2s ease-in-out infinite;
 }
@@ -316,6 +353,16 @@ onUnmounted(() => {
   }
   50% {
     filter: contrast(1.14) brightness(0.87);
+  }
+}
+
+@keyframes overlayDramaHeartbeatPaused {
+  0%,
+  100% {
+    filter: contrast(1.06) brightness(0.65);
+  }
+  50% {
+    filter: contrast(1.12) brightness(0.6);
   }
 }
 

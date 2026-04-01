@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 280" width="400" height="280">
   <rect width="400" height="280" fill="#050308"/>
   <path d="M200 52 L228 108 L288 116 L244 156 L256 216 L200 188 L144 216 L156 156 L112 116 L172 108 Z" fill="#a855f7" fill-opacity="0.12" stroke="#a855f7" stroke-width="1.5" opacity="0.9"/>
-  <text x="200" y="248" text-anchor="middle" fill="#a855f7" font-family="system-ui,sans-serif" font-size="12" font-weight="700" letter-spacing="0.24em">",</text>
+  <text x="200" y="248" text-anchor="middle" fill="#a855f7" font-family="system-ui,sans-serif" font-size="12" font-weight="700" letter-spacing="0.24em">ТІНЬ</text>
 </svg>
