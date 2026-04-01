@@ -26,7 +26,17 @@ const props = defineProps({
   voteInteractive: { type: Boolean, default: false },
   gameId: { type: String, default: '' },
   nominatedPlayerId: { type: String, default: '' },
+  /** Хто ініціював номінацію (slot p1…) */
+  nominatedById: { type: String, default: '' },
+  roomRound: { type: Number, default: 1 },
+  /** Голоси проти цього гравця в поточному раунді: { id, choice } */
+  votesReceived: { type: Array, default: () => [] },
+  hasVotedThisRound: { type: Boolean, default: false },
+  /** Персональний оверлей: тебе голосують */
+  isVoteTargetSelf: { type: Boolean, default: false },
   handRaised: { type: Boolean, default: false },
+  /** Персональний оверлей: немає спікера й немає голосування */
+  idleWaiting: { type: Boolean, default: false },
 })
 
 const labelByKey = computed(() =>
@@ -171,27 +181,54 @@ const isNominated = computed(() => {
   return Boolean(n && props.player?.id === n)
 })
 
+const nominatedByLabel = computed(() => {
+  const n = String(props.nominatedById ?? '').trim()
+  if (!n) return ''
+  return playerIdDisplay({ id: n })
+})
+
+const showVoteTally = computed(
+  () =>
+    votingShown.value &&
+    !props.voteInteractive &&
+    Array.isArray(props.votesReceived) &&
+    props.votesReceived.length > 0,
+)
+
+const voteAckText = computed(() => {
+  if (props.hasVotedThisRound) return 'Ти вже проголосував'
+  if (localVoteChoice.value) return 'Твій голос зараховано'
+  return ''
+})
+
+const voteButtonsLocked = computed(
+  () => voteBusy.value || props.hasVotedThisRound || localVoteChoice.value != null,
+)
+
 const voteBusy = ref(false)
 /** Локальний стан після успішного голосу (персональний оверлей) */
 const localVoteChoice = ref(null)
 
 watch(
-  () => [props.votingActive, votingTargetNorm.value, props.voteInteractive],
+  () => [props.votingActive, votingTargetNorm.value, props.voteInteractive, props.roomRound],
   () => {
     localVoteChoice.value = null
   },
 )
 
 async function submitVote(choice) {
-  if (!props.voteInteractive || voteBusy.value) return
+  if (!props.voteInteractive || voteBusy.value || props.hasVotedThisRound) return
   const gid = String(props.gameId ?? '').trim()
   const voter = String(props.player?.id ?? '').trim()
   const target = votingTargetNorm.value
+  const rr = Math.floor(Number(props.roomRound) || 1)
   if (!gid || !voter || !target) return
   voteBusy.value = true
   try {
-    await saveVote(gid, voter, target, choice)
-    localVoteChoice.value = choice === 'against' ? 'against' : 'for'
+    const res = await saveVote(gid, voter, target, choice, rr)
+    if (res.ok) {
+      localVoteChoice.value = choice === 'against' ? 'against' : 'for'
+    }
   } catch (e) {
     console.error('[saveVote]', e)
   } finally {
@@ -237,6 +274,7 @@ async function submitVote(choice) {
           <p class="card-grid-id">{{ playerIdDisplay(player) }}</p>
           <span v-if="isNominated" class="nominee-badge">НА ГОЛОСУВАННІ</span>
         </div>
+        <p v-if="isNominated && nominatedByLabel" class="nominee-by">Виставив: {{ nominatedByLabel }}</p>
         <h2 class="card-grid-name">
           <span v-if="!identityRevealed(player)" class="placeholder">•••</span>
           <span v-else>{{ displayNameLine(player).text }}</span>
@@ -271,13 +309,20 @@ async function submitVote(choice) {
       <div v-if="votingShown" class="vote-strip vote-strip--grid" aria-label="Голосування">
         <p class="vote-strip__title">ГОЛОСУВАННЯ</p>
         <p class="vote-strip__target">{{ voteHintLine }}</p>
+        <p v-if="showVoteTally" class="vote-tally">
+          <span
+            v-for="v in votesReceived"
+            :key="v.id"
+            class="vote-tally__it"
+          >{{ playerIdDisplay({ id: v.id }) }}{{ v.choice === 'against' ? '👎' : '👍' }}</span>
+        </p>
         <div class="vote-strip__row">
           <button
             v-if="voteInteractive"
             type="button"
             class="vote-btn"
             :class="{ 'vote-btn--picked': localVoteChoice === 'for' }"
-            :disabled="voteBusy"
+            :disabled="voteButtonsLocked"
             @click="submitVote('for')"
           >
             👍 <span class="vote-btn__lbl">за</span>
@@ -288,14 +333,14 @@ async function submitVote(choice) {
             type="button"
             class="vote-btn"
             :class="{ 'vote-btn--picked': localVoteChoice === 'against' }"
-            :disabled="voteBusy"
+            :disabled="voteButtonsLocked"
             @click="submitVote('against')"
           >
             👎 <span class="vote-btn__lbl">проти</span>
           </button>
           <span v-else class="vote-fake">👎</span>
         </div>
-        <p v-if="voteInteractive && localVoteChoice" class="vote-strip__ack">Твій голос зараховано</p>
+        <p v-if="voteInteractive && voteAckText" class="vote-strip__ack">{{ voteAckText }}</p>
       </div>
     </template>
   </article>
@@ -324,6 +369,7 @@ async function submitVote(choice) {
     </div>
 
     <template v-else>
+      <p v-if="solo && idleWaiting" class="idle-wait-cue" role="status">ЧЕКАЄМО ГРАВЦЯ</p>
       <div
         v-if="solo && showActiveCardChip"
         class="ac-chip"
@@ -363,6 +409,7 @@ async function submitVote(choice) {
           </span>
           <span v-if="isTimerTarget" class="hud-speak-badge">ГОВОРИШ</span>
         </div>
+        <p v-if="solo && isNominated && nominatedByLabel" class="nominee-by nominee-by--hud">Виставив: {{ nominatedByLabel }}</p>
         <div v-if="showSpeakerTimer" class="hud-timer-stack">
           <div
             class="hud-ring-wrap"
@@ -423,14 +470,25 @@ async function submitVote(choice) {
         aria-label="Голосування"
       >
         <p class="vote-strip__title">ГОЛОСУВАННЯ</p>
+        <p v-if="voteInteractive && isVoteTargetSelf" class="vote-strip__dramatic">ТЕБЕ ГОЛОСУЮТЬ</p>
         <p class="vote-strip__target">{{ voteHintLine }}</p>
+        <p
+          v-if="voteInteractive && votesReceived.length"
+          class="vote-tally vote-tally--solo"
+        >
+          <span
+            v-for="v in votesReceived"
+            :key="v.id"
+            class="vote-tally__it"
+          >{{ playerIdDisplay({ id: v.id }) }}{{ v.choice === 'against' ? '👎' : '👍' }}</span>
+        </p>
         <div class="vote-strip__row">
           <button
             v-if="voteInteractive"
             type="button"
             class="vote-btn"
             :class="{ 'vote-btn--picked': localVoteChoice === 'for' }"
-            :disabled="voteBusy"
+            :disabled="voteButtonsLocked"
             @click="submitVote('for')"
           >
             👍 <span class="vote-btn__lbl">за</span>
@@ -441,14 +499,14 @@ async function submitVote(choice) {
             type="button"
             class="vote-btn"
             :class="{ 'vote-btn--picked': localVoteChoice === 'against' }"
-            :disabled="voteBusy"
+            :disabled="voteButtonsLocked"
             @click="submitVote('against')"
           >
             👎 <span class="vote-btn__lbl">проти</span>
           </button>
           <span v-else class="vote-fake">👎</span>
         </div>
-        <p v-if="voteInteractive && localVoteChoice" class="vote-strip__ack">Твій голос зараховано</p>
+        <p v-if="voteInteractive && voteAckText" class="vote-strip__ack">{{ voteAckText }}</p>
       </div>
     </template>
   </div>
@@ -499,8 +557,10 @@ async function submitVote(choice) {
 }
 
 .card-grid--nominated:not(.card-grid--eliminated) {
-  border: 1px solid rgba(220, 38, 38, 0.5);
-  box-shadow: 0 0 18px rgba(220, 38, 38, 0.25);
+  border: 1px solid rgba(220, 38, 38, 0.52);
+  box-shadow:
+    0 0 0 1px rgba(127, 29, 29, 0.35),
+    0 0 22px rgba(220, 38, 38, 0.28);
 }
 
 .card-grid--dimmed {
@@ -625,11 +685,12 @@ async function submitVote(choice) {
   font-size: clamp(0.48rem, min(1.35vw, 1.5vh), 0.58rem);
   font-weight: 800;
   letter-spacing: 0.08em;
-  color: rgba(254, 202, 202, 0.95);
-  background: rgba(80, 20, 28, 0.55);
-  border: 1px solid rgba(220, 38, 38, 0.4);
+  color: rgba(254, 226, 226, 0.98);
+  background: rgba(80, 20, 28, 0.62);
+  border: 1px solid rgba(248, 113, 113, 0.45);
   line-height: 1.2;
   white-space: nowrap;
+  box-shadow: 0 0 10px rgba(220, 38, 38, 0.2);
 }
 
 .nominee-badge--hud {
@@ -708,13 +769,64 @@ async function submitVote(choice) {
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.75);
 }
 
-.vote-strip__ack {
-  margin: 0.4rem 0 0;
+.vote-strip__dramatic {
+  margin: 0 0 0.28rem;
+  font-family: Orbitron, sans-serif;
   font-size: clamp(0.58rem, min(1.6vw, 1.75vh), 0.72rem);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  color: rgba(187, 247, 208, 0.95);
+  font-weight: 900;
+  letter-spacing: 0.28em;
+  color: #fecaca;
+  text-shadow:
+    0 0 18px rgba(248, 113, 113, 0.55),
+    0 1px 4px rgba(0, 0, 0, 0.75);
+}
+
+.vote-tally {
+  margin: 0 0 0.28rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem 0.5rem;
+  font-size: clamp(0.55rem, min(1.45vw, 1.55vh), 0.68rem);
+  color: rgba(226, 232, 240, 0.88);
+  line-height: 1.3;
+}
+
+.vote-tally--solo {
+  justify-content: center;
+}
+
+.vote-tally__it {
+  font-family: Orbitron, sans-serif;
+  font-weight: 700;
+  white-space: nowrap;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.nominee-by {
+  margin: 0.15rem 0 0;
+  font-size: clamp(0.48rem, min(1.35vw, 1.45vh), 0.58rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: rgba(254, 202, 202, 0.88);
+}
+
+.nominee-by--hud {
+  margin: 0.2rem 0 0;
+  text-align: right;
+  max-width: 11rem;
+  margin-left: auto;
+}
+
+.vote-strip__ack {
+  margin: 0.45rem 0 0;
+  font-size: clamp(0.62rem, min(1.75vw, 1.9vh), 0.8rem);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #bbf7d0;
+  text-shadow:
+    0 0 12px rgba(74, 222, 128, 0.45),
+    0 1px 4px rgba(0, 0, 0, 0.65);
 }
 
 .vote-strip__row {
@@ -748,13 +860,17 @@ async function submitVote(choice) {
 
 .vote-btn:disabled {
   opacity: 0.55;
-  cursor: wait;
+  cursor: not-allowed;
 }
 
 .vote-btn--picked {
-  border-color: rgba(74, 222, 128, 0.65) !important;
-  background: rgba(22, 101, 52, 0.45) !important;
-  box-shadow: 0 0 16px rgba(74, 222, 128, 0.25);
+  border-color: rgba(52, 211, 153, 0.85) !important;
+  background: rgba(6, 78, 59, 0.55) !important;
+  color: #ecfdf5 !important;
+  box-shadow:
+    0 0 0 2px rgba(74, 222, 128, 0.35),
+    0 0 22px rgba(74, 222, 128, 0.35);
+  transform: scale(1.03);
 }
 
 .vote-btn__lbl {
@@ -784,6 +900,7 @@ async function submitVote(choice) {
 .card-elim-screen {
   position: relative;
   z-index: 2;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -792,6 +909,32 @@ async function submitVote(choice) {
   padding: 1.25rem 1rem;
   min-height: 220px;
   box-sizing: border-box;
+}
+
+.card-elim-screen::before {
+  content: '';
+  position: absolute;
+  inset: -8%;
+  z-index: 0;
+  background: radial-gradient(ellipse at center, #1c0d14 0%, #050308 65%);
+  transform: scale(1);
+  transform-origin: center center;
+  animation: elimCardBgZoom 6s ease-in-out forwards;
+  pointer-events: none;
+}
+
+.card-elim-screen > * {
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes elimCardBgZoom {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.05);
+  }
 }
 
 .card-elim-screen--cut {
@@ -830,17 +973,17 @@ async function submitVote(choice) {
 }
 
 .card-elim-screen__art {
-  width: min(52%, 128px);
+  width: min(50%, 120px);
   height: auto;
   margin: 0 0 0.5rem;
-  opacity: 0.52;
-  filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.12));
+  opacity: 0.42;
+  filter: drop-shadow(0 0 6px rgba(168, 85, 247, 0.08));
 }
 
 .card-elim-screen__title {
   margin: 0;
   font-family: Orbitron, sans-serif;
-  font-size: clamp(1.45rem, 5vw, 2rem);
+  font-size: clamp(1.65rem, 5.5vw, 2.35rem);
   font-weight: 900;
   letter-spacing: 0.22em;
   color: #fecaca;
@@ -1032,6 +1175,26 @@ async function submitVote(choice) {
   background: transparent;
 }
 
+.idle-wait-cue {
+  position: fixed;
+  left: 50%;
+  bottom: max(4.75rem, min(13vh, 8.5rem));
+  transform: translateX(-50%);
+  z-index: 7;
+  margin: 0;
+  padding: 0.28rem 0.75rem;
+  border-radius: 999px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: clamp(0.52rem, min(1.45vw, 1.6vh), 0.66rem);
+  font-weight: 800;
+  letter-spacing: 0.24em;
+  color: rgba(226, 232, 240, 0.78);
+  background: rgba(6, 4, 16, 0.72);
+  border: 1px solid rgba(168, 85, 247, 0.22);
+  pointer-events: none;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
+}
+
 /**
  * Персональний HUD: vmin/vw/vh — масштаб від розміру екрана.
  * Бічні колонки (bl/br) ширші за верхні (tl/tr).
@@ -1107,14 +1270,14 @@ async function submitVote(choice) {
   100% {
     box-shadow:
       0 2px 14px rgba(0, 0, 0, 0.28),
-      0 0 0 1px rgba(168, 85, 247, 0.22),
-      0 0 12px rgba(168, 85, 247, 0.1);
+      0 0 0 1px rgba(168, 85, 247, 0.26),
+      0 0 14px rgba(168, 85, 247, 0.12);
   }
   50% {
     box-shadow:
-      0 2px 16px rgba(0, 0, 0, 0.32),
-      0 0 0 1px rgba(196, 181, 253, 0.42),
-      0 0 20px rgba(168, 85, 247, 0.2);
+      0 2px 18px rgba(0, 0, 0, 0.34),
+      0 0 0 1px rgba(216, 180, 254, 0.5),
+      0 0 28px rgba(168, 85, 247, 0.28);
   }
 }
 
@@ -1284,6 +1447,17 @@ async function submitVote(choice) {
   z-index: 0;
   background-color: #050308;
   opacity: 1;
+  transform-origin: center center;
+  animation: elimSoloBgZoom 6s ease-in-out forwards;
+}
+
+@keyframes elimSoloBgZoom {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.05);
+  }
 }
 
 .elim-solo-screen__base::after {

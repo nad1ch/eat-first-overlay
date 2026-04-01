@@ -38,10 +38,20 @@ import {
   setNominatedPlayer,
   setRoomVoting,
   setGameHandRaised,
+  subscribeToVotes,
+  clearAllVotes,
+  deleteVoteDoc,
+  nextRoomRound,
+  resetRoomRoundCounter,
+  setRoomRound,
+  clearAllHands,
 } from '../services/gameService'
 import { millisFromFirestore } from '../utils/firestoreTime.js'
 import ShowDeskHeader from '../components/showdesk/ShowDeskHeader.vue'
 import ShowDeskHostTools from '../components/showdesk/ShowDeskHostTools.vue'
+import ShowDeskHandsPanel from '../components/showdesk/ShowDeskHandsPanel.vue'
+import ShowDeskVotingPanel from '../components/showdesk/ShowDeskVotingPanel.vue'
+import ShowDeskRoundPanel from '../components/showdesk/ShowDeskRoundPanel.vue'
 import ShowPlayersRoster from '../components/showdesk/ShowPlayersRoster.vue'
 
 const route = useRoute()
@@ -95,8 +105,10 @@ const globalFieldPick = ref('profession')
 
 const gameRoom = ref({})
 const allPlayers = ref([])
+const votes = ref([])
 let unsubGameRoom = null
 let unsubPlayers = null
+let unsubVotes = null
 
 const toast = ref('')
 let toastTimer = null
@@ -157,6 +169,11 @@ function cleanupSubs() {
     unsubPlayers()
     unsubPlayers = null
   }
+  if (unsubVotes) {
+    unsubVotes()
+    unsubVotes = null
+  }
+  votes.value = []
 }
 
 watch(
@@ -175,6 +192,9 @@ watch(
       unsubPlayers = subscribeToPlayers(gameId.value, (list) => {
         allPlayers.value = list
       })
+      unsubVotes = subscribeToVotes(gameId.value, (list) => {
+        votes.value = list
+      })
     } else {
       allPlayers.value = []
     }
@@ -184,6 +204,14 @@ watch(
 
 const aliveCount = computed(
   () => allPlayers.value.filter((p) => p.eliminated !== true).length,
+)
+
+const roomRoundLive = computed(() =>
+  Math.min(8, Math.max(1, Math.floor(Number(gameRoom.value?.round) || 1))),
+)
+
+const votesLiveRound = computed(() =>
+  votes.value.filter((v) => Number(v.round) === roomRoundLive.value),
 )
 
 watch(
@@ -228,6 +256,19 @@ const hostTimerRemaining = computed(() => {
   if (start == null || total <= 0) return null
   const elapsed = Math.floor((tick.value - start) / 1000)
   return Math.max(0, total - elapsed)
+})
+
+watch(hostTimerRemaining, async (left, prev) => {
+  if (gameRoom.value?.timerPaused === true) return
+  if (left !== 0) return
+  if (prev === null || prev === undefined || prev === 0) return
+  const gr = gameRoom.value
+  if (!(Number(gr?.speakingTimer) > 0)) return
+  try {
+    await clearSpeakingTimer(gameId.value)
+  } catch (e) {
+    console.error('[autoClearSpeaker]', e)
+  }
 })
 
 async function persistScenarioChoice() {
@@ -394,7 +435,8 @@ async function hostNominate(slot) {
     loadError.value = null
     const cur = String(gameRoom.value?.nominatedPlayer ?? '').trim()
     const next = s === '' || cur === s ? '' : s
-    await setNominatedPlayer(gameId.value, next)
+    const byHostSlot = next ? String(playerId.value ?? '').trim() : ''
+    await setNominatedPlayer(gameId.value, next, byHostSlot)
     showToast(next ? `Номінація: ${next}` : 'Номінацію знято')
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
@@ -424,6 +466,85 @@ async function hostVotingToggle() {
     const tp = String(v?.targetPlayer ?? '').trim() || 'p1'
     await setRoomVoting(gameId.value, !curActive, !curActive ? tp : '')
     showToast(!curActive ? 'Голосування увімкнено' : 'Голосування вимкнено')
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function hostStopVoting() {
+  if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    await setRoomVoting(gameId.value, false, '')
+    showToast('Голосування зупинено')
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function hostClearVotes() {
+  if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    await clearAllVotes(gameId.value)
+    showToast('Голоси очищено')
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function hostRemoveVote(voterId) {
+  if (!isAdmin.value) return
+  const v = String(voterId ?? '').trim()
+  if (!v) return
+  try {
+    loadError.value = null
+    await deleteVoteDoc(gameId.value, v)
+    showToast(`Голос ${v} знято`)
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function hostNextRound() {
+  if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    await nextRoomRound(gameId.value)
+    showToast('Наступний раунд')
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function hostResetRound() {
+  if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    await resetRoomRoundCounter(gameId.value)
+    showToast('Раунд 1 · голоси очищено')
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function hostSetRound(n) {
+  if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    await setRoomRound(gameId.value, n)
+    showToast(`Раунд ${Math.min(8, Math.max(1, Math.floor(Number(n) || 1)))}`)
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function hostClearHands() {
+  if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    await clearAllHands(gameId.value)
+    showToast('Руки скинуто')
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -692,6 +813,7 @@ function rerollActiveCardOnly() {
 
     <template v-if="isAdmin">
       <section class="admin-zone admin-zone--live" aria-label="Live">
+        <h2 class="zone-kicker zone-kicker--section">LIVE</h2>
         <div class="desk-sticky-bar">
           <ShowDeskHostTools
             :game-room="gameRoom"
@@ -707,14 +829,16 @@ function rerollActiveCardOnly() {
             @pause-timer="adminPauseTimerOnly"
             @resume-timer="adminResumeTimer"
             @clear-timer="adminClearTimer"
-        @spotlight="setSpotlightPlayer"
-        @spotlight-clear="setSpotlightPlayer('')"
-        @next-speaker="adminNextSpeaker"
-            @nominate="hostNominate"
-            @voting-target="hostVotingTarget"
-            @voting-toggle="hostVotingToggle"
-      />
+            @spotlight="setSpotlightPlayer"
+            @spotlight-clear="setSpotlightPlayer('')"
+            @next-speaker="adminNextSpeaker"
+          />
         </div>
+        <ShowDeskHandsPanel
+          :game-room="gameRoom"
+          :player-slots="PLAYER_SLOTS"
+          @clear-hands="hostClearHands"
+        />
         <ShowDeskHeader
           class="admin-zone__header"
           :game-title="GAME_TITLE"
@@ -729,31 +853,8 @@ function rerollActiveCardOnly() {
         />
       </section>
 
-      <section class="admin-zone admin-zone--players" aria-label="Гравці">
-        <h2 class="zone-kicker">Гравці</h2>
-        <ShowPlayersRoster
-          :players="allPlayers"
-          :current-player-id="playerId"
-          :spotlight-player-id="String(gameRoom.activePlayer || '')"
-          :speaker-id="String(gameRoom.currentSpeaker || '')"
-          @select="goToPlayer"
-        />
-        <aside class="side-tools side-tools--inline">
-          <label class="field-label">Game id</label>
-          <div class="inline">
-            <input v-model="draftGameId" type="text" class="input" />
-            <button type="button" class="btn-soft btn-lift" @click="applyNewGame">OK</button>
-          </div>
-          <label class="field-label mt">Новий player id</label>
-          <div class="inline">
-            <input v-model="newPlayerId" type="text" class="input" placeholder="p11" />
-            <button type="button" class="btn-soft btn-lift" @click="createAndGoToPlayer">+</button>
-          </div>
-        </aside>
-      </section>
-
       <section class="admin-zone admin-zone--generate" aria-label="Генерація">
-        <h2 class="zone-kicker zone-kicker--soft">Генерація</h2>
+        <h2 class="zone-kicker zone-kicker--soft zone-kicker--gen-title">ГЕНЕРАЦІЯ</h2>
         <div class="gen-bar gen-bar--actions gen-bar--compact">
           <button type="button" class="btn-neon btn-neon--compact" @click="generateRandomCharacter">
             Generate Player
@@ -786,6 +887,56 @@ function rerollActiveCardOnly() {
           </select>
           <button type="button" class="btn-primary btn-primary--compact" @click="globalRollSelected">OK</button>
         </div>
+      </section>
+
+      <section class="admin-zone admin-zone--players" aria-label="Гравці">
+        <h2 class="zone-kicker">ГРАВЦІ</h2>
+        <ShowPlayersRoster
+          :players="allPlayers"
+          :current-player-id="playerId"
+          :spotlight-player-id="String(gameRoom.activePlayer || '')"
+          :speaker-id="String(gameRoom.currentSpeaker || '')"
+          @select="goToPlayer"
+        />
+        <aside class="side-tools side-tools--inline">
+          <label class="field-label">Game id</label>
+          <div class="inline">
+            <input v-model="draftGameId" type="text" class="input" />
+            <button type="button" class="btn-soft btn-lift" @click="applyNewGame">OK</button>
+          </div>
+          <label class="field-label mt">Новий player id</label>
+          <div class="inline">
+            <input v-model="newPlayerId" type="text" class="input" placeholder="p11" />
+            <button type="button" class="btn-soft btn-lift" @click="createAndGoToPlayer">+</button>
+          </div>
+        </aside>
+      </section>
+
+      <section
+        class="admin-zone admin-zone--voting"
+        :class="{ 'admin-zone--glow': gameRoom.voting?.active }"
+        aria-label="Голосування"
+      >
+        <ShowDeskVotingPanel
+          :game-room="gameRoom"
+          :player-slots="PLAYER_SLOTS"
+          :votes-live="votesLiveRound"
+          @nominate="hostNominate"
+          @voting-target="hostVotingTarget"
+          @voting-toggle="hostVotingToggle"
+          @clear-votes="hostClearVotes"
+          @remove-vote="hostRemoveVote"
+          @stop-voting="hostStopVoting"
+        />
+      </section>
+
+      <section class="admin-zone admin-zone--round" aria-label="Раунд">
+        <ShowDeskRoundPanel
+          :game-room="gameRoom"
+          @next-round="hostNextRound"
+          @reset-round="hostResetRound"
+          @set-round="hostSetRound"
+        />
       </section>
     </template>
 
@@ -995,6 +1146,25 @@ function rerollActiveCardOnly() {
   margin-top: 0.35rem;
 }
 
+.zone-kicker--section {
+  margin-bottom: 0.45rem;
+  color: rgba(196, 181, 253, 0.48);
+}
+
+.admin-zone--voting.admin-zone--glow {
+  border-radius: 16px;
+  padding: 0.15rem;
+  background: linear-gradient(
+    135deg,
+    rgba(56, 189, 248, 0.08) 0%,
+    rgba(168, 85, 247, 0.06) 100%
+  );
+}
+
+.admin-zone--round {
+  margin-bottom: 1.25rem;
+}
+
 .zone-kicker {
   margin: 0 0 0.55rem;
   font-size: 0.65rem;
@@ -1079,6 +1249,12 @@ function rerollActiveCardOnly() {
 .btn-primary--compact {
   padding: 0.38rem 0.7rem;
   font-size: 0.76rem;
+}
+
+.zone-kicker--gen-title {
+  letter-spacing: 0.2em;
+  font-size: 0.68rem;
+  color: rgba(196, 181, 253, 0.36);
 }
 
 .sub-kicker {

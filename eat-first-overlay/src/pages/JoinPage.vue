@@ -432,30 +432,38 @@ const globalOverlayUrl = computed(() => {
   color: inherit;
   cursor: pointer;
   transition:
-    transform 0.22s ease,
-    border-color 0.22s ease,
-    box-shadow 0.22s ease;
+    transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.28s ease,
+    box-shadow 0.28s ease;
 }
 
 .cta:hover {
-  transform: translateY(-2px);
-  border-color: rgba(168, 85, 247, 0.42);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  transform: translateY(-5px);
+  border-color: rgba(168, 85, 247, 0.55);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.4),
+    0 0 36px rgba(168, 85, 247, 0.18);
 }
 
 .cta--obs:hover {
-  box-shadow: 0 0 32px rgba(56, 189, 248, 0.18);
-  border-color: rgba(56, 189, 248, 0.35);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.4),
+    0 0 40px rgba(56, 189, 248, 0.22);
+  border-color: rgba(56, 189, 248, 0.45);
 }
 
 .cta--play:hover {
-  box-shadow: 0 0 32px rgba(74, 222, 128, 0.15);
-  border-color: rgba(74, 222, 128, 0.3);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.4),
+    0 0 40px rgba(74, 222, 128, 0.2);
+  border-color: rgba(74, 222, 128, 0.42);
 }
 
 .cta--host:hover {
-  box-shadow: 0 0 32px rgba(251, 191, 36, 0.15);
-  border-color: rgba(251, 191, 36, 0.35);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.4),
+    0 0 40px rgba(251, 191, 36, 0.2);
+  border-color: rgba(251, 191, 36, 0.45);
 }
 
 .cta-ico {

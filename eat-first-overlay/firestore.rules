@@ -11,7 +11,10 @@ service cloud.firestore {
         allow read: if true;
         allow create, update: if request.resource.data.choice in ['for', 'against']
           && request.resource.data.targetPlayer is string
-          && request.resource.data.targetPlayer.size() > 0;
+          && request.resource.data.targetPlayer.size() > 0
+          && request.resource.data.round is int
+          && request.resource.data.round >= 1
+          && request.resource.data.round <= 8;
       }
     }
 

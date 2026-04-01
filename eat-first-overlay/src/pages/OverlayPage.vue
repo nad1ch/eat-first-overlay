@@ -3,9 +3,11 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import OverlayPlayerCard from '../components/OverlayPlayerCard.vue'
 import {
+  clearSpeakingTimer,
   subscribeToCharacter,
   subscribeToGameRoom,
   subscribeToPlayers,
+  subscribeToVotes,
 } from '../services/gameService'
 import { millisFromFirestore } from '../utils/firestoreTime.js'
 
@@ -25,11 +27,13 @@ const isPersonal = computed(() => personalPlayerId.value != null)
 const players = ref([])
 const singlePlayer = ref(null)
 const gameRoom = ref({})
+const votes = ref([])
 const aliveForCinema = ref(0)
 
 let unsubscribe = null
 let unsubPlayersCount = null
 let unsubGameRoom = null
+let unsubVotes = null
 
 const tick = ref(Date.now())
 let tickId = null
@@ -58,6 +62,13 @@ function cleanupGameRoom() {
   }
 }
 
+function cleanupVotesSub() {
+  if (unsubVotes) {
+    unsubVotes()
+    unsubVotes = null
+  }
+}
+
 function setupGameRoom(gid) {
   cleanupGameRoom()
   unsubGameRoom = subscribeToGameRoom(gid, (data) => {
@@ -65,10 +76,18 @@ function setupGameRoom(gid) {
   })
 }
 
+function setupVotesSub(gid) {
+  cleanupVotesSub()
+  unsubVotes = subscribeToVotes(gid, (list) => {
+    votes.value = list
+  })
+}
+
 watch(
   gameId,
   (gid) => {
     setupGameRoom(gid)
+    setupVotesSub(gid)
   },
   { immediate: true },
 )
@@ -205,6 +224,31 @@ function cardTimerProps(p) {
 const votingActive = computed(() => gameRoom.value?.voting?.active === true)
 const votingTargetId = computed(() => String(gameRoom.value?.voting?.targetPlayer ?? '').trim())
 const nominatedPlayerId = computed(() => String(gameRoom.value?.nominatedPlayer ?? '').trim())
+const nominatedById = computed(() => String(gameRoom.value?.nominatedBy ?? '').trim())
+
+const roomRound = computed(() =>
+  Math.min(8, Math.max(1, Math.floor(Number(gameRoom.value?.round) || 1))),
+)
+
+function votesForTarget(playerId) {
+  const pid = String(playerId ?? '')
+  return votes.value.filter(
+    (v) => Number(v.round) === roomRound.value && String(v.targetPlayer) === pid,
+  )
+}
+
+const personalHasVotedThisRound = computed(() => {
+  const pid = personalPlayerId.value
+  if (!pid) return false
+  return votes.value.some((v) => v.id === pid && Number(v.round) === roomRound.value)
+})
+
+const personalIsVoteTarget = computed(
+  () =>
+    votingActive.value &&
+    personalPlayerId.value != null &&
+    votingTargetId.value === personalPlayerId.value,
+)
 
 function handsMap() {
   const h = gameRoom.value?.hands
@@ -215,9 +259,34 @@ function isHandRaised(p) {
   return handsMap()[String(p.id)] === true
 }
 
+/** Персональний оверлей: тихий стан «ніхто не говорить» (не під час голосування). */
+const showIdleWaitingCue = computed(
+  () =>
+    isPersonal.value &&
+    !speakerForTimerId.value &&
+    !votingActive.value &&
+    singlePlayer.value != null &&
+    singlePlayer.value.eliminated !== true,
+)
+
+/** Коли час вичерпано — зняти спікера й таймер (без зміни spotlight). */
+watch(speakerTimeLeft, async (left, prevLeft) => {
+  if (gameRoom.value?.timerPaused === true) return
+  if (left !== 0) return
+  if (prevLeft === undefined || prevLeft === 0) return
+  const gr = gameRoom.value
+  if (!(Number(gr?.speakingTimer) > 0)) return
+  try {
+    await clearSpeakingTimer(gameId.value)
+  } catch (e) {
+    console.error('[autoClearSpeaker]', e)
+  }
+})
+
 onUnmounted(() => {
   cleanupPlayerSub()
   cleanupGameRoom()
+  cleanupVotesSub()
   if (tickId != null) {
     window.clearInterval(tickId)
     tickId = null
@@ -262,7 +331,13 @@ onUnmounted(() => {
         :vote-interactive="true"
         :game-id="gameId"
         :nominated-player-id="nominatedPlayerId"
+        :nominated-by-id="nominatedById"
+        :room-round="roomRound"
+        :votes-received="votesForTarget(singlePlayer.id)"
+        :has-voted-this-round="personalHasVotedThisRound"
+        :is-vote-target-self="personalIsVoteTarget"
         :hand-raised="isHandRaised(singlePlayer)"
+        :idle-waiting="showIdleWaitingCue"
         v-bind="cardTimerProps(singlePlayer)"
         solo
       />
@@ -283,6 +358,11 @@ onUnmounted(() => {
         :vote-interactive="false"
         :game-id="gameId"
         :nominated-player-id="nominatedPlayerId"
+        :nominated-by-id="nominatedById"
+        :room-round="roomRound"
+        :votes-received="votesForTarget(p.id)"
+        :has-voted-this-round="false"
+        :is-vote-target-self="false"
         :hand-raised="isHandRaised(p)"
         v-bind="cardTimerProps(p)"
       />

@@ -1,12 +1,14 @@
 import {
   collection,
   deleteField,
+  deleteDoc,
   doc,
   getDocs,
   onSnapshot,
   setDoc,
   getDoc,
   Timestamp,
+  writeBatch,
 } from 'firebase/firestore'
 import { ADMIN_KEY } from '../config/access.js'
 import { buildRandomPlayerDocument } from '../data/randomPools.js'
@@ -66,11 +68,12 @@ export async function startSpeakingTimer(gameId, speakerId, seconds) {
   )
 }
 
-/** Зупинити відображення таймера (spotlight можна лишити). */
+/** Зупинити таймер і зняти currentSpeaker (activePlayer / spotlight не чіпаємо). */
 export async function clearSpeakingTimer(gameId) {
   await setDoc(
     gameDocRef(gameId),
     {
+      currentSpeaker: '',
       timerStartedAt: deleteField(),
       speakingTimer: 0,
       timerPaused: false,
@@ -133,7 +136,9 @@ export async function resetGameRoomControls(gameId) {
       timerPaused: false,
       timerRemainingFrozen: deleteField(),
       gamePhase: 'intro',
+      round: 1,
       nominatedPlayer: deleteField(),
+      nominatedBy: deleteField(),
       hands: deleteField(),
       voting: deleteField(),
       key: ADMIN_KEY,
@@ -142,10 +147,94 @@ export async function resetGameRoomControls(gameId) {
   )
 }
 
-/** Номінація: кого «судять» на оверлеї (легка червона рамка). */
-export async function setNominatedPlayer(gameId, playerId) {
+function votesColRef(gameId) {
+  return collection(db, 'games', gameId, 'votes')
+}
+
+/** Підписка на всі голоси кімнати (для оверлею та адмінки). */
+export function subscribeToVotes(gameId, callback) {
+  const colRef = votesColRef(gameId)
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
+      list.sort((a, b) =>
+        a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }),
+      )
+      callback(list)
+    },
+    (err) => {
+      console.error('[subscribeToVotes]', err)
+      callback([])
+    },
+  )
+}
+
+/** Видалити всі документи в votes/ (батчами). */
+export async function clearAllVotes(gameId) {
+  const snap = await getDocs(votesColRef(gameId))
+  let batch = writeBatch(db)
+  let n = 0
+  for (const d of snap.docs) {
+    batch.delete(d.ref)
+    n++
+    if (n >= 400) {
+      await batch.commit()
+      batch = writeBatch(db)
+      n = 0
+    }
+  }
+  if (n > 0) await batch.commit()
+}
+
+export async function deleteVoteDoc(gameId, voterId) {
+  const v = String(voterId ?? '').trim()
+  if (!v) return
+  await deleteDoc(doc(db, 'games', gameId, 'votes', v))
+}
+
+/** Номінація + хто ініціював (slot p1… або ''). */
+export async function setNominatedPlayer(gameId, playerId, nominatedBySlot) {
   const p = String(playerId ?? '').trim()
-  await saveGameRoom(gameId, { nominatedPlayer: p })
+  const by = String(nominatedBySlot ?? '').trim()
+  if (!p) {
+    await saveGameRoom(gameId, { nominatedPlayer: '', nominatedBy: deleteField() })
+    return
+  }
+  await saveGameRoom(gameId, {
+    nominatedPlayer: p,
+    nominatedBy: by || deleteField(),
+  })
+}
+
+const MIN_ROUND = 1
+const MAX_ROUND = 8
+
+export async function setRoomRound(gameId, nextRound, clearVotesToo = true) {
+  const r = Math.min(MAX_ROUND, Math.max(MIN_ROUND, Math.floor(Number(nextRound) || 1)))
+  await saveGameRoom(gameId, { round: r })
+  if (clearVotesToo) await clearAllVotes(gameId)
+}
+
+export async function nextRoomRound(gameId) {
+  const snap = await getDoc(gameDocRef(gameId))
+  const cur = Math.floor(Number(snap.exists() ? snap.data().round : 1) || 1)
+  const next = Math.min(MAX_ROUND, cur + 1)
+  await saveGameRoom(gameId, { round: next })
+  await clearAllVotes(gameId)
+}
+
+export async function resetRoomRoundCounter(gameId) {
+  await saveGameRoom(gameId, { round: 1 })
+  await clearAllVotes(gameId)
+}
+
+export async function clearAllHands(gameId) {
+  await setDoc(
+    gameDocRef(gameId),
+    { hands: deleteField(), key: ADMIN_KEY },
+    { merge: true },
+  )
 }
 
 /** Голосування на кімнаті: { active, targetPlayer }. */
@@ -178,22 +267,28 @@ export async function setGameHandRaised(gameId, playerId, raised) {
 
 /**
  * Голос з персонального оверлею: games/{gameId}/votes/{voterPlayerId}
- * @param {'for' | 'against'} choice
+ * Один голос на раунд: якщо вже є запис з тим самим round — не писати.
+ * @returns {{ ok: true } | { ok: false, reason: string }}
  */
-export async function saveVote(gameId, voterPlayerId, targetPlayer, choice) {
+export async function saveVote(gameId, voterPlayerId, targetPlayer, choice, round) {
   const voter = String(voterPlayerId ?? '').trim()
   const target = String(targetPlayer ?? '').trim()
-  if (!voter || !target) return
+  const r = Math.floor(Number(round) || 0)
+  if (!voter || !target || r < MIN_ROUND) return { ok: false, reason: 'invalid' }
   const c = choice === 'against' ? 'against' : 'for'
-  await setDoc(
-    doc(db, 'games', gameId, 'votes', voter),
-    {
-      choice: c,
-      targetPlayer: target,
-      at: Timestamp.now(),
-    },
-    { merge: true },
-  )
+  const voteRef = doc(db, 'games', gameId, 'votes', voter)
+  const existing = await getDoc(voteRef)
+  if (existing.exists()) {
+    const prev = existing.data()
+    if (Number(prev.round) === r) return { ok: false, reason: 'already-voted' }
+  }
+  await setDoc(voteRef, {
+    choice: c,
+    targetPlayer: target,
+    round: r,
+    at: Timestamp.now(),
+  })
+  return { ok: true }
 }
 
 export async function regenerateAllPlayersRandom(gameId, scenarioId) {
