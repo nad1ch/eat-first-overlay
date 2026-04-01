@@ -159,6 +159,16 @@ const dramaMode = computed(() => {
   return aliveInGame.value === 3
 })
 
+/** Персональний оверлей: та сама «напруга», коли в грі лишилось 3. */
+const dramaPersonal = computed(() => isPersonal.value && aliveForCinema.value === 3)
+
+const overlayDrama = computed(() => dramaMode.value || dramaPersonal.value)
+
+/** У глобальній сітці затемнюємо картки, поки обраний спікер (фокус на тому, хто говорить). */
+const gridDimNonSpeakers = computed(
+  () => !isPersonal.value && Boolean(speakerForTimerId.value),
+)
+
 function isSpotlightPlayer(p) {
   return activeSpotlightId.value != null && p.id === activeSpotlightId.value
 }
@@ -182,7 +192,7 @@ function cardTimerProps(p) {
     :class="{
       'overlay-root--personal': isPersonal,
       'overlay-root--global': !isPersonal,
-      'overlay-root--drama': dramaMode,
+      'overlay-root--drama': overlayDrama,
     }"
   >
     <header
@@ -205,7 +215,7 @@ function cardTimerProps(p) {
         :is-spotlight="isSpotlightPlayer(singlePlayer)"
         :is-timer-target="isTimerPlayer(singlePlayer)"
         :cinema="cinemaHud"
-        :drama="false"
+        :drama="dramaPersonal"
         v-bind="cardTimerProps(singlePlayer)"
         solo
       />
@@ -218,6 +228,7 @@ function cardTimerProps(p) {
         :player="p"
         :is-spotlight="isSpotlightPlayer(p)"
         :is-timer-target="isTimerPlayer(p)"
+        :dimmed="gridDimNonSpeakers && !isTimerPlayer(p)"
         :cinema="cinemaGrid"
         :drama="dramaMode"
         v-bind="cardTimerProps(p)"
@@ -254,6 +265,22 @@ function cardTimerProps(p) {
 
 .overlay-root--drama {
   position: relative;
+  filter: contrast(1.08) brightness(0.92);
+  animation: overlayDramaHeartbeat 1.2s ease-in-out infinite;
+}
+
+.overlay-root--personal.overlay-root--drama {
+  animation: overlayDramaHeartbeat 1.2s ease-in-out infinite;
+}
+
+@keyframes overlayDramaHeartbeat {
+  0%,
+  100% {
+    filter: contrast(1.06) brightness(0.93);
+  }
+  50% {
+    filter: contrast(1.14) brightness(0.87);
+  }
 }
 
 .overlay-root--drama::before {
@@ -265,8 +292,19 @@ function cardTimerProps(p) {
   background: radial-gradient(
     ellipse at center,
     transparent 35%,
-    rgba(90, 20, 30, 0.35) 100%
+    rgba(90, 20, 30, 0.38) 100%
   );
+  animation: dramaVignettePulse 1.2s ease-in-out infinite;
+}
+
+@keyframes dramaVignettePulse {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .overlay-root--drama .board-head,
@@ -322,6 +360,7 @@ function cardTimerProps(p) {
 
 .single-stage--hud {
   position: relative;
+  z-index: 1;
   flex: 1;
   min-height: 100vh;
   width: 100%;

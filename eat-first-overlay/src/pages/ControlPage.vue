@@ -86,6 +86,7 @@ const selectedScenario = ref('classic_crash')
 const timerSpeakerSlot = ref('p1')
 const speakingDuration = ref(30)
 const globalFieldPick = ref('profession')
+const adminTab = ref('live')
 
 const gameRoom = ref({})
 const allPlayers = ref([])
@@ -359,11 +360,26 @@ async function setRoomSpeaker(slot) {
   }
 }
 
-async function onRosterPick(id) {
+async function onRosterPick(id, opts = {}) {
   const sid = String(id ?? '').trim()
   if (!sid) return
-  await setRoomSpeaker(sid)
-  goToPlayer(sid)
+  try {
+    loadError.value = null
+    if (opts.shiftKey) {
+      await setSpotlightPlayer(sid)
+      goToPlayer(sid)
+      showToast('Spotlight')
+      return
+    }
+    timerSpeakerSlot.value = sid
+    await saveGameRoom(gameId.value, { currentSpeaker: sid })
+    const sec = Number(speakingDuration.value) || 30
+    await startSpeakingTimer(gameId.value, sid, sec)
+    goToPlayer(sid)
+    showToast(`${sid} · ${sec}s`)
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
 }
 
 function generateRandomCharacter() {
@@ -595,7 +611,27 @@ function rerollActiveCardOnly() {
         @copy-global="copyGlobal"
       />
 
+      <nav class="admin-tabs" aria-label="Режим пульта">
+        <button
+          type="button"
+          class="admin-tab"
+          :class="{ on: adminTab === 'live' }"
+          @click="adminTab = 'live'"
+        >
+          LIVE
+        </button>
+        <button
+          type="button"
+          class="admin-tab"
+          :class="{ on: adminTab === 'settings' }"
+          @click="adminTab = 'settings'"
+        >
+          SETTINGS
+        </button>
+      </nav>
+
       <ShowDeskHostTools
+        :mode="adminTab"
         :game-room="gameRoom"
         :player-slots="PLAYER_SLOTS"
         v-model:speaking-duration="speakingDuration"
@@ -613,7 +649,7 @@ function rerollActiveCardOnly() {
         @spotlight-clear="setSpotlightPlayer('')"
       />
 
-      <div class="admin-row">
+      <div v-if="adminTab === 'live'" class="admin-row">
         <ShowPlayersRoster
           :players="allPlayers"
           :current-player-id="playerId"
@@ -622,17 +658,19 @@ function rerollActiveCardOnly() {
           @pick="onRosterPick"
           @set-spotlight="setSpotlightPlayer"
         />
+      </div>
 
+      <div v-if="adminTab === 'settings'" class="settings-stack">
         <aside class="side-tools">
           <label class="field-label">game id</label>
           <div class="inline">
             <input v-model="draftGameId" type="text" class="input" />
-            <button type="button" class="btn-soft" @click="applyNewGame">OK</button>
+            <button type="button" class="btn-soft btn-lift" @click="applyNewGame">OK</button>
           </div>
           <label class="field-label mt">Новий player id</label>
           <div class="inline">
             <input v-model="newPlayerId" type="text" class="input" placeholder="p11" />
-            <button type="button" class="btn-soft" @click="createAndGoToPlayer">+</button>
+            <button type="button" class="btn-soft btn-lift" @click="createAndGoToPlayer">+</button>
           </div>
         </aside>
       </div>
@@ -778,7 +816,7 @@ function rerollActiveCardOnly() {
       </div>
     </section>
 
-    <section v-if="isAdmin" class="panel globals-panel">
+    <section v-if="isAdmin && adminTab === 'settings'" class="panel globals-panel">
       <h2 class="panel-kicker">Глобальні дії</h2>
       <div class="global-btns">
         <button type="button" class="gbtn" @click="globalRollField('profession')">Професія всім</button>
@@ -795,7 +833,7 @@ function rerollActiveCardOnly() {
       </div>
     </section>
 
-    <section v-if="isAdmin" class="panel scenario-panel">
+    <section v-if="isAdmin && adminTab === 'settings'" class="panel scenario-panel">
       <h2 class="panel-kicker">Сценарій</h2>
       <p class="hint-sc">{{ getScenarioHint(selectedScenario) }}</p>
       <select v-model="selectedScenario" class="input select" @change="persistScenarioChoice">
@@ -901,17 +939,48 @@ function rerollActiveCardOnly() {
   color: rgba(196, 181, 253, 0.55);
 }
 
-.admin-row {
-  display: grid;
-  grid-template-columns: 1fr 200px;
-  gap: 1rem;
-  align-items: start;
+.admin-tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0 0 0.85rem;
 }
 
-@media (max-width: 800px) {
-  .admin-row {
-    grid-template-columns: 1fr;
-  }
+.admin-tab {
+  flex: 1;
+  padding: 0.55rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.32);
+  color: rgba(148, 163, 184, 0.95);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+  font-family: 'Orbitron', sans-serif;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s,
+    color 0.15s,
+    background 0.15s;
+}
+
+.admin-tab:hover {
+  transform: scale(1.02);
+}
+
+.admin-tab.on {
+  border-color: rgba(168, 85, 247, 0.55);
+  color: #faf5ff;
+  background: rgba(88, 28, 135, 0.38);
+}
+
+.settings-stack {
+  margin-bottom: 1.25rem;
+}
+
+.admin-row {
+  display: block;
+  margin-bottom: 0.25rem;
 }
 
 .side-tools {
@@ -1186,7 +1255,12 @@ function rerollActiveCardOnly() {
   cursor: pointer;
   transition:
     border-color 0.15s,
-    background 0.15s;
+    background 0.15s,
+    transform 0.15s ease;
+}
+
+.reveal-chip:not(:disabled):hover {
+  transform: scale(1.03);
 }
 
 .reveal-chip.on {
@@ -1260,10 +1334,14 @@ function rerollActiveCardOnly() {
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
+  transition:
+    border-color 0.15s,
+    transform 0.15s ease;
 }
 
 .gbtn:hover {
   border-color: rgba(167, 139, 250, 0.35);
+  transform: scale(1.03);
 }
 
 .pick-row {
@@ -1295,6 +1373,11 @@ function rerollActiveCardOnly() {
   color: #f5f3ff;
   font-weight: 600;
   cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.btn-primary:not(:disabled):hover {
+  transform: scale(1.03);
 }
 
 .btn-primary:disabled {
@@ -1311,6 +1394,11 @@ function rerollActiveCardOnly() {
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.btn-soft.btn-lift:hover {
+  transform: scale(1.03);
 }
 
 .btn-amber {

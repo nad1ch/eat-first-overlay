@@ -11,6 +11,8 @@ const props = defineProps({
   isSpotlight: { type: Boolean, default: false },
   /** Таймер лише для currentSpeaker */
   isTimerTarget: { type: Boolean, default: false },
+  /** Глобальна сітка: затемнити, коли інший говорить */
+  dimmed: { type: Boolean, default: false },
   solo: { type: Boolean, default: false },
   cinema: { type: Boolean, default: false },
   speakerTimeLeft: { type: Number, default: undefined },
@@ -93,10 +95,18 @@ const ringPct = computed(() => {
   return Math.min(100, (left / total) * 100)
 })
 
+const timerUrgent = computed(() => {
+  const t = props.speakerTimeLeft
+  if (typeof t !== 'number') return false
+  return t > 0 && t <= 5
+})
+
 const timerRingStyle = computed(() => {
   const pct = ringPct.value
+  const urgent = timerUrgent.value
+  const c = urgent ? '#ef4444' : '#a855f7'
   return {
-    background: `conic-gradient(#a855f7 ${pct}%, rgba(255,255,255,0.12) 0)`,
+    background: `conic-gradient(${c} ${pct}%, rgba(255,255,255,0.1) 0)`,
   }
 })
 
@@ -116,6 +126,8 @@ const acChipTitle = computed(() => {
       'card-grid--timer': isTimerTarget,
       'card-grid--eliminated': isEliminated(player),
       'card-grid--cinema': cinema,
+      'card-grid--dimmed': dimmed && !isEliminated(player),
+      'card-grid--speaker': isTimerTarget && !isEliminated(player),
     }"
   >
     <div v-if="isEliminated(player)" class="card-elim-screen">
@@ -127,9 +139,10 @@ const acChipTitle = computed(() => {
 
     <template v-else>
       <div v-if="showSpeakerTimer" class="card-grid-timer" aria-hidden="true">
-        <div class="timer-ring-wrap">
+        <p v-if="isTimerTarget" class="card-speaking-label">🎤 ГОВОРИТЬ</p>
+        <div class="timer-ring-wrap" :class="{ 'timer-ring-wrap--urgent': timerUrgent }">
           <span class="timer-ring" :style="timerRingStyle" />
-          <span class="timer-num">⏱ {{ speakerTimeLeft }}s</span>
+          <span class="timer-num" :class="{ 'timer-num--urgent': timerUrgent }">⏱ {{ speakerTimeLeft }}s</span>
         </div>
       </div>
       <div class="card-grid-body">
@@ -146,10 +159,11 @@ const acChipTitle = computed(() => {
           <li v-for="row in fieldConfig" :key="row.key">
             <span
               :key="valueRevealKey(player, row.key)"
-              class="stat-cell"
-              :class="{
+            class="stat-cell"
+            :class="{
                 'stat-cell--open': chunkFor(player, row.key).revealed,
                 'stat-cell--wave': chunkFor(player, row.key).revealed,
+                'value--revealed': chunkFor(player, row.key).revealed,
                 'stat-cell--drama': drama && chunkFor(player, row.key).revealed,
               }"
             >
@@ -172,12 +186,15 @@ const acChipTitle = computed(() => {
     :class="{
       'hud-root--eliminated': isEliminated(player),
       'hud-root--spotlight': isSpotlight && !isEliminated(player),
+      'hud-root--speaker': isTimerTarget && !isEliminated(player),
       'hud-root--cinema': cinema,
       'hud-root--drama': drama,
     }"
   >
     <div v-if="isEliminated(player)" class="elim-solo-screen">
-      <div class="elim-solo-screen__veil" aria-hidden="true" />
+      <div class="elim-solo-screen__death-flash" aria-hidden="true" />
+      <div class="elim-solo-screen__base" aria-hidden="true" />
+      <div class="elim-solo-screen__grain" aria-hidden="true" />
       <div class="elim-solo-screen__content">
         <img class="elim-solo-screen__art" src="/overlay-eliminated.svg" alt="" />
         <p class="elim-solo-screen__kicker">Кого ми з’їмо першим</p>
@@ -212,10 +229,11 @@ const acChipTitle = computed(() => {
 
       <div class="hud-block hud-tr">
         <span class="hud-slot">{{ playerIdDisplay(player) }}</span>
+        <p v-if="isTimerTarget" class="hud-speaking-pill">🎤 ГОВОРИТЬ</p>
         <div v-if="showSpeakerTimer" class="hud-timer-stack">
-          <div class="hud-ring-wrap">
+          <div class="hud-ring-wrap" :class="{ 'hud-ring-wrap--urgent': timerUrgent }">
             <span class="hud-ring" :style="timerRingStyle" />
-            <span class="hud-timer-label">⏱ {{ speakerTimeLeft }}s</span>
+            <span class="hud-timer-label" :class="{ 'hud-timer-label--urgent': timerUrgent }">⏱ {{ speakerTimeLeft }}s</span>
           </div>
         </div>
       </div>
@@ -228,6 +246,7 @@ const acChipTitle = computed(() => {
             :class="{
               'hud-stat-inner--open': chunkFor(player, key).revealed,
               'hud-stat-inner--wave': chunkFor(player, key).revealed,
+              'value--revealed': chunkFor(player, key).revealed,
               'hud-stat-inner--drama': drama && chunkFor(player, key).revealed,
             }"
           >
@@ -245,6 +264,7 @@ const acChipTitle = computed(() => {
             :class="{
               'hud-stat-inner--open': chunkFor(player, key).revealed,
               'hud-stat-inner--wave': chunkFor(player, key).revealed,
+              'value--revealed': chunkFor(player, key).revealed,
               'hud-stat-inner--drama': drama && chunkFor(player, key).revealed,
             }"
           >
@@ -326,6 +346,64 @@ const acChipTitle = computed(() => {
   }
 }
 
+.card-grid--dimmed {
+  opacity: 0.62;
+  filter: saturate(0.65);
+  transition:
+    opacity 0.35s ease,
+    filter 0.35s ease;
+}
+
+.card-grid--speaker {
+  opacity: 1;
+  filter: none;
+  z-index: 2;
+  transform: scale(1.03);
+  animation: speakerCardGlow 2s ease-in-out infinite;
+}
+
+@keyframes speakerCardGlow {
+  0%,
+  100% {
+    box-shadow:
+      0 8px 28px rgba(0, 0, 0, 0.4),
+      0 0 24px rgba(168, 85, 247, 0.35);
+  }
+  50% {
+    box-shadow:
+      0 8px 28px rgba(0, 0, 0, 0.4),
+      0 0 48px rgba(168, 85, 247, 0.65);
+  }
+}
+
+.card-speaking-label {
+  margin: 0;
+  font-size: clamp(0.58rem, min(1.8vw, 2vh), 0.72rem);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #e9d5ff;
+  text-shadow: 0 0 12px rgba(168, 85, 247, 0.5);
+}
+
+.timer-ring-wrap--urgent {
+  animation: timerUrgentPulse 0.55s ease-in-out infinite;
+}
+
+@keyframes timerUrgentPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+.timer-num--urgent {
+  color: #fecaca !important;
+  text-shadow: 0 0 10px rgba(239, 68, 68, 0.6) !important;
+}
+
 .card-grid--timer {
   animation: timerPulse 1.4s ease-in-out infinite;
 }
@@ -342,12 +420,16 @@ const acChipTitle = computed(() => {
   }
 }
 
-.card-grid-timer {
+.card-grid > .card-grid-timer {
   position: absolute;
   top: 0.45rem;
   right: 0.45rem;
   z-index: 4;
   pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
 }
 
 .timer-ring-wrap {
@@ -504,6 +586,23 @@ const acChipTitle = computed(() => {
   animation: revealWave 0.85s ease-out;
 }
 
+.stat-cell.value--revealed {
+  animation: revealWave 0.55s ease-out, revealFlash 0.5s ease;
+}
+
+@keyframes revealFlash {
+  0% {
+    background-color: rgba(255, 255, 255, 0.45);
+    color: #0f172a;
+  }
+  35% {
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
 @keyframes revealWave {
   0% {
     opacity: 0;
@@ -611,31 +710,101 @@ const acChipTitle = computed(() => {
   box-shadow: inset 0 0 14px rgba(168, 85, 247, 0.08);
 }
 
+.hud-root--speaker:not(.hud-root--eliminated) .hud-zones {
+  animation: speakerHudPulse 2s ease-in-out infinite;
+  filter: drop-shadow(0 0 22px rgba(168, 85, 247, 0.35));
+}
+
+@keyframes speakerHudPulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 18px rgba(168, 85, 247, 0.28));
+  }
+  50% {
+    filter: drop-shadow(0 0 36px rgba(168, 85, 247, 0.55));
+  }
+}
+
+.hud-root--speaker:not(.hud-root--eliminated) .hud-block {
+  box-shadow:
+    inset 0 0 20px rgba(168, 85, 247, 0.12),
+    0 0 0 1px rgba(168, 85, 247, 0.5),
+    0 0 32px rgba(168, 85, 247, 0.38);
+}
+
+.hud-speaking-pill {
+  margin: 0.35rem 0 0;
+  font-size: clamp(0.62rem, min(1.9vw, 2.1vh), 0.82rem);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: #faf5ff;
+  text-shadow: 0 0 14px rgba(168, 85, 247, 0.55);
+}
+
+.hud-ring-wrap--urgent {
+  animation: timerUrgentPulse 0.55s ease-in-out infinite;
+}
+
+.hud-timer-label--urgent {
+  color: #fecaca !important;
+  text-shadow: 0 0 8px rgba(239, 68, 68, 0.65) !important;
+}
+
+.hud-stat-inner.value--revealed {
+  animation: revealWave 0.55s ease-out, revealFlash 0.5s ease;
+}
+
 .elim-solo-screen {
   position: absolute;
   inset: 0;
-  z-index: 40;
+  z-index: 999;
   display: flex;
   align-items: center;
   justify-content: center;
   pointer-events: none;
   padding: clamp(1rem, 4vw, 2rem);
   box-sizing: border-box;
+  overflow: hidden;
 }
 
-.elim-solo-screen__veil {
+.elim-solo-screen__death-flash {
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(ellipse 85% 70% at 50% 45%, rgba(30, 10, 20, 0.55), rgba(4, 2, 10, 0.97)),
-    rgba(4, 2, 10, 0.96);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  z-index: 2;
+  pointer-events: none;
+  animation: deathFlash 0.55s ease-out forwards;
+}
+
+@keyframes deathFlash {
+  0% {
+    background: rgba(255, 0, 0, 0.78);
+  }
+  100% {
+    background: rgba(0, 0, 0, 0);
+  }
+}
+
+.elim-solo-screen__base {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: radial-gradient(circle, #0a0616 0%, #000 100%);
+  opacity: 1;
+}
+
+.elim-solo-screen__grain {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: 0.09;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
 }
 
 .elim-solo-screen__content {
   position: relative;
-  z-index: 1;
+  z-index: 3;
   max-width: min(92vw, 400px);
   text-align: center;
 }

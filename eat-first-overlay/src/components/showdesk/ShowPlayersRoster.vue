@@ -11,6 +11,10 @@ defineProps({
 
 const emit = defineEmits(['pick', 'set-spotlight'])
 
+function onMainClick(e, id) {
+  emit('pick', id, { shiftKey: e.shiftKey })
+}
+
 function cardUnused(p) {
   const ac = p.activeCard
   if (!ac || typeof ac !== 'object') return false
@@ -32,7 +36,9 @@ function slotNum(id) {
 <template>
   <section class="roster">
     <h2 class="block-title">Гравці</h2>
-    <p class="roster-hint">Клік по картці — зробити спікером і відкрити в редакторі. ★ — spotlight.</p>
+    <p class="roster-hint">
+      Клік — спікер + таймер + редактор. Shift+клік — spotlight. ★ — лише spotlight.
+    </p>
     <div class="roster-grid">
       <div
         v-for="p in players"
@@ -43,9 +49,13 @@ function slotNum(id) {
           spotlight: String(spotlightPlayerId || '').trim() === p.id,
           speaking: String(speakerId || '').trim() === p.id,
           elim: p.eliminated === true,
+          muted:
+            Boolean(String(speakerId || '').trim()) &&
+            String(speakerId || '').trim() !== p.id &&
+            p.eliminated !== true,
         }"
       >
-        <button type="button" class="roster-main" @click="emit('pick', p.id)">
+        <button type="button" class="roster-main" @click="onMainClick($event, p.id)">
           <span class="rid">{{ slotNum(p.id) }}</span>
           <span class="rname">{{ (p.name && String(p.name).trim()) || '—' }}</span>
           <span v-if="p.eliminated" class="tag bad">вибув</span>
@@ -140,6 +150,10 @@ function slotNum(id) {
   opacity: 0.52;
   border-color: rgba(185, 28, 28, 0.45);
   background: rgba(40, 10, 14, 0.35);
+}
+
+.roster-card.muted:not(.speaking):not(.elim) {
+  opacity: 0.72;
 }
 
 .roster-main {

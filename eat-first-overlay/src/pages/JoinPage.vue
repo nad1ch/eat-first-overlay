@@ -59,8 +59,16 @@ function slotNum(id) {
   return s.replace(/^p/i, '') || s
 }
 
-function openOverlay(pid) {
+function openPersonalOverlay(pid) {
   router.push({ path: '/overlay', query: { game: gameId.value, player: String(pid).trim() } })
+}
+
+function goObsGlobal() {
+  router.push({ path: '/overlay', query: { game: gameId.value } })
+}
+
+function goPlayerControl() {
+  router.push({ path: '/control', query: { game: gameId.value, player: 'p1' } })
 }
 
 function goAdmin() {
@@ -74,10 +82,12 @@ function applyGameFromInput() {
 
 <template>
   <div class="join">
-    <header class="join-head">
-      <p class="eyebrow">Лобі</p>
+    <div class="join-bg" aria-hidden="true" />
+
+    <header class="join-hero">
+      <p class="eyebrow">Live show</p>
       <h1 class="title">Кого ми з’їмо першим</h1>
-      <p class="sub">Обери слот — відкриється персональний оверлей для OBS.</p>
+      <p class="lead">Лобі кімнати · підключи OBS, зайди як гравець або відкрий пульт ведучого.</p>
     </header>
 
     <div class="game-bar">
@@ -88,9 +98,28 @@ function applyGameFromInput() {
       </div>
     </div>
 
+    <div class="cta-grid">
+      <button type="button" class="cta cta--obs" @click="goObsGlobal">
+        <span class="cta-ico">🎥</span>
+        <span class="cta-t">OBS overlay</span>
+        <span class="cta-d">Загальний екран для всіх гравців</span>
+      </button>
+      <button type="button" class="cta cta--play" @click="goPlayerControl">
+        <span class="cta-ico">🎮</span>
+        <span class="cta-t">Увійти в гру</span>
+        <span class="cta-d">Панель гравця · картки та карта</span>
+      </button>
+      <button type="button" class="cta cta--host" @click="goAdmin">
+        <span class="cta-ico">🔐</span>
+        <span class="cta-t">Ведучий</span>
+        <span class="cta-d">Пульт з ключем доступу</span>
+      </button>
+    </div>
+
     <section class="cards-wrap">
-      <h2 class="sec-title">Гравці</h2>
-      <p v-if="sortedPlayers.length === 0" class="empty">Немає гравців у цій кімнаті (ще).</p>
+      <h2 class="sec-title">Персональні оверлеї</h2>
+      <p class="sec-sub">Клік по слоту — тільки цей гравець у OBS (камера + HUD).</p>
+      <p v-if="sortedPlayers.length === 0" class="empty">Ще немає гравців у Firestore для цієї кімнати.</p>
       <div v-else class="cards">
         <button
           v-for="p in sortedPlayers"
@@ -98,69 +127,87 @@ function applyGameFromInput() {
           type="button"
           class="pcard"
           :class="{ elim: p.eliminated === true }"
-          @click="openOverlay(p.id)"
+          @click="openPersonalOverlay(p.id)"
         >
-          <span class="num">{{ slotNum(p.id) }}</span>
+          <span class="num">Гравець {{ slotNum(p.id) }}</span>
           <span class="nm">{{ (p.name && String(p.name).trim()) || '—' }}</span>
           <span v-if="p.eliminated" class="badge">вибув</span>
         </button>
       </div>
     </section>
-
-    <footer class="join-foot">
-      <button type="button" class="btn-admin" @click="goAdmin">Admin</button>
-    </footer>
   </div>
 </template>
 
 <style scoped>
 .join {
+  position: relative;
   min-height: 100vh;
   box-sizing: border-box;
-  padding: 1.5rem 1.25rem 2.5rem;
-  max-width: 640px;
+  padding: 1.75rem 1.25rem 3rem;
+  max-width: 720px;
   margin: 0 auto;
   font-family: Inter, system-ui, sans-serif;
   color: #e2e8f0;
-  background: radial-gradient(120% 80% at 50% 0%, rgba(88, 28, 135, 0.35), transparent),
-    linear-gradient(180deg, #0a0614 0%, #050308 100%);
+  overflow-x: hidden;
 }
 
-.join-head {
+.join-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 100% 80% at 50% -20%, rgba(168, 85, 247, 0.28), transparent 55%),
+    linear-gradient(180deg, #070510 0%, #020108 100%);
+  pointer-events: none;
+}
+
+.join-hero,
+.game-bar,
+.cta-grid,
+.cards-wrap {
+  position: relative;
+  z-index: 1;
+}
+
+.join-hero {
   margin-bottom: 1.5rem;
+  text-align: center;
 }
 
 .eyebrow {
   margin: 0;
   font-size: 0.65rem;
   font-weight: 700;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: rgba(196, 181, 253, 0.45);
+  color: rgba(196, 181, 253, 0.5);
 }
 
 .title {
-  margin: 0.35rem 0 0.25rem;
+  margin: 0.5rem 0 0.4rem;
   font-family: Orbitron, sans-serif;
-  font-size: 1.35rem;
+  font-size: clamp(1.4rem, 4.5vw, 1.85rem);
   font-weight: 800;
   color: #faf5ff;
-  line-height: 1.2;
+  line-height: 1.15;
 }
 
-.sub {
+.lead {
   margin: 0;
-  font-size: 0.82rem;
-  line-height: 1.45;
-  color: rgba(186, 181, 200, 0.85);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: rgba(186, 181, 200, 0.88);
+  max-width: 34rem;
+  margin-inline: auto;
 }
 
 .game-bar {
-  margin-bottom: 1.75rem;
-  padding: 1rem 1.1rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.15rem;
   border-radius: 16px;
-  background: rgba(10, 8, 22, 0.75);
+  background: rgba(10, 8, 22, 0.82);
   border: 1px solid rgba(168, 85, 247, 0.2);
+  backdrop-filter: blur(10px);
 }
 
 .lbl {
@@ -179,30 +226,109 @@ function applyGameFromInput() {
 
 .inp {
   flex: 1;
-  padding: 0.55rem 0.7rem;
+  padding: 0.6rem 0.75rem;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(8, 6, 20, 0.9);
+  background: rgba(8, 6, 20, 0.92);
   color: #f1f5f9;
   font-size: 0.9rem;
 }
 
 .btn-go {
-  padding: 0.55rem 1rem;
+  padding: 0.6rem 1.1rem;
   border-radius: 12px;
   border: 1px solid rgba(168, 85, 247, 0.45);
-  background: rgba(88, 28, 135, 0.4);
+  background: rgba(88, 28, 135, 0.45);
   color: #fff;
   font-weight: 600;
   cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.btn-go:hover {
+  transform: scale(1.04);
+}
+
+.cta-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-bottom: 2rem;
+}
+
+.cta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 0.85rem;
+  row-gap: 0.15rem;
+  padding: 1rem 1.15rem;
+  text-align: left;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(12, 8, 24, 0.75);
+  color: inherit;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s,
+    box-shadow 0.18s;
+}
+
+.cta:hover {
+  transform: scale(1.02);
+  border-color: rgba(168, 85, 247, 0.45);
+  box-shadow: 0 0 28px rgba(168, 85, 247, 0.22);
+}
+
+.cta--obs:hover {
+  box-shadow: 0 0 32px rgba(56, 189, 248, 0.18);
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.cta--play:hover {
+  box-shadow: 0 0 32px rgba(74, 222, 128, 0.15);
+  border-color: rgba(74, 222, 128, 0.3);
+}
+
+.cta--host:hover {
+  box-shadow: 0 0 32px rgba(251, 191, 36, 0.15);
+  border-color: rgba(251, 191, 36, 0.35);
+}
+
+.cta-ico {
+  grid-row: span 2;
+  font-size: 1.65rem;
+  line-height: 1;
+  align-self: center;
+}
+
+.cta-t {
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-family: Orbitron, sans-serif;
+  color: #f5f3ff;
+}
+
+.cta-d {
+  font-size: 0.78rem;
+  color: rgba(186, 181, 200, 0.82);
+  line-height: 1.35;
 }
 
 .sec-title {
-  margin: 0 0 0.65rem;
-  font-size: 0.85rem;
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
   font-weight: 700;
   font-family: Orbitron, sans-serif;
   color: #ede9fe;
+}
+
+.sec-sub {
+  margin: 0 0 1rem;
+  font-size: 0.78rem;
+  color: rgba(196, 181, 253, 0.45);
+  line-height: 1.4;
 }
 
 .empty {
@@ -213,29 +339,31 @@ function applyGameFromInput() {
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 0.55rem;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 0.65rem;
 }
 
 .pcard {
   text-align: left;
-  padding: 0.75rem 0.85rem;
+  padding: 0.85rem 1rem;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(12, 8, 24, 0.88);
+  background: rgba(10, 6, 22, 0.88);
   color: inherit;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.35rem;
   transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
+    transform 0.18s ease,
+    border-color 0.18s,
+    box-shadow 0.18s;
 }
 
 .pcard:hover {
-  border-color: rgba(168, 85, 247, 0.45);
-  box-shadow: 0 0 18px rgba(168, 85, 247, 0.15);
+  transform: translateY(-2px) scale(1.02);
+  border-color: rgba(168, 85, 247, 0.5);
+  box-shadow: 0 8px 32px rgba(168, 85, 247, 0.2);
 }
 
 .pcard.elim {
@@ -243,15 +371,19 @@ function applyGameFromInput() {
   border-color: rgba(185, 28, 28, 0.35);
 }
 
+.pcard.elim:hover {
+  box-shadow: 0 8px 24px rgba(185, 28, 28, 0.15);
+}
+
 .num {
   font-family: Orbitron, sans-serif;
-  font-size: 0.7rem;
-  letter-spacing: 0.12em;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
   color: rgba(196, 181, 253, 0.55);
 }
 
 .nm {
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   font-weight: 700;
   color: #f5f3ff;
 }
@@ -263,27 +395,5 @@ function applyGameFromInput() {
   text-transform: uppercase;
   color: #fecaca;
   align-self: flex-start;
-}
-
-.join-foot {
-  margin-top: 2rem;
-  padding-top: 1rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.btn-admin {
-  padding: 0.5rem 1.1rem;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(0, 0, 0, 0.35);
-  color: rgba(226, 232, 240, 0.85);
-  font-size: 0.78rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.btn-admin:hover {
-  border-color: rgba(168, 85, 247, 0.4);
-  color: #fff;
 }
 </style>

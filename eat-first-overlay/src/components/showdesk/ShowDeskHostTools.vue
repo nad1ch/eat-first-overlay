@@ -1,5 +1,6 @@
 <script setup>
 defineProps({
+  mode: { type: String, default: 'live' }, // 'live' | 'settings'
   gameRoom: { type: Object, default: () => ({}) },
   playerSlots: { type: Array, default: () => [] },
   speakingDuration: { type: [Number, String], default: 30 },
@@ -30,12 +31,10 @@ function slotNum(slot) {
 </script>
 
 <template>
-  <section class="host-tools">
-    <h2 class="block-title">Control Center</h2>
-    <div class="row-actions">
-      <button type="button" class="btn-primary" @click="emit('start-round')">Start round</button>
-      <button type="button" class="btn-amber" @click="emit('pause-show')">Pause</button>
-      <button type="button" class="btn-danger" @click="emit('reset-room')">Reset</button>
+  <section v-if="mode === 'live'" class="host-tools host-tools--live">
+    <h2 class="block-title">Live control</h2>
+    <div class="row-actions row-actions--hero">
+      <button type="button" class="btn-amber btn-fat" @click="emit('pause-show')">Pause</button>
     </div>
 
     <p class="micro-label">Speaker</p>
@@ -72,12 +71,12 @@ function slotNum(slot) {
       <button type="button" class="btn-soft" @click="emit('clear-timer')">Reset</button>
     </div>
     <p class="hint-line">
-      Зараз говорить:
+      Говорить:
       <strong>{{ String(gameRoom.currentSpeaker || '').trim() || '—' }}</strong>
-      <span v-if="gameRoom.timerPaused" class="paused">· на паузі</span>
+      <span v-if="gameRoom.timerPaused" class="paused">· пауза</span>
     </p>
 
-    <p class="micro-label">Spotlight (оверлей)</p>
+    <p class="micro-label">Spotlight</p>
     <div class="chip-row">
       <button
         v-for="slot in playerSlots"
@@ -90,6 +89,15 @@ function slotNum(slot) {
         {{ slotNum(slot) }}
       </button>
       <button type="button" class="btn-soft" @click="emit('spotlight-clear')">Вимкнути</button>
+    </div>
+    <p class="hint-mini">Клік по гравцю в ростері: спікер + таймер · Shift+клік: spotlight</p>
+  </section>
+
+  <section v-else class="host-tools host-tools--settings">
+    <h2 class="block-title">Налаштування кімнати</h2>
+    <div class="row-actions">
+      <button type="button" class="btn-primary" @click="emit('start-round')">Start round</button>
+      <button type="button" class="btn-danger" @click="emit('reset-room')">Reset room</button>
     </div>
 
     <p class="micro-label">Фаза шоу</p>
@@ -112,9 +120,13 @@ function slotNum(slot) {
 .host-tools {
   padding: 1.15rem 1.25rem;
   border-radius: 20px;
-  background: rgba(10, 8, 22, 0.72);
+  background: rgba(10, 8, 22, 0.78);
   border: 1px solid rgba(168, 85, 247, 0.22);
   margin-bottom: 1.25rem;
+}
+
+.host-tools--live {
+  border-color: rgba(168, 85, 247, 0.35);
 }
 
 .block-title {
@@ -132,6 +144,10 @@ function slotNum(slot) {
   margin-bottom: 1rem;
 }
 
+.row-actions--hero {
+  margin-bottom: 1.15rem;
+}
+
 .row-actions.tight {
   margin-top: 0.5rem;
   margin-bottom: 0.65rem;
@@ -147,6 +163,14 @@ function slotNum(slot) {
   font-weight: 600;
   cursor: pointer;
   border: 1px solid transparent;
+  transition: transform 0.15s ease;
+}
+
+.btn-primary:hover,
+.btn-amber:hover,
+.btn-danger:hover,
+.btn-soft:hover {
+  transform: scale(1.03);
 }
 
 .btn-primary {
@@ -158,6 +182,13 @@ function slotNum(slot) {
 .btn-primary.wide {
   flex: 1;
   min-width: 100px;
+}
+
+.btn-fat {
+  flex: 1;
+  min-height: 2.75rem;
+  font-size: 0.95rem;
+  font-weight: 700;
 }
 
 .btn-amber {
@@ -202,6 +233,11 @@ function slotNum(slot) {
   background: rgba(0, 0, 0, 0.25);
   color: #cbd5e1;
   cursor: pointer;
+  transition: transform 0.12s ease;
+}
+
+.chip:hover {
+  transform: scale(1.04);
 }
 
 .chip.on {
@@ -216,13 +252,20 @@ function slotNum(slot) {
 }
 
 .hint-line {
-  margin: 0 0 1rem;
+  margin: 0 0 0.85rem;
   font-size: 0.8rem;
   color: rgba(186, 181, 200, 0.9);
 }
 
 .hint-line strong {
   color: #e9d5ff;
+}
+
+.hint-mini {
+  margin: 0;
+  font-size: 0.65rem;
+  line-height: 1.4;
+  color: rgba(196, 181, 253, 0.4);
 }
 
 .paused {
