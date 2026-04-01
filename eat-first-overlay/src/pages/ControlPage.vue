@@ -189,14 +189,24 @@ watch(
   },
 )
 
+watch(
+  () => String(gameRoom.value?.currentSpeaker ?? '').trim(),
+  (c) => {
+    if (c && PLAYER_SLOTS.includes(c)) timerSpeakerSlot.value = c
+  },
+  { immediate: true },
+)
+
 const scenarioForRolls = computed(
   () => String(gameRoom.value?.activeScenario || selectedScenario.value || 'classic_crash'),
 )
 
 const myStatusLabel = computed(() => {
   if (characterState.eliminated) return 'ВИБУВ'
+  const sp = String(gameRoom.value?.currentSpeaker ?? '').trim()
+  if (sp && sp === playerId.value) return 'ГОВОРИШ'
   const ap = String(gameRoom.value?.activePlayer ?? '').trim()
-  if (ap && ap === playerId.value) return 'АКТИВНИЙ'
+  if (ap && ap === playerId.value) return 'SPOTLIGHT'
   return 'ЧЕКАЄШ'
 })
 
@@ -334,6 +344,26 @@ async function setSpotlightPlayer(slot) {
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
+}
+
+async function setRoomSpeaker(slot) {
+  if (!isAdmin.value) return
+  const s = String(slot ?? '').trim()
+  if (!s) return
+  try {
+    loadError.value = null
+    timerSpeakerSlot.value = s
+    await saveGameRoom(gameId.value, { currentSpeaker: s })
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function onRosterPick(id) {
+  const sid = String(id ?? '').trim()
+  if (!sid) return
+  await setRoomSpeaker(sid)
+  goToPlayer(sid)
 }
 
 function generateRandomCharacter() {
@@ -568,13 +598,13 @@ function rerollActiveCardOnly() {
       <ShowDeskHostTools
         :game-room="gameRoom"
         :player-slots="PLAYER_SLOTS"
-        v-model:timer-speaker-slot="timerSpeakerSlot"
         v-model:speaking-duration="speakingDuration"
         :phase-options="PHASE_OPTIONS"
         @start-round="controlStartRound"
         @pause-show="controlPauseShow"
         @reset-room="controlReset"
         @set-phase="setPhase"
+        @set-speaker="setRoomSpeaker"
         @start-timer="adminStartSpeakingTimer"
         @pause-timer="adminPauseTimerOnly"
         @resume-timer="adminResumeTimer"
@@ -587,8 +617,10 @@ function rerollActiveCardOnly() {
         <ShowPlayersRoster
           :players="allPlayers"
           :current-player-id="playerId"
-          :active-speaker-id="String(gameRoom.activePlayer || '')"
-          @select="goToPlayer"
+          :spotlight-player-id="String(gameRoom.activePlayer || '')"
+          :speaker-id="String(gameRoom.currentSpeaker || '')"
+          @pick="onRosterPick"
+          @set-spotlight="setSpotlightPlayer"
         />
 
         <aside class="side-tools">
@@ -631,9 +663,11 @@ function rerollActiveCardOnly() {
         </div>
       </div>
       <div v-else class="player-meta">
-        <p><span class="mk">Ім’я</span> {{ characterState.name || '—' }}</p>
-        <p><span class="mk">Вік</span> {{ characterState.age || '—' }}</p>
-        <p><span class="mk">Гендер</span> {{ characterState.gender || '—' }}</p>
+        <template v-if="characterState.identityRevealed">
+          <p><span class="mk">Ім’я</span> {{ characterState.name || '—' }}</p>
+          <p><span class="mk">Вік · гендер</span> {{ characterState.age || '—' }} · {{ characterState.gender || '—' }}</p>
+        </template>
+        <p v-else class="meta-locked">Профіль на шоу ще закритий — ведучий відкриє пізніше.</p>
       </div>
 
       <div v-if="isAdmin" class="traits-grid">
@@ -654,6 +688,17 @@ function rerollActiveCardOnly() {
       <div class="active-card-box">
         <h3 class="ac-title">Активна карта</h3>
         <template v-if="isAdmin">
+          <div v-if="characterState.activeCardRequest" class="card-request-host">
+            <p class="card-request-host__text">Гравець хоче використати карту на шоу.</p>
+            <button
+              type="button"
+              class="btn-confirm-card"
+              :disabled="characterState.activeCard.used"
+              @click="confirmActiveCardEffect"
+            >
+              ПІДТВЕРДИТИ КАРТУ
+            </button>
+          </div>
           <input v-model="characterState.activeCard.title" type="text" class="input" placeholder="Заголовок" />
           <textarea v-model="characterState.activeCard.description" class="textarea" rows="3" placeholder="Опис" />
           <p class="ac-meta">effectId: <code>{{ characterState.activeCard.effectId || '—' }}</code></p>
@@ -668,12 +713,13 @@ function rerollActiveCardOnly() {
               Зняти запит гравця
             </button>
             <button
+              v-if="!characterState.activeCardRequest"
               type="button"
               class="btn-primary"
               :disabled="characterState.activeCard.used"
               @click="confirmActiveCardEffect"
             >
-              Підтвердити ефект карти
+              Застосувати ефект (без запиту)
             </button>
           </div>
         </template>
@@ -681,16 +727,16 @@ function rerollActiveCardOnly() {
           <p class="ac-t">{{ characterState.activeCard.title || '—' }}</p>
           <p class="ac-d">{{ characterState.activeCard.description || '—' }}</p>
           <p v-if="characterState.activeCard.used" class="ac-used">Використано</p>
+          <p v-else-if="characterState.activeCardRequest" class="ac-pending">
+            Очікує підтвердження ведучого
+          </p>
           <button
             v-else
             type="button"
             class="btn-request"
-            :disabled="characterState.activeCardRequest"
             @click="requestCardFromHost"
           >
-            {{
-              characterState.activeCardRequest ? 'Запит надіслано ведучому' : 'Хочу використати карту'
-            }}
+            Використати карту
           </button>
         </template>
       </div>
@@ -708,18 +754,26 @@ function rerollActiveCardOnly() {
     </section>
 
     <section v-if="isAdmin" class="panel reveal-panel">
-      <h2 class="panel-kicker">Відкриття карт на оверлеї</h2>
-      <div class="reveal-grid">
+      <h2 class="panel-kicker">Відкриття на оверлеї</h2>
+      <p class="reveal-hint">Клік по чіпу — відкрити / сховати значення та анімацію reveal.</p>
+      <div class="reveal-chips">
+        <button
+          type="button"
+          class="reveal-chip"
+          :class="{ on: characterState.identityRevealed }"
+          @click="characterState.identityRevealed = !characterState.identityRevealed"
+        >
+          Ім’я / вік / гендер <span class="chip-mark">{{ characterState.identityRevealed ? '✔' : '❌' }}</span>
+        </button>
         <button
           v-for="row in fieldConfig"
           :key="'rv-' + row.key"
           type="button"
-          class="reveal-tile"
+          class="reveal-chip"
           :class="{ on: characterState[row.key].revealed }"
           @click="characterState[row.key].revealed = !characterState[row.key].revealed"
         >
-          <span class="rt-label">{{ row.label }}</span>
-          <span class="rt-state">{{ characterState[row.key].revealed ? 'Відкрито' : 'Закрито' }}</span>
+          {{ row.label }} <span class="chip-mark">{{ characterState[row.key].revealed ? '✔' : '❌' }}</span>
         </button>
       </div>
     </section>
@@ -756,18 +810,17 @@ function rerollActiveCardOnly() {
 
     <section v-if="!isAdmin" class="panel reveal-player">
       <h2 class="panel-kicker">Твої картки</h2>
-      <div class="reveal-grid">
+      <div class="reveal-chips">
         <button
           v-for="row in fieldConfig"
           :key="'pv-' + row.key"
           type="button"
-          class="reveal-tile"
+          class="reveal-chip"
           :class="{ on: characterState[row.key].revealed }"
           :disabled="playerRevealLocked"
           @click="toggle(row.key)"
         >
-          <span class="rt-label">{{ row.label }}</span>
-          <span class="rt-state">{{ characterState[row.key].revealed ? 'Відкрито' : 'Закрито' }}</span>
+          {{ row.label }} <span class="chip-mark">{{ characterState[row.key].revealed ? '✔' : '❌' }}</span>
         </button>
       </div>
     </section>
@@ -816,8 +869,13 @@ function rerollActiveCardOnly() {
   color: #f5f3ff;
 }
 
-.status-pill[data-s='АКТИВНИЙ'] {
-  border-color: rgba(251, 191, 36, 0.45);
+.status-pill[data-s='ГОВОРИШ'] {
+  border-color: rgba(251, 191, 36, 0.55);
+  background: rgba(120, 53, 15, 0.28);
+}
+
+.status-pill[data-s='SPOTLIGHT'] {
+  border-color: rgba(168, 85, 247, 0.55);
 }
 
 .status-pill[data-s='ВИБУВ'] {
@@ -937,6 +995,53 @@ function rerollActiveCardOnly() {
   color: #e2e8f0;
 }
 
+.meta-locked {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: rgba(196, 181, 253, 0.65);
+}
+
+.ac-pending {
+  margin: 0.65rem 0 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #fde68a;
+}
+
+.card-request-host {
+  margin-bottom: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 14px;
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  background: rgba(88, 28, 135, 0.22);
+}
+
+.card-request-host__text {
+  margin: 0 0 0.75rem;
+  font-size: 0.88rem;
+  color: #e9d5ff;
+}
+
+.btn-confirm-card {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  border: 1px solid rgba(168, 85, 247, 0.55);
+  background: linear-gradient(180deg, rgba(139, 92, 246, 0.45), rgba(88, 28, 135, 0.55));
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.btn-confirm-card:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .mk {
   display: inline-block;
   min-width: 4.5rem;
@@ -1052,6 +1157,50 @@ function rerollActiveCardOnly() {
   border-color: rgba(74, 222, 128, 0.4);
   background: rgba(22, 101, 52, 0.3);
   color: #bbf7d0;
+}
+
+.reveal-hint {
+  margin: -0.35rem 0 0.75rem;
+  font-size: 0.72rem;
+  color: rgba(196, 181, 253, 0.5);
+  line-height: 1.35;
+}
+
+.reveal-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.reveal-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.28);
+  color: #e2e8f0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.reveal-chip.on {
+  border-color: rgba(168, 85, 247, 0.5);
+  background: rgba(88, 28, 135, 0.3);
+}
+
+.reveal-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.chip-mark {
+  font-size: 0.85rem;
 }
 
 .reveal-grid {

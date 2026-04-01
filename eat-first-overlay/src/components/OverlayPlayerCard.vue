@@ -7,7 +7,10 @@ const HUD_RIGHT = ['luggage', 'fact', 'quirk']
 
 const props = defineProps({
   player: { type: Object, required: true },
-  highlighted: { type: Boolean, default: false },
+  /** Spotlight (activePlayer) */
+  isSpotlight: { type: Boolean, default: false },
+  /** Таймер лише для currentSpeaker */
+  isTimerTarget: { type: Boolean, default: false },
   solo: { type: Boolean, default: false },
   cinema: { type: Boolean, default: false },
   speakerTimeLeft: { type: Number, default: undefined },
@@ -25,21 +28,30 @@ function chunkFor(player, key) {
   return { value: '', revealed: false }
 }
 
-function displayStat(player, fieldKey) {
+function statDisplay(player, fieldKey) {
   const c = chunkFor(player, fieldKey)
-  if (!c.revealed) return '❓'
+  if (!c.revealed) return { mode: 'label', text: labelByKey.value[fieldKey] }
   const v = String(c.value ?? '').trim()
-  return v.length ? v : '—'
+  return { mode: 'value', text: v.length ? v : '—' }
 }
 
-function displayLine(val) {
-  const s = String(val ?? '').trim()
-  return s.length ? s : '—'
+function identityRevealed(player) {
+  return player.identityRevealed === true
 }
 
-function displayName(player) {
+function displayNameLine(player) {
+  if (!identityRevealed(player)) return { hidden: true, text: '' }
   const n = String(player.name ?? '').trim()
-  return n.length ? n : '—'
+  return { hidden: false, text: n.length ? n : '—' }
+}
+
+function displayAgeGenderLine(player) {
+  if (!identityRevealed(player)) return { hidden: true, text: '' }
+  const a = String(player.age ?? '').trim()
+  const g = String(player.gender ?? '').trim()
+  const left = a.length ? a : '—'
+  const right = g.length ? g : '—'
+  return { hidden: false, text: `${left} · ${right}` }
 }
 
 function isEliminated(player) {
@@ -64,27 +76,36 @@ function activeCardFrom(player) {
     return { title: '', description: '', used: false }
   }
   return {
-    title: String(ac.title ?? '').trim() || '—',
-    description: String(ac.description ?? '').trim() || '—',
+    title: String(ac.title ?? '').trim(),
+    description: String(ac.description ?? '').trim(),
     used: Boolean(ac.used),
   }
 }
 
 const showSpeakerTimer = computed(
-  () => props.highlighted && typeof props.speakerTimeLeft === 'number',
+  () => props.isTimerTarget && typeof props.speakerTimeLeft === 'number',
 )
 
-const timerRingStyle = computed(() => {
-  if (!showSpeakerTimer.value) return {}
-  const gr = 3
+const ringPct = computed(() => {
+  if (!showSpeakerTimer.value) return 0
   const total = Math.max(1, props.speakerTimerTotal || 30)
   const left = Math.max(0, props.speakerTimeLeft)
-  const pct = Math.min(100, (left / total) * 100)
+  return Math.min(100, (left / total) * 100)
+})
+
+const timerRingStyle = computed(() => {
+  const pct = ringPct.value
   return {
-    background: `conic-gradient(rgba(167, 139, 250, 0.92) ${pct}%, rgba(255,255,255,0.1) 0)`,
-    WebkitMask: `radial-gradient(farthest-side, transparent calc(100% - ${gr}px), #000 calc(100% - ${gr}px + 1px))`,
-    mask: `radial-gradient(farthest-side, transparent calc(100% - ${gr}px), #000 calc(100% - ${gr}px + 1px))`,
+    background: `conic-gradient(#a855f7 ${pct}%, rgba(255,255,255,0.12) 0)`,
+    WebkitMask: 'radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px))',
+    mask: 'radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px))',
   }
+})
+
+const acChipTitle = computed(() => {
+  const t = activeCardFrom(props.player).title
+  if (!t) return 'Карта'
+  return t.length > 22 ? `${t.slice(0, 20)}…` : t
 })
 </script>
 
@@ -93,7 +114,8 @@ const timerRingStyle = computed(() => {
     v-if="!solo"
     class="card-grid"
     :class="{
-      'card-grid--active': highlighted,
+      'card-grid--spotlight': isSpotlight,
+      'card-grid--timer': isTimerTarget,
       'card-grid--eliminated': isEliminated(player),
       'card-grid--cinema': cinema,
     }"
@@ -102,28 +124,41 @@ const timerRingStyle = computed(() => {
       <div v-if="isEliminated(player)" class="eliminated-badge" aria-hidden="true">ВИБУВ</div>
     </Transition>
     <div v-if="showSpeakerTimer" class="card-grid-timer" aria-hidden="true">
-      <span class="card-grid-timer-ring" :style="timerRingStyle" />
-      <span class="card-grid-timer-text">{{ speakerTimeLeft }}s</span>
+      <div class="timer-ring-wrap">
+        <span class="timer-ring" :style="timerRingStyle" />
+        <span class="timer-num">⏱ {{ speakerTimeLeft }}s</span>
+      </div>
     </div>
     <div
       class="card-grid-body"
       :class="{ 'card-grid-body--eliminated': isEliminated(player) }"
     >
       <p class="card-grid-id">{{ playerIdDisplay(player) }}</p>
-      <h2 class="card-grid-name">{{ displayName(player) }}</h2>
+      <h2 class="card-grid-name">
+        <span v-if="!identityRevealed(player)" class="placeholder">•••</span>
+        <span v-else>{{ displayNameLine(player).text }}</span>
+      </h2>
+      <p class="card-grid-meta">
+        <span v-if="!identityRevealed(player)" class="placeholder">••• · •••</span>
+        <span v-else>{{ displayAgeGenderLine(player).text }}</span>
+      </p>
       <ul class="stats">
         <li v-for="row in fieldConfig" :key="row.key">
-          <span class="label">{{ row.label }}</span>
           <span
             :key="valueRevealKey(player, row.key)"
-            class="value"
+            class="stat-cell"
             :class="{
-              hidden: !chunkFor(player, row.key).revealed,
-              'value--revealed': chunkFor(player, row.key).revealed,
-              'value--drama-reveal': drama && chunkFor(player, row.key).revealed,
+              'stat-cell--open': chunkFor(player, row.key).revealed,
+              'stat-cell--wave': chunkFor(player, row.key).revealed,
+              'stat-cell--drama': drama && chunkFor(player, row.key).revealed,
             }"
           >
-            {{ displayStat(player, row.key) }}
+            <template v-if="!chunkFor(player, row.key).revealed">
+              {{ labelByKey[row.key] }}
+            </template>
+            <template v-else>
+              {{ statDisplay(player, row.key).text }}
+            </template>
           </span>
         </li>
       </ul>
@@ -135,7 +170,7 @@ const timerRingStyle = computed(() => {
     class="hud-root hud-root--solo"
     :class="{
       'hud-root--eliminated': isEliminated(player),
-      'hud-root--active': highlighted,
+      'hud-root--spotlight': isSpotlight,
       'hud-root--cinema': cinema,
       'hud-root--drama': drama,
     }"
@@ -144,69 +179,68 @@ const timerRingStyle = computed(() => {
       <div v-if="isEliminated(player)" class="hud-eliminated-badge" aria-hidden="true">ВИБУВ</div>
     </Transition>
 
-    <div class="hud-zones hud-zones--solo">
-      <div class="hud-col-left">
-        <div class="hud-block hud-tl">
-          <p class="hud-meta-line hud-meta-name">
-            <span class="hud-meta-k">Ім’я</span>
-            <span class="hud-meta-v">{{ displayName(player) }}</span>
-          </p>
-          <p class="hud-meta-line">
-            <span class="hud-meta-k">Вік</span>
-            <span class="hud-meta-v">{{ displayLine(player.age) }}</span>
-          </p>
-          <p class="hud-meta-line">
-            <span class="hud-meta-k">Гендер</span>
-            <span class="hud-meta-v">{{ displayLine(player.gender) }}</span>
-          </p>
-        </div>
+    <div
+      v-if="solo && (activeCardFrom(player).title || activeCardFrom(player).description)"
+      class="ac-chip"
+      :class="{ 'ac-chip--used': activeCardFrom(player).used }"
+      :title="activeCardFrom(player).description || activeCardFrom(player).title"
+    >
+      <span class="ac-chip-ico">🃏</span>
+      <span class="ac-chip-t">{{ acChipTitle }}</span>
+    </div>
 
-        <div class="hud-block hud-aml">
-          <p class="hud-aml-k">Активна карта</p>
-          <p class="hud-aml-title">{{ activeCardFrom(player).title }}</p>
-          <p class="hud-aml-desc">{{ activeCardFrom(player).description }}</p>
-          <p v-if="activeCardFrom(player).used" class="hud-aml-used">Використано</p>
-        </div>
+    <div class="hud-zones">
+      <div class="hud-block hud-tl">
+        <p class="hud-line hud-line--name">
+          <span v-if="!identityRevealed(player)" class="hud-ph">•••</span>
+          <span v-else>{{ displayNameLine(player).text }}</span>
+        </p>
+        <p class="hud-line hud-line--sub">
+          <span v-if="!identityRevealed(player)" class="hud-ph">••• · •••</span>
+          <span v-else>{{ displayAgeGenderLine(player).text }}</span>
+        </p>
       </div>
 
       <div class="hud-block hud-tr">
         <span class="hud-slot">{{ playerIdDisplay(player) }}</span>
-        <div v-if="showSpeakerTimer" class="hud-timer-wrap">
-          <span class="hud-timer-ring" :style="timerRingStyle" aria-hidden="true" />
-          <span class="hud-timer">{{ speakerTimeLeft }}s</span>
+        <div v-if="showSpeakerTimer" class="hud-timer-stack">
+          <div class="hud-ring-wrap">
+            <span class="hud-ring" :style="timerRingStyle" />
+            <span class="hud-timer-label">⏱ {{ speakerTimeLeft }}s</span>
+          </div>
         </div>
       </div>
 
       <div class="hud-block hud-bl">
-        <div v-for="key in HUD_LEFT" :key="key" class="hud-row">
-          <span class="hud-label">{{ labelByKey[key] }}</span>
+        <div v-for="key in HUD_LEFT" :key="key" class="hud-stat">
           <span
             :key="valueRevealKey(player, key)"
-            class="hud-value"
+            class="hud-stat-inner"
             :class="{
-              'hud-value--hidden': !chunkFor(player, key).revealed,
-              'value--revealed': chunkFor(player, key).revealed,
-              'value--drama-reveal': drama && chunkFor(player, key).revealed,
+              'hud-stat-inner--open': chunkFor(player, key).revealed,
+              'hud-stat-inner--wave': chunkFor(player, key).revealed,
+              'hud-stat-inner--drama': drama && chunkFor(player, key).revealed,
             }"
           >
-            {{ displayStat(player, key) }}
+            <template v-if="!chunkFor(player, key).revealed">{{ labelByKey[key] }}</template>
+            <template v-else>{{ statDisplay(player, key).text }}</template>
           </span>
         </div>
       </div>
 
       <div class="hud-block hud-br">
-        <div v-for="key in HUD_RIGHT" :key="key" class="hud-row">
-          <span class="hud-label">{{ labelByKey[key] }}</span>
+        <div v-for="key in HUD_RIGHT" :key="key" class="hud-stat">
           <span
             :key="valueRevealKey(player, key)"
-            class="hud-value"
+            class="hud-stat-inner"
             :class="{
-              'hud-value--hidden': !chunkFor(player, key).revealed,
-              'value--revealed': chunkFor(player, key).revealed,
-              'value--drama-reveal': drama && chunkFor(player, key).revealed,
+              'hud-stat-inner--open': chunkFor(player, key).revealed,
+              'hud-stat-inner--wave': chunkFor(player, key).revealed,
+              'hud-stat-inner--drama': drama && chunkFor(player, key).revealed,
             }"
           >
-            {{ displayStat(player, key) }}
+            <template v-if="!chunkFor(player, key).revealed">{{ labelByKey[key] }}</template>
+            <template v-else>{{ statDisplay(player, key).text }}</template>
           </span>
         </div>
       </div>
@@ -218,106 +252,129 @@ const timerRingStyle = computed(() => {
 .card-grid {
   position: relative;
   padding: 0;
-  border-radius: 16px;
-  background: rgba(14, 12, 28, 0.88);
-  border: 1px solid rgba(167, 139, 250, 0.18);
-  box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  border-radius: 14px;
+  background: rgba(12, 8, 28, 0.92);
+  border: 1px solid rgba(168, 85, 247, 0.28);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
   overflow: hidden;
-  transition: border-color 0.32s ease, box-shadow 0.32s ease, transform 0.35s ease;
+  transition:
+    transform 0.35s ease,
+    box-shadow 0.35s ease,
+    border-color 0.35s ease;
+}
+
+.card-grid--spotlight {
+  transform: scale(1.03);
+  border-color: rgba(168, 85, 247, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(168, 85, 247, 0.35),
+    0 0 24px rgba(168, 85, 247, 0.22);
+}
+
+.card-grid--timer {
+  animation: timerPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes timerPulse {
+  0%,
+  100% {
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+  }
+  50% {
+    box-shadow:
+      0 8px 28px rgba(0, 0, 0, 0.4),
+      0 0 20px rgba(168, 85, 247, 0.2);
+  }
 }
 
 .card-grid-timer {
   position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
+  top: 0.45rem;
+  right: 0.45rem;
   z-index: 3;
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.2rem 0.45rem 0.2rem 0.35rem;
-  border-radius: 999px;
-  background: rgba(8, 6, 22, 0.82);
-  border: 1px solid rgba(167, 139, 250, 0.4);
-  box-shadow: 0 0 14px rgba(124, 58, 237, 0.25);
   pointer-events: none;
 }
 
-.card-grid-timer-ring {
-  width: 26px;
-  height: 26px;
+.timer-ring-wrap {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+}
+
+.timer-ring {
+  position: absolute;
+  inset: 0;
   border-radius: 50%;
-  flex-shrink: 0;
+  transition: background 0.35s linear;
 }
 
-.card-grid-timer-text {
-  font-size: 0.7rem;
+.timer-num {
+  position: relative;
+  z-index: 1;
+  font-size: 0.62rem;
   font-weight: 800;
-  letter-spacing: 0.06em;
-  color: #f5f3ff;
-  font-family: 'Orbitron', ui-sans-serif, system-ui, sans-serif;
-}
-
-.card-grid--cinema {
-  border-radius: 18px;
+  color: #faf5ff;
+  font-family: 'Orbitron', sans-serif;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
 }
 
 .card-grid-body {
-  padding: 1rem 1.1rem 1.15rem;
-  transition: opacity 0.32s ease, filter 0.32s ease;
+  padding: 0.85rem 0.95rem 1rem;
 }
 
 .card-grid-body--eliminated {
-  opacity: 0.35;
-  filter: grayscale(1);
-}
-
-.card-grid--active {
-  transform: scale(1.04);
-  z-index: 2;
-  border-color: rgba(167, 139, 250, 0.5);
-  box-shadow:
-    0 0 0 1px rgba(167, 139, 250, 0.35),
-    0 0 28px rgba(124, 58, 237, 0.35),
-    0 16px 40px rgba(0, 0, 0, 0.5);
+  opacity: 0.42;
+  filter: grayscale(0.9);
 }
 
 .card-grid--eliminated {
-  background: rgba(24, 10, 14, 0.9);
   border-color: rgba(185, 28, 28, 0.45);
+  background: rgba(28, 10, 16, 0.92);
 }
 
 .eliminated-badge {
   position: absolute;
-  top: 0.55rem;
-  left: 0.55rem;
+  top: 0.45rem;
+  left: 0.45rem;
   z-index: 2;
-  padding: 0.2rem 0.45rem;
+  padding: 0.15rem 0.4rem;
   border-radius: 6px;
-  font-size: 0.62rem;
+  font-size: 0.58rem;
   font-weight: 800;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   color: #fecaca;
-  background: rgba(80, 15, 22, 0.82);
-  border: 1px solid rgba(248, 113, 113, 0.4);
+  background: rgba(70, 12, 18, 0.9);
+  border: 1px solid rgba(248, 113, 113, 0.35);
   pointer-events: none;
 }
 
 .card-grid-id {
-  margin: 0 0 0.25rem;
-  font-size: 0.65rem;
-  letter-spacing: 0.12em;
+  margin: 0 0 0.2rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
   color: rgba(196, 181, 253, 0.55);
   font-family: 'Orbitron', sans-serif;
 }
 
 .card-grid-name {
-  margin: 0 0 0.65rem;
-  font-size: clamp(0.95rem, 2vw, 1.1rem);
-  font-weight: 600;
-  color: #e9d5ff;
-  line-height: 1.25;
+  margin: 0 0 0.15rem;
+  font-size: clamp(0.95rem, 2vw, 1.05rem);
+  font-weight: 700;
+  color: #f5f3ff;
+  line-height: 1.2;
+}
+
+.card-grid-meta {
+  margin: 0 0 0.55rem;
+  font-size: 0.8rem;
+  color: rgba(226, 232, 240, 0.88);
+}
+
+.placeholder {
+  letter-spacing: 0.2em;
+  color: rgba(196, 181, 253, 0.45);
 }
 
 .stats {
@@ -326,78 +383,65 @@ const timerRingStyle = computed(() => {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.35rem;
 }
 
 .stats li {
-  display: grid;
-  grid-template-columns: 1fr minmax(0, 1.15fr);
-  gap: 0.5rem;
-  align-items: baseline;
-  padding: 0.4rem 0.5rem;
+  margin: 0;
+}
+
+.stat-cell {
+  display: block;
+  padding: 0.38rem 0.5rem;
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.label {
-  font-size: 0.68rem;
-  color: rgba(226, 232, 255, 0.45);
-}
-
-.value {
-  display: inline-block;
-  font-size: 0.75rem;
-  color: #f1f5ff;
-  text-align: right;
-  word-break: break-word;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 0.72rem;
   font-weight: 600;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  color: rgba(196, 181, 253, 0.75);
+  text-align: right;
+  line-height: 1.35;
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease;
 }
 
-.value.hidden {
-  font-size: 0.85rem;
-  opacity: 0.9;
+.stat-cell--open {
+  color: #f8fafc;
+  border-color: rgba(168, 85, 247, 0.25);
+  text-align: right;
 }
 
-.value--revealed {
-  animation: flashReveal 0.4s ease-out forwards;
+.stat-cell--wave {
+  animation: revealWave 0.55s ease-out;
 }
 
-@keyframes flashReveal {
+.stat-cell--drama {
+  animation: revealWave 0.85s ease-out;
+}
+
+@keyframes revealWave {
   0% {
     opacity: 0;
-    filter: blur(6px);
-    transform: scale(0.98);
+    filter: blur(8px);
+    transform: scale(0.97);
+  }
+  45% {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1.02);
+    text-shadow: 0 0 12px rgba(168, 85, 247, 0.45);
   }
   100% {
     opacity: 1;
-    filter: blur(0);
     transform: scale(1);
-  }
-}
-
-.value--drama-reveal {
-  animation: flashRevealDrama 1s ease-out forwards;
-}
-
-@keyframes flashRevealDrama {
-  0% {
-    opacity: 0;
-    filter: blur(10px);
-  }
-  50% {
-    box-shadow: 0 0 16px rgba(185, 28, 28, 0.35);
-  }
-  100% {
-    opacity: 1;
-    filter: blur(0);
+    text-shadow: none;
   }
 }
 
 .badge-pop-enter-active,
 .badge-pop-leave-active {
-  transition: opacity 0.28s ease, transform 0.28s ease;
+  transition: opacity 0.25s ease, transform 0.25s ease;
 }
 
 .badge-pop-enter-from,
@@ -414,261 +458,209 @@ const timerRingStyle = computed(() => {
   min-height: min(100vh, 100%);
   pointer-events: none;
   box-sizing: border-box;
+  background: transparent;
 }
 
-.hud-root--solo {
-  background: transparent;
+.hud-root--spotlight .hud-block {
+  border-color: rgba(168, 85, 247, 0.42);
+  box-shadow: 0 0 18px rgba(168, 85, 247, 0.12);
+}
+
+.hud-eliminated-badge {
+  position: absolute;
+  top: 0.4rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  padding: 0.2rem 0.55rem;
+  border-radius: 8px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: #fecaca;
+  background: rgba(50, 10, 14, 0.88);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+}
+
+.ac-chip {
+  position: absolute;
+  bottom: clamp(0.55rem, 2vh, 1rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: min(88vw, 320px);
+  padding: 0.28rem 0.55rem 0.28rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(10, 6, 22, 0.92);
+  border: 1px solid rgba(168, 85, 247, 0.38);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.ac-chip--used {
+  opacity: 0.65;
+  border-color: rgba(148, 163, 184, 0.35);
+}
+
+.ac-chip-ico {
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.ac-chip-t {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #ede9fe;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .hud-zones {
   position: absolute;
   inset: 0;
-  z-index: 1;
-}
-
-.hud-eliminated-badge {
-  position: absolute;
-  top: clamp(0.5rem, 1.5vh, 1rem);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 6;
-  padding: 0.25rem 0.7rem;
-  border-radius: 8px;
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  color: #fecaca;
-  background: rgba(60, 12, 18, 0.75);
-  border: 1px solid rgba(248, 113, 113, 0.4);
-  pointer-events: none;
-}
-
-.hud-zones--solo {
-  animation: none;
-}
-
-.hud-root--active .hud-zones--solo {
-  animation: none;
-}
-
-.hud-col-left {
-  position: absolute;
-  top: clamp(0.5rem, 1.5vh, 1.25rem);
-  left: clamp(0.5rem, 1.5vw, 1.25rem);
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  max-width: min(42vw, 300px);
   z-index: 2;
 }
 
 .hud-block {
-  padding: 0.45rem 0.6rem;
+  position: absolute;
+  padding: 0.42rem 0.55rem;
   border-radius: 12px;
-  background: rgba(8, 6, 22, 0.45);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(167, 139, 250, 0.22);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
-  opacity: 0;
-  animation: hudFadeIn 0.45s ease-out forwards;
+  background: rgba(8, 6, 20, 0.93);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(168, 85, 247, 0.28);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  max-width: min(40vw, 280px);
 }
 
 .hud-tl {
-  position: relative;
-  top: auto;
-  left: auto;
-  max-width: none;
-  width: 100%;
-}
-
-.hud-aml {
-  position: relative;
-  padding: 0.4rem 0.55rem;
-}
-
-.hud-aml-k {
-  margin: 0 0 0.2rem;
-  font-size: 9px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: rgba(196, 181, 253, 0.65);
-}
-
-.hud-aml-title {
-  margin: 0 0 0.25rem;
-  font-size: clamp(12px, 2vw, 13px);
-  font-weight: 700;
-  color: #f5f3ff;
-  line-height: 1.25;
-}
-
-.hud-aml-desc {
-  margin: 0;
-  font-size: clamp(10px, 1.65vw, 11px);
-  line-height: 1.35;
-  color: rgba(226, 232, 240, 0.82);
-}
-
-.hud-aml-used {
-  margin: 0.35rem 0 0;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: rgba(167, 139, 250, 0.95);
+  top: clamp(0.45rem, 1.2vh, 1rem);
+  left: clamp(0.45rem, 1.2vw, 1rem);
 }
 
 .hud-tr {
-  position: absolute;
-  top: clamp(0.5rem, 1.5vh, 1.25rem);
-  right: clamp(0.5rem, 1.5vw, 1.25rem);
+  top: clamp(0.45rem, 1.2vh, 1rem);
+  right: clamp(0.45rem, 1.2vw, 1rem);
   text-align: right;
-  max-width: min(36vw, 200px);
+  max-width: min(38vw, 220px);
 }
 
 .hud-bl {
-  position: absolute;
-  bottom: clamp(0.5rem, 1.5vh, 1.25rem);
-  left: clamp(0.5rem, 1.5vw, 1.25rem);
-  max-width: min(42vw, 320px);
+  bottom: clamp(0.45rem, 1.2vh, 1rem);
+  left: clamp(0.45rem, 1.2vw, 1rem);
 }
 
 .hud-br {
-  position: absolute;
-  bottom: clamp(0.5rem, 1.5vh, 1.25rem);
-  right: clamp(0.5rem, 1.5vw, 1.25rem);
+  bottom: clamp(0.45rem, 1.2vh, 1rem);
+  right: clamp(0.45rem, 1.2vw, 1rem);
   text-align: right;
-  max-width: min(42vw, 320px);
 }
 
-@keyframes hudFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.hud-timer-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.35rem;
-  margin-top: 0.35rem;
-}
-
-.hud-timer-ring {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.hud-timer {
-  font-size: clamp(0.78rem, 2vw, 0.95rem);
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  color: #faf5ff;
-  font-family: 'Orbitron', ui-sans-serif, system-ui, sans-serif;
-}
-
-.hud-meta-line {
-  margin: 0 0 0.28rem;
-  font-size: 13px;
+.hud-line {
+  margin: 0;
+  color: #f5f3ff;
   line-height: 1.3;
-  color: #e2e8f0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.2rem 0.45rem;
-  align-items: baseline;
 }
 
-.hud-meta-line:last-child {
-  margin-bottom: 0;
+.hud-line--name {
+  font-size: clamp(0.95rem, 2.2vw, 1.15rem);
+  font-weight: 700;
 }
 
-.hud-meta-k {
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(196, 181, 253, 0.55);
-  min-width: 3.2rem;
+.hud-line--sub {
+  margin-top: 0.2rem;
+  font-size: clamp(0.78rem, 1.8vw, 0.88rem);
+  color: rgba(226, 232, 240, 0.9);
 }
 
-.hud-meta-v {
-  font-weight: 600;
-  color: #f8fafc;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-}
-
-.hud-meta-name .hud-meta-v {
-  font-size: 14px;
+.hud-ph {
+  letter-spacing: 0.18em;
+  color: rgba(196, 181, 253, 0.5);
 }
 
 .hud-slot {
-  font-size: clamp(1.75rem, 5vw, 2.75rem);
+  font-size: clamp(1.6rem, 4.5vw, 2.5rem);
   font-weight: 900;
-  letter-spacing: 0.04em;
-  color: #f5f3ff;
-  text-shadow: 0 0 18px rgba(124, 58, 237, 0.35);
+  color: #faf5ff;
   font-family: 'Orbitron', sans-serif;
   line-height: 1;
+  text-shadow: 0 0 14px rgba(168, 85, 247, 0.25);
 }
 
-.hud-row {
+.hud-timer-stack {
+  margin-top: 0.4rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.hud-ring-wrap {
+  position: relative;
+  width: 56px;
+  height: 56px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
-  gap: 0.3rem 0.5rem;
-  align-items: baseline;
-  padding: 0.3rem 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  place-items: center;
 }
 
-.hud-row:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
+.hud-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  transition: background 0.3s linear;
 }
 
-.hud-row:first-child {
-  padding-top: 0;
+.hud-timer-label {
+  position: relative;
+  z-index: 1;
+  font-size: 0.65rem;
+  font-weight: 800;
+  font-family: 'Orbitron', sans-serif;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
 }
 
-.hud-label {
-  font-size: clamp(10px, 1.6vw, 11px);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: rgba(196, 181, 253, 0.55);
-  text-align: left;
+.hud-stat {
+  margin-bottom: 0.32rem;
 }
 
-.hud-value {
-  font-size: clamp(12px, 2vw, 15px);
+.hud-stat:last-child {
+  margin-bottom: 0;
+}
+
+.hud-stat-inner {
+  display: block;
+  padding: 0.32rem 0.45rem;
+  border-radius: 10px;
+  background: rgba(10, 6, 22, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: clamp(0.68rem, 1.6vw, 0.78rem);
   font-weight: 600;
-  color: #f8fafc;
+  color: rgba(196, 181, 253, 0.78);
+  line-height: 1.3;
+}
+
+.hud-br .hud-stat-inner {
   text-align: right;
-  word-break: break-word;
-  line-height: 1.2;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
 
-.hud-value--hidden {
-  font-size: clamp(14px, 2.2vw, 17px);
-  opacity: 0.92;
+.hud-stat-inner--open {
+  color: #f8fafc;
+  border-color: rgba(168, 85, 247, 0.28);
 }
 
-.hud-value.value--revealed {
-  animation: flashReveal 0.4s ease-out forwards;
+.hud-stat-inner--wave {
+  animation: revealWave 0.55s ease-out;
 }
 
-.hud-root--cinema .hud-block {
-  padding: 0.55rem 0.7rem;
+.hud-stat-inner--drama {
+  animation: revealWave 0.85s ease-out;
 }
 
 .hud-root--drama .hud-block {
-  border-color: rgba(185, 28, 28, 0.28);
+  border-color: rgba(185, 28, 28, 0.22);
 }
 </style>

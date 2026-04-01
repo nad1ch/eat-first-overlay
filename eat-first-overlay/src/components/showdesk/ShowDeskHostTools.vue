@@ -2,18 +2,17 @@
 defineProps({
   gameRoom: { type: Object, default: () => ({}) },
   playerSlots: { type: Array, default: () => [] },
-  timerSpeakerSlot: { type: String, default: 'p1' },
   speakingDuration: { type: [Number, String], default: 30 },
   phaseOptions: { type: Array, default: () => [] },
 })
 
 const emit = defineEmits([
-  'update:timerSpeakerSlot',
   'update:speakingDuration',
   'start-round',
   'pause-show',
   'reset-room',
   'set-phase',
+  'set-speaker',
   'start-timer',
   'pause-timer',
   'resume-timer',
@@ -21,6 +20,13 @@ const emit = defineEmits([
   'spotlight',
   'spotlight-clear',
 ])
+
+function slotNum(slot) {
+  const s = String(slot ?? '')
+  const m = s.match(/^p(\d+)$/i)
+  if (m) return m[1]
+  return s.replace(/^p/i, '') || s
+}
 </script>
 
 <template>
@@ -29,7 +35,61 @@ const emit = defineEmits([
     <div class="row-actions">
       <button type="button" class="btn-primary" @click="emit('start-round')">Start round</button>
       <button type="button" class="btn-amber" @click="emit('pause-show')">Pause</button>
-      <button type="button" class="btn-danger" @click="emit('reset-room')">Reset room</button>
+      <button type="button" class="btn-danger" @click="emit('reset-room')">Reset</button>
+    </div>
+
+    <p class="micro-label">Speaker</p>
+    <div class="chip-row">
+      <button
+        v-for="slot in playerSlots"
+        :key="'spk-' + slot"
+        type="button"
+        class="chip chip-slot"
+        :class="{ on: String(gameRoom.currentSpeaker || '').trim() === slot }"
+        @click="emit('set-speaker', slot)"
+      >
+        {{ slotNum(slot) }}
+      </button>
+    </div>
+
+    <p class="micro-label">Timer</p>
+    <div class="chip-row">
+      <button
+        v-for="sec in [30, 60, 90]"
+        :key="'d-' + sec"
+        type="button"
+        class="chip"
+        :class="{ on: Number(speakingDuration) === sec }"
+        @click="emit('update:speakingDuration', sec)"
+      >
+        {{ sec }}s
+      </button>
+    </div>
+    <div class="row-actions tight">
+      <button type="button" class="btn-primary wide" @click="emit('start-timer')">Start</button>
+      <button type="button" class="btn-soft" @click="emit('pause-timer')">Pause</button>
+      <button type="button" class="btn-soft" @click="emit('resume-timer')">Resume</button>
+      <button type="button" class="btn-soft" @click="emit('clear-timer')">Reset</button>
+    </div>
+    <p class="hint-line">
+      Зараз говорить:
+      <strong>{{ String(gameRoom.currentSpeaker || '').trim() || '—' }}</strong>
+      <span v-if="gameRoom.timerPaused" class="paused">· на паузі</span>
+    </p>
+
+    <p class="micro-label">Spotlight (оверлей)</p>
+    <div class="chip-row">
+      <button
+        v-for="slot in playerSlots"
+        :key="'sp-' + slot"
+        type="button"
+        class="chip chip-sp"
+        :class="{ on: String(gameRoom.activePlayer || '') === slot }"
+        @click="emit('spotlight', slot)"
+      >
+        {{ slotNum(slot) }}
+      </button>
+      <button type="button" class="btn-soft" @click="emit('spotlight-clear')">Вимкнути</button>
     </div>
 
     <p class="micro-label">Фаза шоу</p>
@@ -45,58 +105,6 @@ const emit = defineEmits([
         {{ ph }}
       </button>
     </div>
-
-    <p class="micro-label">Хто говорить · таймер</p>
-    <div class="chip-row">
-      <button
-        v-for="slot in playerSlots"
-        :key="'ts-' + slot"
-        type="button"
-        class="chip chip-slot"
-        :class="{ on: timerSpeakerSlot === slot }"
-        @click="emit('update:timerSpeakerSlot', slot)"
-      >
-        {{ slot }}
-      </button>
-    </div>
-    <div class="chip-row">
-      <button
-        v-for="sec in [30, 60, 90]"
-        :key="'d-' + sec"
-        type="button"
-        class="chip"
-        :class="{ on: Number(speakingDuration) === sec }"
-        @click="emit('update:speakingDuration', sec)"
-      >
-        {{ sec }}s
-      </button>
-    </div>
-    <div class="row-actions tight">
-      <button type="button" class="btn-primary wide" @click="emit('start-timer')">Start timer</button>
-      <button type="button" class="btn-soft" @click="emit('pause-timer')">Pause timer</button>
-      <button type="button" class="btn-soft" @click="emit('resume-timer')">Resume</button>
-      <button type="button" class="btn-soft" @click="emit('clear-timer')">Clear</button>
-    </div>
-    <p class="hint-line">
-      Зараз говорить:
-      <strong>{{ String(gameRoom.activePlayer || '').trim() || '—' }}</strong>
-      <span v-if="gameRoom.timerPaused" class="paused">· на паузі</span>
-    </p>
-
-    <p class="micro-label">Spotlight на оверлеї</p>
-    <div class="chip-row">
-      <button
-        v-for="slot in playerSlots"
-        :key="'sp-' + slot"
-        type="button"
-        class="chip chip-sp"
-        :class="{ on: String(gameRoom.activePlayer || '') === slot }"
-        @click="emit('spotlight', slot)"
-      >
-        {{ slot }}
-      </button>
-      <button type="button" class="btn-soft" @click="emit('spotlight-clear')">Вимкнути</button>
-    </div>
   </section>
 </template>
 
@@ -105,7 +113,7 @@ const emit = defineEmits([
   padding: 1.15rem 1.25rem;
   border-radius: 20px;
   background: rgba(10, 8, 22, 0.72);
-  border: 1px solid rgba(124, 58, 237, 0.22);
+  border: 1px solid rgba(168, 85, 247, 0.22);
   margin-bottom: 1.25rem;
 }
 
@@ -143,13 +151,13 @@ const emit = defineEmits([
 
 .btn-primary {
   background: rgba(88, 28, 135, 0.45);
-  border-color: rgba(167, 139, 250, 0.45);
+  border-color: rgba(168, 85, 247, 0.45);
   color: #f5f3ff;
 }
 
 .btn-primary.wide {
   flex: 1;
-  min-width: 140px;
+  min-width: 100px;
 }
 
 .btn-amber {
@@ -197,8 +205,8 @@ const emit = defineEmits([
 }
 
 .chip.on {
-  border-color: rgba(167, 139, 250, 0.5);
-  background: rgba(88, 28, 135, 0.35);
+  border-color: rgba(168, 85, 247, 0.55);
+  background: rgba(88, 28, 135, 0.38);
   color: #fff;
 }
 

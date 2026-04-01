@@ -17,28 +17,61 @@ export const ages = ['20', '22', '24', '26', '28', '30', '32', '35', '38', '41',
 
 export const genders = ['Чол.', 'Жін.', 'Non-binary', 'Не вказано']
 
-export const displayNames = [
+const namesMale = [
   'Олексій',
-  'Марія',
   'Дмитро',
-  'Катерина',
   'Андрій',
-  'Олена',
   'Бодя',
-  'Настя',
   'Сергій',
-  'Ірина',
   'Макс',
-  'Юля',
   'Тарас',
-  'Світлана',
   'Ігор',
+  'Роман',
+  'Петро',
+  'Василь',
+  'Микола',
+  'Єгор',
+  'Артем',
+  'Олег',
+]
+
+const namesFemale = [
+  'Марія',
+  'Катерина',
+  'Олена',
+  'Настя',
+  'Ірина',
+  'Юля',
+  'Світлана',
   'Христина',
   'Віка',
-  'Роман',
   'Леся',
-  'Петро',
+  'Анна',
+  'Софія',
+  'Дарина',
+  'Тетяна',
+  'Оксана',
 ]
+
+const namesNeutral = [
+  'Алекс',
+  'Саша',
+  'Женя',
+  'Нікі',
+  'Райан',
+  'Джордан',
+  'Кейсі',
+]
+
+/** Для сумісності / старих сценаріїв */
+export const displayNames = [...namesMale, ...namesFemale]
+
+export function pickNameForGender(gender) {
+  const g = String(gender || '')
+  if (g === 'Чол.') return pick(namesMale)
+  if (g === 'Жін.') return pick(namesFemale)
+  return pick([...namesNeutral, ...namesMale, ...namesFemale])
+}
 
 const DEFAULT_POOLS = {
   profession: professions,
@@ -66,9 +99,10 @@ export function rollRandomIntoCharacter(target, options = {}) {
     options.scenarioId && scenarios[options.scenarioId] ? options.scenarioId : 'classic_crash'
   const keys = Array.isArray(options.keys) && options.keys.length ? options.keys : FIELD_KEYS
 
-  target.name = pick(displayNames)
-  target.age = pick(ages)
   target.gender = pick(genders)
+  target.name = pickNameForGender(target.gender)
+  target.age = pick(ages)
+  target.identityRevealed = false
   for (const key of keys) {
     const slot = target[key]
     if (!slot || typeof slot !== 'object') continue
@@ -99,11 +133,13 @@ export function rollKeysIntoCharacter(target, keys, scenarioId = 'classic_crash'
 
 export function buildRandomPlayerDocument(scenarioId = 'classic_crash') {
   const sid = scenarioId && scenarios[scenarioId] ? scenarioId : 'classic_crash'
+  const gender = pick(genders)
   const out = {
     eliminated: false,
-    name: pick(displayNames),
+    identityRevealed: false,
+    name: pickNameForGender(gender),
     age: pick(ages),
-    gender: pick(genders),
+    gender,
     activeCardRequest: false,
   }
   for (const key of FIELD_KEYS) {

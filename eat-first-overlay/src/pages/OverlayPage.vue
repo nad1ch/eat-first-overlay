@@ -80,6 +80,21 @@ const activeSpotlightId = computed(() => {
   return s.length ? s : null
 })
 
+/** Таймер прив’язаний до currentSpeaker; legacy: activePlayer якщо поле ще не мігрувало. */
+const speakerForTimerId = computed(() => {
+  const gr = gameRoom.value
+  const cs = String(gr?.currentSpeaker ?? '').trim()
+  if (cs) return cs
+  const hasClock =
+    (Number(gr?.speakingTimer) > 0 && gr?.timerStartedAt) ||
+    (gr?.timerPaused === true && Number.isFinite(Number(gr?.timerRemainingFrozen)))
+  if (hasClock) {
+    const leg = String(gr?.activePlayer ?? '').trim()
+    return leg || null
+  }
+  return null
+})
+
 const aliveInGame = computed(
   () => players.value.filter((p) => p.eliminated !== true).length,
 )
@@ -148,8 +163,12 @@ function isSpotlightPlayer(p) {
   return activeSpotlightId.value != null && p.id === activeSpotlightId.value
 }
 
+function isTimerPlayer(p) {
+  return speakerForTimerId.value != null && p.id === speakerForTimerId.value
+}
+
 function cardTimerProps(p) {
-  if (!isSpotlightPlayer(p) || speakerTimeLeft.value === undefined) return {}
+  if (!isTimerPlayer(p) || speakerTimeLeft.value === undefined) return {}
   return {
     speakerTimeLeft: speakerTimeLeft.value,
     speakerTimerTotal: speakerTimerTotal.value,
@@ -183,7 +202,8 @@ function cardTimerProps(p) {
       <OverlayPlayerCard
         v-if="singlePlayer"
         :player="singlePlayer"
-        :highlighted="isSpotlightPlayer(singlePlayer)"
+        :is-spotlight="isSpotlightPlayer(singlePlayer)"
+        :is-timer-target="isTimerPlayer(singlePlayer)"
         :cinema="cinemaHud"
         :drama="false"
         v-bind="cardTimerProps(singlePlayer)"
@@ -196,7 +216,8 @@ function cardTimerProps(p) {
         v-for="p in players"
         :key="p.id"
         :player="p"
-        :highlighted="isSpotlightPlayer(p)"
+        :is-spotlight="isSpotlightPlayer(p)"
+        :is-timer-target="isTimerPlayer(p)"
         :cinema="cinemaGrid"
         :drama="dramaMode"
         v-bind="cardTimerProps(p)"

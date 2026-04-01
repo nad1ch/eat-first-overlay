@@ -19,6 +19,8 @@ export function defaultActiveCard() {
 
 export const characterState = reactive({
   eliminated: false,
+  /** Профіль (ім’я / вік / гендер) на оверлеї до відкриття ведучим */
+  identityRevealed: false,
   name: '',
   age: '',
   gender: '',
@@ -43,6 +45,7 @@ export const fieldConfig = [
 
 export function resetCharacterState(target = characterState) {
   target.eliminated = false
+  target.identityRevealed = false
   target.name = ''
   target.age = ''
   target.gender = ''
@@ -74,6 +77,7 @@ export function applyRemoteCharacterData(target, data) {
     return
   }
   target.eliminated = Boolean(data.eliminated)
+  target.identityRevealed = Boolean(data.identityRevealed)
   if (typeof data.name === 'string') target.name = data.name
   else target.name = ''
   if (typeof data.age === 'string') target.age = data.age
@@ -97,6 +101,7 @@ export function applyRemoteCharacterData(target, data) {
 export function snapshotCharacter(target = characterState) {
   const out = {
     eliminated: Boolean(target.eliminated),
+    identityRevealed: Boolean(target.identityRevealed),
     name: target.name,
     age: target.age,
     gender: target.gender,

@@ -46,13 +46,16 @@ export async function saveGameRoom(gameId, partial) {
 
 const GAME_PHASES = new Set(['intro', 'discussion', 'voting', 'final'])
 
-/** Активний спікер + зворотний відлік (секунди від timerStartedAt). */
-export async function startSpeakingTimer(gameId, activePlayerId, seconds) {
+/**
+ * Таймер мовлення: games/{gameId}.currentSpeaker (окремо від activePlayer = spotlight).
+ */
+export async function startSpeakingTimer(gameId, speakerId, seconds) {
   const sec = Math.max(1, Math.floor(Number(seconds) || 30))
+  const sp = String(speakerId || '').trim()
   await setDoc(
     gameDocRef(gameId),
     {
-      activePlayer: String(activePlayerId || '').trim(),
+      currentSpeaker: sp,
       speakingTimer: sec,
       timerStartedAt: Timestamp.now(),
       timerPaused: false,
@@ -97,7 +100,7 @@ export async function resumeSpeakingTimer(gameId) {
   const snapshot = await getDoc(gameDocRef(gameId))
   const d = snapshot.exists() ? snapshot.data() : {}
   const rem = Math.max(1, Number(d.timerRemainingFrozen || d.speakingTimer) || 30)
-  const ap = String(d.activePlayer || '').trim()
+  const sp = String(d.currentSpeaker || '').trim()
   await setDoc(
     gameDocRef(gameId),
     {
@@ -105,7 +108,7 @@ export async function resumeSpeakingTimer(gameId) {
       speakingTimer: rem,
       timerStartedAt: Timestamp.now(),
       timerRemainingFrozen: deleteField(),
-      ...(ap ? { activePlayer: ap } : {}),
+      ...(sp ? { currentSpeaker: sp } : {}),
       key: ADMIN_KEY,
     },
     { merge: true },
@@ -118,12 +121,13 @@ export async function setGamePhase(gameId, phase) {
   await saveGameRoom(gameId, { gamePhase: next })
 }
 
-/** Скинути кімнату: spotlight, таймер, фаза. */
+/** Скинути кімнату: spotlight, спікер, таймер, фаза. */
 export async function resetGameRoomControls(gameId) {
   await setDoc(
     gameDocRef(gameId),
     {
       activePlayer: '',
+      currentSpeaker: '',
       speakingTimer: 0,
       timerStartedAt: deleteField(),
       timerPaused: false,
