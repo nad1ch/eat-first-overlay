@@ -180,7 +180,7 @@ const globalOverlayUrl = computed(() => {
   max-width: min(52rem, 100%);
   margin: 0 auto;
   font-family: Inter, system-ui, sans-serif;
-  color: #e2e8f0;
+  color: var(--text-body);
   overflow-x: hidden;
 }
 
@@ -188,9 +188,7 @@ const globalOverlayUrl = computed(() => {
   position: fixed;
   inset: 0;
   z-index: 0;
-  background:
-    radial-gradient(ellipse 100% 80% at 50% -20%, rgba(168, 85, 247, 0.28), transparent 55%),
-    linear-gradient(180deg, #070510 0%, #020108 100%);
+  background: var(--bg-body);
   pointer-events: none;
 }
 
@@ -208,8 +206,8 @@ const globalOverlayUrl = computed(() => {
   margin: 0 auto 1.35rem;
   padding: 0.85rem 1rem;
   border-radius: 14px;
-  border: 1px solid rgba(168, 85, 247, 0.18);
-  background: rgba(10, 8, 22, 0.65);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
   max-width: 26rem;
   box-sizing: border-box;
 }
@@ -222,8 +220,8 @@ const globalOverlayUrl = computed(() => {
   padding: 0.35rem 0;
   font-size: 0.82rem;
   line-height: 1.45;
-  color: rgba(226, 232, 240, 0.9);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--text-body);
+  border-bottom: 1px solid var(--join-step-border);
 }
 
 .join-steps li:last-child {
@@ -241,9 +239,9 @@ const globalOverlayUrl = computed(() => {
   font-size: 0.68rem;
   font-weight: 800;
   font-family: Orbitron, sans-serif;
-  color: #ede9fe;
-  background: rgba(88, 28, 135, 0.35);
-  border: 1px solid rgba(168, 85, 247, 0.35);
+  color: var(--text-heading);
+  background: var(--accent-fill);
+  border: 1px solid var(--border-strong);
 }
 
 .roles {
@@ -258,14 +256,14 @@ const globalOverlayUrl = computed(() => {
   letter-spacing: 0.2em;
   text-transform: uppercase;
   font-family: Orbitron, sans-serif;
-  color: rgba(196, 181, 253, 0.55);
+  color: var(--text-muted);
 }
 
 .roles-hint {
   margin: 0 0 1rem;
   text-align: center;
   font-size: 0.78rem;
-  color: rgba(186, 181, 200, 0.72);
+  color: var(--text-secondary);
   line-height: 1.4;
 }
 
@@ -280,7 +278,7 @@ const globalOverlayUrl = computed(() => {
   font-weight: 700;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: rgba(196, 181, 253, 0.5);
+  color: var(--text-muted);
 }
 
 .title {
@@ -288,7 +286,7 @@ const globalOverlayUrl = computed(() => {
   font-family: Orbitron, sans-serif;
   font-size: clamp(1.4rem, 4.5vw, 1.85rem);
   font-weight: 800;
-  color: #faf5ff;
+  color: var(--text-title);
   line-height: 1.15;
 }
 
@@ -296,7 +294,7 @@ const globalOverlayUrl = computed(() => {
   margin: 0;
   font-size: 0.88rem;
   line-height: 1.5;
-  color: rgba(186, 181, 200, 0.88);
+  color: var(--text-secondary);
   max-width: 34rem;
   margin-inline: auto;
 }
@@ -305,9 +303,9 @@ const globalOverlayUrl = computed(() => {
   margin-bottom: 1.5rem;
   padding: 1rem 1.15rem;
   border-radius: 16px;
-  background: rgba(10, 8, 22, 0.94);
-  border: 1px solid rgba(168, 85, 247, 0.24);
-  box-shadow: 0 0 24px rgba(168, 85, 247, 0.06);
+  background: var(--bg-card-solid);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 0 24px var(--accent-glow);
 }
 
 .lbl {
@@ -316,7 +314,7 @@ const globalOverlayUrl = computed(() => {
   font-size: 0.65rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(196, 181, 253, 0.45);
+  color: var(--text-muted);
 }
 
 .game-row {
@@ -328,18 +326,18 @@ const globalOverlayUrl = computed(() => {
   flex: 1;
   padding: 0.6rem 0.75rem;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(8, 6, 20, 0.92);
-  color: #f1f5f9;
+  border: 1px solid var(--border-input);
+  background: var(--bg-input);
+  color: var(--text-body);
   font-size: 0.9rem;
 }
 
 .btn-go {
   padding: 0.6rem 1.1rem;
   border-radius: 12px;
-  border: 1px solid rgba(168, 85, 247, 0.45);
-  background: rgba(88, 28, 135, 0.45);
-  color: #fff;
+  border: 1px solid var(--accent);
+  background: var(--accent-fill);
+  color: var(--text-main);
   font-weight: 600;
   cursor: pointer;
   transition: transform 0.15s ease;
@@ -361,9 +359,9 @@ const globalOverlayUrl = computed(() => {
   margin-bottom: 2rem;
   padding: 1.1rem 1.2rem 1.2rem;
   border-radius: 16px;
-  border: 1px solid rgba(56, 189, 248, 0.22);
-  background: rgba(8, 12, 28, 0.9);
-  box-shadow: 0 0 20px rgba(56, 189, 248, 0.06);
+  border: 1px solid var(--border-cyan);
+  background: var(--bg-obs-hint);
+  box-shadow: 0 0 20px var(--glow-vote);
 }
 
 .obs-hint__title {
@@ -372,7 +370,7 @@ const globalOverlayUrl = computed(() => {
   font-weight: 800;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgba(125, 211, 252, 0.75);
+  color: var(--text-cyan);
   font-family: Orbitron, sans-serif;
 }
 
@@ -381,7 +379,7 @@ const globalOverlayUrl = computed(() => {
   padding-left: 1.15rem;
   font-size: 0.84rem;
   line-height: 1.55;
-  color: rgba(203, 213, 225, 0.88);
+  color: var(--text-cyan-body);
 }
 
 .obs-hint__list li {
@@ -389,7 +387,7 @@ const globalOverlayUrl = computed(() => {
 }
 
 .obs-hint__list strong {
-  color: #e0f2fe;
+  color: var(--text-cyan-strong);
   font-weight: 600;
 }
 
@@ -403,7 +401,7 @@ const globalOverlayUrl = computed(() => {
   font-size: 0.62rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(148, 163, 184, 0.65);
+  color: var(--text-muted);
 }
 
 .obs-hint__code {
@@ -413,9 +411,9 @@ const globalOverlayUrl = computed(() => {
   font-size: 0.72rem;
   line-height: 1.4;
   word-break: break-all;
-  background: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #cbd5e1;
+  background: var(--bg-code);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-code);
 }
 
 .cta {
@@ -427,8 +425,8 @@ const globalOverlayUrl = computed(() => {
   padding: 1rem 1.15rem;
   text-align: left;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(12, 8, 24, 0.75);
+  border: 1px solid var(--cta-border);
+  background: var(--cta-bg);
   color: inherit;
   cursor: pointer;
   transition:
@@ -439,30 +437,30 @@ const globalOverlayUrl = computed(() => {
 
 .cta:hover {
   transform: translateY(-5px);
-  border-color: rgba(168, 85, 247, 0.55);
+  border-color: var(--border-strong);
   box-shadow:
-    0 10px 28px rgba(0, 0, 0, 0.4),
-    0 0 36px rgba(168, 85, 247, 0.18);
+    0 10px 28px var(--shadow-deep),
+    0 0 36px var(--glow-purple-lg);
 }
 
 .cta--obs:hover {
   box-shadow:
-    0 10px 28px rgba(0, 0, 0, 0.4),
-    0 0 40px rgba(56, 189, 248, 0.22);
-  border-color: rgba(56, 189, 248, 0.45);
+    0 10px 28px var(--shadow-deep),
+    0 0 40px var(--glow-cyan-lg);
+  border-color: var(--border-cyan-strong);
 }
 
 .cta--play:hover {
   box-shadow:
-    0 10px 28px rgba(0, 0, 0, 0.4),
-    0 0 40px rgba(74, 222, 128, 0.2);
+    0 10px 28px var(--shadow-deep),
+    0 0 40px var(--glow-green-lg);
   border-color: rgba(74, 222, 128, 0.42);
 }
 
 .cta--host:hover {
   box-shadow:
-    0 10px 28px rgba(0, 0, 0, 0.4),
-    0 0 40px rgba(251, 191, 36, 0.2);
+    0 10px 28px var(--shadow-deep),
+    0 0 40px var(--glow-amber-lg);
   border-color: rgba(251, 191, 36, 0.45);
 }
 
@@ -477,12 +475,12 @@ const globalOverlayUrl = computed(() => {
   font-size: 0.95rem;
   font-weight: 700;
   font-family: Orbitron, sans-serif;
-  color: #f5f3ff;
+  color: var(--text-title);
 }
 
 .cta-d {
   font-size: 0.78rem;
-  color: rgba(186, 181, 200, 0.82);
+  color: var(--text-secondary);
   line-height: 1.35;
 }
 
@@ -491,20 +489,20 @@ const globalOverlayUrl = computed(() => {
   font-size: 0.9rem;
   font-weight: 700;
   font-family: Orbitron, sans-serif;
-  color: #ede9fe;
+  color: var(--text-heading);
 }
 
 .sec-sub {
   margin: 0 0 1rem;
   font-size: 0.78rem;
-  color: rgba(196, 181, 253, 0.45);
+  color: var(--text-muted);
   line-height: 1.4;
 }
 
 .empty {
   margin: 0;
   font-size: 0.85rem;
-  color: rgba(196, 181, 253, 0.5);
+  color: var(--text-muted);
 }
 
 .cards {
@@ -517,8 +515,8 @@ const globalOverlayUrl = computed(() => {
   text-align: left;
   padding: 0.85rem 1rem;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(10, 6, 22, 0.88);
+  border: 1px solid var(--cta-border);
+  background: var(--pcard-bg);
   color: inherit;
   cursor: pointer;
   display: flex;
@@ -532,8 +530,8 @@ const globalOverlayUrl = computed(() => {
 
 .pcard:hover {
   transform: translateY(-2px) scale(1.02);
-  border-color: rgba(168, 85, 247, 0.5);
-  box-shadow: 0 8px 32px rgba(168, 85, 247, 0.2);
+  border-color: var(--border-strong);
+  box-shadow: 0 8px 32px var(--glow-purple-lg);
 }
 
 .pcard.elim {
@@ -549,13 +547,13 @@ const globalOverlayUrl = computed(() => {
   font-family: Orbitron, sans-serif;
   font-size: 0.72rem;
   letter-spacing: 0.1em;
-  color: rgba(196, 181, 253, 0.55);
+  color: var(--text-muted);
 }
 
 .nm {
   font-size: 0.92rem;
   font-weight: 700;
-  color: #f5f3ff;
+  color: var(--text-title);
 }
 
 .badge {
@@ -563,7 +561,7 @@ const globalOverlayUrl = computed(() => {
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #fecaca;
+  color: var(--error-text);
   align-self: flex-start;
 }
 </style>

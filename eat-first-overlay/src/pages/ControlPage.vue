@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ADMIN_KEY } from '../config/access.js'
 import {
@@ -24,6 +24,7 @@ import { applyActiveCardEffect } from '../services/activeCardEffects.js'
 import {
   saveCharacter,
   fetchCharacter,
+  subscribeToCharacter,
   subscribeToGameRoom,
   subscribeToPlayers,
   saveGameRoom,
@@ -44,14 +45,13 @@ import {
   deleteVoteDoc,
   setRoomRound,
   clearAllHands,
+  saveVote,
 } from '../services/gameService'
 import { millisFromFirestore } from '../utils/firestoreTime.js'
 import ShowDeskHeader from '../components/showdesk/ShowDeskHeader.vue'
-import ShowDeskHostTools from '../components/showdesk/ShowDeskHostTools.vue'
-import ShowDeskHandsPanel from '../components/showdesk/ShowDeskHandsPanel.vue'
-import ShowDeskHostGameBar from '../components/showdesk/ShowDeskHostGameBar.vue'
 import ShowPlayersRoster from '../components/showdesk/ShowPlayersRoster.vue'
-import { playRevealFlipSound } from '../utils/voteUiSound.js'
+import { playRevealFlipSound, playVoteSubmitSound } from '../utils/voteUiSound.js'
+import { syncHostControlChrome, clearHostControlChrome } from '../composables/hostControlChrome.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -108,6 +108,7 @@ const votes = ref([])
 let unsubGameRoom = null
 let unsubPlayers = null
 let unsubVotes = null
+let unsubCharacter = null
 
 const toast = ref('')
 let toastTimer = null
@@ -172,6 +173,10 @@ function cleanupSubs() {
     unsubVotes()
     unsubVotes = null
   }
+  if (unsubCharacter) {
+    unsubCharacter()
+    unsubCharacter = null
+  }
   votes.value = []
 }
 
@@ -187,12 +192,12 @@ watch(
     unsubGameRoom = subscribeToGameRoom(gameId.value, (d) => {
       gameRoom.value = d && typeof d === 'object' ? d : {}
     })
+    unsubVotes = subscribeToVotes(gameId.value, (list) => {
+      votes.value = list
+    })
     if (isAdmin.value) {
       unsubPlayers = subscribeToPlayers(gameId.value, (list) => {
         allPlayers.value = list
-      })
-      unsubVotes = subscribeToVotes(gameId.value, (list) => {
-        votes.value = list
       })
     } else {
       allPlayers.value = []
@@ -448,6 +453,63 @@ async function toggleMyHand() {
   }
 }
 
+const playerVotingTargetId = computed(() =>
+  String(gameRoom.value?.voting?.targetPlayer ?? '').trim(),
+)
+
+const showPlayerVotingUi = computed(
+  () =>
+    !isAdmin.value &&
+    Boolean(gameRoom.value?.voting?.active) &&
+    playerVotingTargetId.value.length > 0 &&
+    characterState.eliminated !== true,
+)
+
+const playerHasVotedThisRound = computed(() =>
+  votes.value.some(
+    (v) =>
+      String(v.id) === String(playerId.value) && Number(v.round) === roomRoundLive.value,
+  ),
+)
+
+const playerVoteSlotLabel = computed(() => {
+  const id = playerVotingTargetId.value
+  const m = id.match(/^p(\d+)$/i)
+  return m ? m[1] : id.replace(/^p/i, '') || id
+})
+
+const playerIsVotingTarget = computed(
+  () => showPlayerVotingUi.value && String(playerId.value) === playerVotingTargetId.value,
+)
+
+const playerVoteBusy = ref(false)
+
+async function submitPlayerVote(choice) {
+  if (isAdmin.value) return
+  if (!showPlayerVotingUi.value || playerHasVotedThisRound.value || playerVoteBusy.value) return
+  const gid = gameId.value
+  const voter = playerId.value
+  const target = playerVotingTargetId.value
+  const rr = roomRoundLive.value
+  playerVoteBusy.value = true
+  try {
+    loadError.value = null
+    const res = await saveVote(gid, voter, target, choice, rr)
+    if (res.ok) {
+      playVoteSubmitSound(0.14)
+      showToast('Голос зараховано')
+    } else if (res.reason === 'already-voted') {
+      showToast('Ти вже голосував у цьому раунді')
+    } else {
+      showToast('Не вдалося надіслати голос')
+    }
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    playerVoteBusy.value = false
+  }
+}
+
 function revealIdentity(open) {
   if (open) playRevealFlipSound(0.09)
   characterState.identityRevealed = open
@@ -636,6 +698,43 @@ async function adminNextSpeaker() {
   showToast('Немає активних гравців')
 }
 
+const hostChromeActions = {
+  roundDelta: hostRoundDelta,
+  votingStart: hostVotingStart,
+  votingFinish: hostFinishVoting,
+  removeVote: hostRemoveVote,
+  clearHands: hostClearHands,
+  setSpeakingDuration(n) {
+    speakingDuration.value = n
+  },
+  startRound: controlStartRound,
+  pauseShow: controlPauseShow,
+  resetRoom: controlReset,
+  setPhase,
+  startTimer: adminStartSpeakingTimer,
+  pauseTimer: adminPauseTimerOnly,
+  resumeTimer: adminResumeTimer,
+  clearTimer: adminClearTimer,
+  nextSpeaker: adminNextSpeaker,
+}
+
+watchEffect(() => {
+  if (adminAccessDenied.value || !isAdmin.value) {
+    clearHostControlChrome()
+    return
+  }
+  syncHostControlChrome({
+    summaryLine: hostSummaryLine.value,
+    round: roomRoundLive.value,
+    gameRoom: gameRoom.value,
+    votesLive: votesLiveRound.value,
+    allPlayersVoted: allPlayersVoted.value,
+    speakingDuration: speakingDuration.value,
+    phaseOptions: PHASE_OPTIONS,
+    actions: hostChromeActions,
+  })
+})
+
 function rerollSingleTrait(fieldKey) {
   if (!isAdmin.value) return
   characterState[fieldKey].value = rollFieldValue(fieldKey, scenarioForRolls.value)
@@ -731,10 +830,16 @@ async function clearCardRequest() {
   showToast('Запит знято')
 }
 
-function requestCardFromHost() {
+async function requestCardFromHost() {
   if (isAdmin.value) return
   if (characterState.activeCard.used) return
   characterState.activeCardRequest = true
+  try {
+    loadError.value = null
+    await saveCharacter(gameId.value, playerId.value, snapshotCharacter(characterState))
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
 }
 
 let saveTimer = null
@@ -789,35 +894,38 @@ function scheduleSave() {
   }, 400)
 }
 
-async function hydrate() {
-  syncing.value = true
-  loadError.value = null
-  try {
-    const data = await fetchCharacter(gameId.value, playerId.value)
-    applyRemoteCharacterData(characterState, data)
-  } catch (e) {
-    loadError.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    syncing.value = false
-  }
-}
-
 watch(characterState, () => {
   if (syncing.value || adminAccessDenied.value) return
   scheduleSave()
 }, { deep: true })
 
-watch([gameId, playerId], () => {
-  if (adminAccessDenied.value) return
-  hydrate()
-})
-
-onMounted(() => {
-  if (adminAccessDenied.value) return
-  hydrate()
-})
+watch(
+  [gameId, playerId, adminAccessDenied],
+  () => {
+    if (unsubCharacter) {
+      unsubCharacter()
+      unsubCharacter = null
+    }
+    if (adminAccessDenied.value) return
+    const gid = gameId.value
+    const pid = playerId.value
+    if (!gid || !pid) return
+    loadError.value = null
+    unsubCharacter = subscribeToCharacter(gid, pid, (data) => {
+      if (data == null) return
+      syncing.value = true
+      try {
+        applyRemoteCharacterData(characterState, data)
+      } finally {
+        syncing.value = false
+      }
+    })
+  },
+  { immediate: true },
+)
 
 onUnmounted(() => {
+  clearHostControlChrome()
   clearTimeout(saveTimer)
   clearTimeout(toastTimer)
   cleanupSubs()
@@ -862,45 +970,7 @@ function rerollActiveCardOnly() {
     </div>
 
     <template v-if="isAdmin">
-      <div class="host-summary-bar" role="status">{{ hostSummaryLine }}</div>
-      <section
-        class="admin-zone admin-zone--gamebar admin-card"
-        :class="{ 'admin-zone--glow': gameRoom.voting?.active }"
-        aria-label="Раунд і голосування"
-      >
-        <ShowDeskHostGameBar
-          :game-room="gameRoom"
-          :votes-live="votesLiveRound"
-          :all-players-voted="allPlayersVoted"
-          @round-delta="hostRoundDelta"
-          @voting-start="hostVotingStart"
-          @remove-vote="hostRemoveVote"
-          @voting-finish="hostFinishVoting"
-        />
-      </section>
       <section class="admin-zone admin-zone--live admin-card admin-zone--live-priority" aria-label="Live">
-        <div class="admin-dock">
-          <ShowDeskHostTools
-            :game-room="gameRoom"
-            :room-round="roomRoundLive"
-            v-model:speaking-duration="speakingDuration"
-            :phase-options="PHASE_OPTIONS"
-            @start-round="controlStartRound"
-            @pause-show="controlPauseShow"
-            @reset-room="controlReset"
-            @set-phase="setPhase"
-            @start-timer="adminStartSpeakingTimer"
-            @pause-timer="adminPauseTimerOnly"
-            @resume-timer="adminResumeTimer"
-            @clear-timer="adminClearTimer"
-            @next-speaker="adminNextSpeaker"
-          />
-        </div>
-        <ShowDeskHandsPanel
-          :game-room="gameRoom"
-          :player-slots="PLAYER_SLOTS"
-          @clear-hands="hostClearHands"
-        />
         <ShowDeskHeader
           class="admin-zone__header"
           :game-title="GAME_TITLE"
@@ -913,42 +983,6 @@ function rerollActiveCardOnly() {
           @copy-personal="copyPersonal"
           @copy-global="copyGlobal"
         />
-      </section>
-
-      <section class="admin-zone admin-zone--generate admin-zone--tier-lower" aria-label="Генерація">
-        <h2 class="zone-kicker zone-kicker--soft zone-kicker--gen-title">ГЕНЕРАЦІЯ</h2>
-        <div class="gen-bar gen-bar--actions gen-bar--compact">
-          <button type="button" class="btn-neon btn-neon--compact" @click="generateRandomCharacter">
-            Generate Player
-          </button>
-          <button type="button" class="btn-neon btn-neon--soft btn-neon--compact" @click="generateCoreOnly">
-            Усі 6 карт
-          </button>
-          <button type="button" class="btn-neon btn-neon--wide btn-neon--compact" @click="regenerateAllPlayers">
-            Усі гравці
-          </button>
-        </div>
-        <p class="hint-sc hint-sc--tight hint-sc--muted">{{ getScenarioHint(selectedScenario) }}</p>
-        <div class="scenario-row">
-          <label class="field-label field-label--inline">Сценарій</label>
-          <select v-model="selectedScenario" class="input select select--compact" @change="persistScenarioChoice">
-            <option v-for="sid in scenarioIds" :key="sid" :value="sid">{{ getScenarioLabel(sid) }}</option>
-          </select>
-        </div>
-        <h3 class="sub-kicker sub-kicker--soft">Глобально всім</h3>
-        <div class="global-btns global-btns--compact">
-          <button type="button" class="gbtn" @click="globalRollField('profession')">Професія</button>
-          <button type="button" class="gbtn" @click="globalRollField('health')">Здоров’я</button>
-          <button type="button" class="gbtn" @click="globalRollField('phobia')">Фобія</button>
-          <button type="button" class="gbtn" @click="globalChaos">Chaos</button>
-        </div>
-        <div class="pick-row pick-row--compact">
-          <label class="field-label">Поле всім</label>
-          <select v-model="globalFieldPick" class="input select select--compact">
-            <option v-for="row in fieldConfig" :key="row.key" :value="row.key">{{ row.label }}</option>
-          </select>
-          <button type="button" class="btn-primary btn-primary--compact" @click="globalRollSelected">OK</button>
-        </div>
       </section>
 
       <section
@@ -987,6 +1021,42 @@ function rerollActiveCardOnly() {
         </aside>
       </section>
 
+      <section class="admin-zone admin-zone--generate admin-zone--tier-lower" aria-label="Генерація">
+        <h2 class="zone-kicker zone-kicker--soft zone-kicker--gen-title">ГЕНЕРАЦІЯ</h2>
+        <div class="gen-bar gen-bar--actions gen-bar--compact">
+          <button type="button" class="btn-neon btn-neon--compact" @click="generateRandomCharacter">
+            Generate Player
+          </button>
+          <button type="button" class="btn-neon btn-neon--soft btn-neon--compact" @click="generateCoreOnly">
+            Усі 6 карт
+          </button>
+          <button type="button" class="btn-neon btn-neon--wide btn-neon--compact" @click="regenerateAllPlayers">
+            Усі гравці
+          </button>
+        </div>
+        <p class="hint-sc hint-sc--tight hint-sc--muted">{{ getScenarioHint(selectedScenario) }}</p>
+        <div class="scenario-row">
+          <label class="field-label field-label--inline">Сценарій</label>
+          <select v-model="selectedScenario" class="input select select--compact" @change="persistScenarioChoice">
+            <option v-for="sid in scenarioIds" :key="sid" :value="sid">{{ getScenarioLabel(sid) }}</option>
+          </select>
+        </div>
+        <h3 class="sub-kicker sub-kicker--soft">Глобально всім</h3>
+        <div class="global-btns global-btns--compact">
+          <button type="button" class="gbtn" @click="globalRollField('profession')">Професія</button>
+          <button type="button" class="gbtn" @click="globalRollField('health')">Здоров’я</button>
+          <button type="button" class="gbtn" @click="globalRollField('phobia')">Фобія</button>
+          <button type="button" class="gbtn" @click="globalChaos">Chaos</button>
+        </div>
+        <div class="pick-row pick-row--compact">
+          <label class="field-label">Поле всім</label>
+          <select v-model="globalFieldPick" class="input select select--compact">
+            <option v-for="row in fieldConfig" :key="row.key" :value="row.key">{{ row.label }}</option>
+          </select>
+          <button type="button" class="btn-primary btn-primary--compact" @click="globalRollSelected">OK</button>
+        </div>
+      </section>
+
     </template>
 
     <div v-else class="player-hero">
@@ -995,6 +1065,31 @@ function rerollActiveCardOnly() {
       <button type="button" class="btn-hand" :class="{ up: myHandRaised }" @click="toggleMyHand">
         {{ myHandRaised ? '✋ Опустити руку' : '✋ Підняти руку' }}
       </button>
+    </div>
+
+    <div v-if="showPlayerVotingUi" class="player-vote-panel">
+      <p class="player-vote-panel__k">Голосування</p>
+      <p class="player-vote-panel__line">Голос проти гравця <strong>{{ playerVoteSlotLabel }}</strong></p>
+      <p v-if="playerIsVotingTarget" class="player-vote-panel__warn">Тебе голосують</p>
+      <p v-if="playerHasVotedThisRound" class="player-vote-panel__done">Ти вже проголосував у цьому раунді.</p>
+      <div v-else class="player-vote-panel__row">
+        <button
+          type="button"
+          class="player-vote-btn player-vote-btn--for"
+          :disabled="playerVoteBusy"
+          @click="submitPlayerVote('for')"
+        >
+          👍 За
+        </button>
+        <button
+          type="button"
+          class="player-vote-btn player-vote-btn--against"
+          :disabled="playerVoteBusy"
+          @click="submitPlayerVote('against')"
+        >
+          👎 Проти
+        </button>
+      </div>
     </div>
 
     <p v-if="loadError" class="error">{{ loadError }}</p>
@@ -1213,47 +1308,9 @@ function rerollActiveCardOnly() {
   box-sizing: border-box;
 }
 
-.host-summary-bar {
-  position: sticky;
-  top: 0;
-  z-index: 60;
-  margin: 0 -1.25rem 0.55rem;
-  padding: 0.52rem 1.25rem;
-  background: rgba(3, 2, 12, 0.98);
-  border-bottom: 1px solid rgba(45, 212, 191, 0.38);
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  line-height: 1.4;
-  color: #f8fafc;
-  text-shadow: 0 0 24px rgba(45, 212, 191, 0.12);
-  font-family: 'Orbitron', sans-serif;
-  overflow-x: auto;
-  white-space: nowrap;
-  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.45);
-}
-
-.admin-dock {
-  position: sticky;
-  top: 2.35rem;
-  z-index: 55;
-  margin: 0 0 0.75rem;
-  padding-bottom: 0.35rem;
-}
-
-@media (max-width: 520px) {
-  .admin-dock {
-    top: 2.85rem;
-  }
-}
-
-.admin-dock :deep(.cc) {
-  margin-bottom: 0;
-}
-
 .admin-zone--live-priority.admin-card {
-  border-color: rgba(168, 85, 247, 0.38);
-  box-shadow: 0 0 32px rgba(168, 85, 247, 0.12);
+  border-color: var(--border-strong);
+  box-shadow: 0 0 32px var(--accent-glow);
 }
 
 .admin-zone {
@@ -1263,16 +1320,10 @@ function rerollActiveCardOnly() {
 .admin-card {
   border-radius: 16px;
   padding: 12px;
-  background: rgba(10, 8, 22, 0.95);
-  border: 1px solid rgba(168, 85, 247, 0.2);
+  background: var(--bg-card-solid);
+  border: 1px solid var(--border);
   box-sizing: border-box;
-}
-
-.admin-zone--live.admin-card :deep(.cc) {
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  margin-bottom: 0;
+  box-shadow: var(--panel-desk-shadow);
 }
 
 .admin-zone--players.admin-card :deep(.roster) {
@@ -1300,19 +1351,18 @@ function rerollActiveCardOnly() {
 
 .zone-kicker--section {
   margin-bottom: 0.45rem;
-  color: rgba(196, 181, 253, 0.48);
+  color: var(--text-muted);
 }
 
-.admin-zone--voting.admin-zone--glow,
-.admin-zone--gamebar.admin-zone--glow {
+.admin-zone--voting.admin-zone--glow {
   border-radius: 16px;
   padding: 0.15rem;
-  border: 1px solid rgba(56, 189, 248, 0.35);
-  box-shadow: 0 0 28px rgba(56, 189, 248, 0.14);
+  border: 1px solid var(--border-cyan-strong);
+  box-shadow: 0 0 28px var(--glow-vote);
   background: linear-gradient(
     135deg,
-    rgba(56, 189, 248, 0.1) 0%,
-    rgba(168, 85, 247, 0.07) 100%
+    var(--glow-vote-inner) 0%,
+    var(--glow-vote-inner-2) 100%
   );
 }
 
@@ -1323,9 +1373,9 @@ function rerollActiveCardOnly() {
 .admin-zone--nominated-active {
   border-radius: 16px;
   padding: 0.65rem 0.5rem 0.85rem;
-  border: 1px solid rgba(248, 113, 113, 0.28);
-  box-shadow: 0 0 22px rgba(220, 38, 38, 0.12);
-  background: rgba(40, 10, 14, 0.2);
+  border: 1px solid var(--danger-border);
+  box-shadow: 0 0 22px var(--danger-glow);
+  background: var(--danger-bg);
 }
 
 .zone-kicker {
@@ -1334,25 +1384,25 @@ function rerollActiveCardOnly() {
   font-weight: 800;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: rgba(196, 181, 253, 0.42);
+  color: var(--text-muted-soft);
   font-family: 'Orbitron', sans-serif;
 }
 
 .admin-zone--generate {
   padding: 0.85rem 1rem 1rem;
   border-radius: 14px;
-  background: rgba(4, 3, 14, 0.52);
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: var(--bg-generate);
+  border: 1px solid var(--border-subtle);
   margin-bottom: 1.2rem;
 }
 
 .admin-zone--tier-lower {
   opacity: 0.92;
-  border-color: rgba(71, 85, 105, 0.2);
+  border-color: var(--border);
 }
 
 .zone-kicker--soft {
-  color: rgba(196, 181, 253, 0.3);
+  color: var(--text-muted);
   letter-spacing: 0.16em;
 }
 
@@ -1374,7 +1424,7 @@ function rerollActiveCardOnly() {
 }
 
 .hint-sc--muted {
-  color: rgba(186, 181, 200, 0.5);
+  color: var(--text-muted);
   font-size: 0.66rem;
   line-height: 1.45;
 }
@@ -1401,7 +1451,7 @@ function rerollActiveCardOnly() {
 
 .sub-kicker--soft {
   margin: 0.55rem 0 0.35rem;
-  color: rgba(196, 181, 253, 0.26);
+  color: var(--text-muted);
 }
 
 .global-btns--compact .gbtn {
@@ -1422,7 +1472,7 @@ function rerollActiveCardOnly() {
 .zone-kicker--gen-title {
   letter-spacing: 0.2em;
   font-size: 0.68rem;
-  color: rgba(196, 181, 253, 0.36);
+  color: var(--text-muted);
 }
 
 .sub-kicker {
@@ -1431,7 +1481,7 @@ function rerollActiveCardOnly() {
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgba(196, 181, 253, 0.38);
+  color: var(--text-muted);
 }
 
 .hint-sc--tight {
@@ -1451,18 +1501,18 @@ function rerollActiveCardOnly() {
 }
 
 .editor-panel--calm {
-  border-color: rgba(51, 65, 85, 0.35);
-  background: rgba(8, 10, 18, 0.55);
+  border-color: var(--border-editor-calm);
+  background: var(--bg-editor-calm);
 }
 
 .editor-panel--calm .trait-label,
 .editor-panel--calm .panel-kicker {
-  color: rgba(148, 163, 184, 0.55);
+  color: var(--editor-trait-label);
 }
 
 .editor-panel--calm .trait-block,
 .editor-panel--calm .trait-block--identity {
-  border-color: rgba(51, 65, 85, 0.35);
+  border-color: var(--border-editor-calm);
 }
 
 .editor-panel--calm .input:focus,
@@ -1470,8 +1520,8 @@ function rerollActiveCardOnly() {
 .editor-panel--calm .trait-value-input:focus,
 .editor-panel--calm .select:focus {
   outline: none;
-  border-color: rgba(100, 116, 139, 0.65);
-  box-shadow: 0 0 0 2px rgba(71, 85, 105, 0.35);
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
 .editor-panel .trait-block {
@@ -1492,11 +1542,11 @@ function rerollActiveCardOnly() {
   gap: 0.75rem;
   padding: 0.65rem 0;
   margin-bottom: 0.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .mode-strip.admin {
-  border-color: rgba(124, 58, 237, 0.2);
+  border-color: var(--border-panel);
 }
 
 .mode-label {
@@ -1504,16 +1554,16 @@ function rerollActiveCardOnly() {
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #c4b5fd;
+  color: var(--text-heading);
 }
 
 .status-pill {
   font-size: 0.78rem;
   padding: 0.25rem 0.6rem;
   border-radius: 999px;
-  background: rgba(88, 28, 135, 0.25);
-  border: 1px solid rgba(167, 139, 250, 0.3);
-  color: #f5f3ff;
+  background: var(--accent-fill-soft);
+  border: 1px solid var(--border-strong);
+  color: var(--text-title);
 }
 
 .status-pill[data-s='ГОВОРИШ'] {
@@ -1539,13 +1589,13 @@ function rerollActiveCardOnly() {
   margin: 0;
   font-size: 1.5rem;
   font-family: 'Orbitron', sans-serif;
-  color: #f5f3ff;
+  color: var(--text-title);
 }
 
 .player-phase {
   margin: 0.5rem 0 0;
   font-size: 0.8rem;
-  color: rgba(196, 181, 253, 0.55);
+  color: var(--text-muted);
 }
 
 .btn-hand {
@@ -1555,9 +1605,9 @@ function rerollActiveCardOnly() {
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
-  border: 1px solid rgba(251, 191, 36, 0.35);
-  background: rgba(60, 40, 8, 0.4);
-  color: #fef3c7;
+  border: 1px solid var(--btn-hand-border);
+  background: var(--btn-hand-bg);
+  color: var(--btn-hand-text);
   transition:
     transform 0.12s ease,
     border-color 0.12s ease;
@@ -1565,20 +1615,93 @@ function rerollActiveCardOnly() {
 
 .btn-hand:hover {
   transform: scale(1.03);
-  border-color: rgba(251, 191, 36, 0.55);
+  border-color: var(--btn-hand-border-hover);
 }
 
 .btn-hand.up {
-  border-color: rgba(74, 222, 128, 0.45);
-  background: rgba(22, 101, 52, 0.35);
-  color: #bbf7d0;
+  border-color: var(--btn-hand-up-border);
+  background: var(--btn-hand-up-bg);
+  color: var(--btn-hand-up-text);
+}
+
+.player-vote-panel {
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 16px;
+  border: 1px solid var(--border-cyan-strong);
+  background: var(--bg-muted);
+  box-shadow: 0 4px 20px var(--shadow-deep);
+}
+
+.player-vote-panel__k {
+  margin: 0;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  color: var(--text-cyan-strong);
+  font-family: 'Orbitron', sans-serif;
+}
+
+.player-vote-panel__line {
+  margin: 0.35rem 0 0;
+  font-size: 0.88rem;
+  color: var(--text-body);
+}
+
+.player-vote-panel__warn {
+  margin: 0.45rem 0 0;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--error-text);
+}
+
+.player-vote-panel__done {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.player-vote-panel__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+}
+
+.player-vote-btn {
+  flex: 1 1 auto;
+  min-width: 7rem;
+  padding: 0.55rem 0.85rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+
+.player-vote-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.player-vote-btn--for {
+  border-color: var(--reveal-on-border);
+  background: var(--reveal-on-bg);
+  color: var(--reveal-on-text);
+}
+
+.player-vote-btn--against {
+  border-color: var(--reveal-off-border);
+  background: var(--reveal-off-bg);
+  color: var(--reveal-off-text);
 }
 
 .side-tools {
   padding: 1rem;
   border-radius: 16px;
-  background: rgba(0, 0, 0, 0.22);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-muted);
+  border: 1px solid var(--border-subtle);
 }
 
 .inline {
@@ -1592,7 +1715,7 @@ function rerollActiveCardOnly() {
   font-size: 0.68rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgba(196, 181, 253, 0.45);
+  color: var(--text-muted);
 }
 
 .field-label.mt {
@@ -1605,9 +1728,9 @@ function rerollActiveCardOnly() {
   box-sizing: border-box;
   padding: 0.55rem 0.7rem;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(8, 6, 20, 0.85);
-  color: #f1f5f9;
+  border: 1px solid var(--border-input);
+  background: var(--bg-input-soft);
+  color: var(--text-body);
   font-size: 0.9rem;
 }
 
@@ -1619,15 +1742,16 @@ function rerollActiveCardOnly() {
   padding: 1.25rem 1.35rem;
   margin-bottom: 1.25rem;
   border-radius: 20px;
-  background: rgba(10, 8, 22, 0.75);
-  border: 1px solid rgba(124, 58, 237, 0.15);
+  background: var(--bg-card-soft);
+  border: 1px solid var(--border-panel);
+  box-shadow: var(--panel-desk-shadow);
 }
 
 .panel-kicker {
   margin: 0 0 1rem;
   font-size: 1rem;
   font-weight: 700;
-  color: #ede9fe;
+  color: var(--text-heading);
   font-family: 'Orbitron', sans-serif;
 }
 
@@ -1641,9 +1765,9 @@ function rerollActiveCardOnly() {
 .btn-neon {
   padding: 0.5rem 0.95rem;
   border-radius: 12px;
-  border: 1px solid rgba(168, 85, 247, 0.55);
-  background: linear-gradient(180deg, rgba(139, 92, 246, 0.38), rgba(88, 28, 135, 0.52));
-  color: #faf5ff;
+  border: 1px solid var(--btn-neon-border);
+  background: linear-gradient(180deg, var(--btn-neon-top), var(--btn-neon-bot));
+  color: var(--text-title);
   font-size: 0.78rem;
   font-weight: 700;
   cursor: pointer;
@@ -1656,12 +1780,12 @@ function rerollActiveCardOnly() {
 
 .btn-neon:hover {
   transform: scale(1.02);
-  box-shadow: 0 0 22px rgba(168, 85, 247, 0.35);
+  box-shadow: 0 0 22px var(--accent-glow-strong);
 }
 
 .btn-neon--soft {
-  border-color: rgba(196, 181, 253, 0.38);
-  background: rgba(0, 0, 0, 0.42);
+  border-color: var(--border-strong);
+  background: var(--btn-soft-bg);
 }
 
 .btn-neon--wide {
@@ -1672,8 +1796,8 @@ function rerollActiveCardOnly() {
 .trait-block {
   padding: 0.85rem 1rem;
   border-radius: 16px;
-  background: rgba(0, 0, 0, 0.22);
-  border: 1px solid rgba(168, 85, 247, 0.16);
+  background: var(--bg-muted);
+  border: 1px solid var(--trait-border);
   margin-bottom: 0.65rem;
 }
 
@@ -1686,7 +1810,7 @@ function rerollActiveCardOnly() {
 }
 
 .trait-block--player {
-  border-color: rgba(255, 255, 255, 0.08);
+  border-color: var(--trait-player-border);
 }
 
 .trait-toolbar {
@@ -1702,7 +1826,11 @@ function rerollActiveCardOnly() {
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(196, 181, 253, 0.55);
+  color: var(--text-muted);
+}
+
+.traits-stack--player .trait-label {
+  color: var(--editor-trait-label);
 }
 
 .trait-actions {
@@ -1720,8 +1848,8 @@ function rerollActiveCardOnly() {
   justify-content: center;
   padding: 0;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--btn-soft-border);
+  background: var(--bg-muted-strong);
   font-size: 0.95rem;
   line-height: 1;
   cursor: pointer;
@@ -1733,13 +1861,13 @@ function rerollActiveCardOnly() {
 
 .icon-btn:hover {
   transform: scale(1.06);
-  border-color: rgba(168, 85, 247, 0.45);
+  border-color: var(--border-strong);
 }
 
 .icon-btn.active {
-  border-color: rgba(168, 85, 247, 0.6);
-  box-shadow: 0 0 16px rgba(168, 85, 247, 0.35);
-  background: rgba(88, 28, 135, 0.35);
+  border-color: var(--border-strong);
+  box-shadow: 0 0 16px var(--accent-glow-strong);
+  background: var(--accent-fill);
 }
 
 .icon-btn--reroll {
@@ -1770,9 +1898,9 @@ function rerollActiveCardOnly() {
   font-weight: 900;
   letter-spacing: 0.08em;
   cursor: pointer;
-  border: 1px solid rgba(71, 85, 105, 0.55);
-  background: rgba(15, 23, 42, 0.65);
-  color: rgba(203, 213, 225, 0.75);
+  border: 1px solid var(--reveal-border);
+  background: var(--reveal-bg);
+  color: var(--text-secondary);
   transition:
     transform 0.12s ease,
     box-shadow 0.2s ease,
@@ -1784,17 +1912,17 @@ function rerollActiveCardOnly() {
 }
 
 .reveal-btn--green {
-  border-color: rgba(74, 222, 128, 0.55);
-  background: rgba(22, 101, 52, 0.42);
-  color: #bbf7d0;
-  box-shadow: 0 0 14px rgba(74, 222, 128, 0.28);
+  border-color: var(--reveal-on-border);
+  background: var(--reveal-on-bg);
+  color: var(--reveal-on-text);
+  box-shadow: 0 0 14px var(--reveal-on-glow);
 }
 
 .reveal-btn--red {
-  border-color: rgba(248, 113, 113, 0.45);
-  background: rgba(60, 22, 28, 0.55);
-  color: #fecaca;
-  box-shadow: 0 0 12px rgba(248, 113, 113, 0.15);
+  border-color: var(--reveal-off-border);
+  background: var(--reveal-off-bg);
+  color: var(--reveal-off-text);
+  box-shadow: 0 0 12px var(--reveal-off-glow);
 }
 
 .stat-reveal-enter-active {
@@ -1852,7 +1980,7 @@ function rerollActiveCardOnly() {
 
 .pv-line {
   margin: 0.35rem 0 0;
-  color: #e2e8f0;
+  color: var(--text-body);
 }
 
 .pv-line:first-of-type {
@@ -1863,7 +1991,7 @@ function rerollActiveCardOnly() {
   margin: 0.35rem 0 0;
   letter-spacing: 0.25em;
   font-size: 1.1rem;
-  color: rgba(196, 181, 253, 0.35);
+  color: var(--text-muted);
 }
 
 .trait-value-preview {
@@ -1871,8 +1999,13 @@ function rerollActiveCardOnly() {
   padding: 0.45rem 0 0.15rem;
   font-size: 0.92rem;
   font-weight: 600;
-  color: #e2e8f0;
+  color: var(--text-body);
   line-height: 1.4;
+}
+
+.trait-value-preview--off {
+  color: var(--text-secondary);
+  letter-spacing: 0.2em;
 }
 
 .traits-stack--player .trait-block--player {
@@ -1920,29 +2053,30 @@ function rerollActiveCardOnly() {
   font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.06em;
-  color: #fde68a;
+  color: var(--active-card-pending);
 }
 
 .card-request-host {
   margin-bottom: 1rem;
   padding: 1rem 1.1rem;
   border-radius: 14px;
-  border: 1px solid rgba(168, 85, 247, 0.45);
-  background: rgba(88, 28, 135, 0.22);
+  border: 1px solid var(--card-request-border);
+  background: var(--card-request-bg);
 }
 
 .card-request-host__text {
   margin: 0 0 0.75rem;
   font-size: 0.88rem;
-  color: #e9d5ff;
+  color: var(--card-request-text);
+  font-weight: 600;
 }
 
 .btn-confirm-card {
   width: 100%;
   padding: 0.85rem 1rem;
   border-radius: 14px;
-  border: 1px solid rgba(168, 85, 247, 0.55);
-  background: linear-gradient(180deg, rgba(139, 92, 246, 0.45), rgba(88, 28, 135, 0.55));
+  border: 1px solid var(--confirm-card-border);
+  background: linear-gradient(180deg, var(--confirm-card-bg-top), var(--confirm-card-bg-bot));
   color: #fff;
   font-size: 0.95rem;
   font-weight: 800;
@@ -1959,7 +2093,7 @@ function rerollActiveCardOnly() {
   display: inline-block;
   min-width: 4.5rem;
   font-size: 0.72rem;
-  color: rgba(196, 181, 253, 0.5);
+  color: var(--trait-mini-label);
 }
 
 .traits-read {
@@ -1991,20 +2125,26 @@ function rerollActiveCardOnly() {
 .active-card-box {
   padding: 1rem;
   border-radius: 16px;
-  background: rgba(88, 28, 135, 0.12);
-  border: 1px solid rgba(167, 139, 250, 0.25);
+  background: var(--active-card-surface-bg);
+  border: 1px solid var(--active-card-surface-border);
   margin-bottom: 1rem;
 }
 
 .ac-title {
   margin: 0 0 0.65rem;
   font-size: 0.85rem;
-  color: #e9d5ff;
+  color: var(--active-card-heading);
+  font-weight: 800;
 }
 
 .ac-meta {
   font-size: 0.75rem;
-  color: rgba(196, 181, 253, 0.65);
+  color: var(--active-card-meta);
+}
+
+.ac-meta code {
+  color: var(--active-card-meta);
+  font-weight: 600;
 }
 
 .ac-actions {
@@ -2017,14 +2157,14 @@ function rerollActiveCardOnly() {
 .ac-t {
   margin: 0 0 0.35rem;
   font-weight: 700;
-  color: #f5f3ff;
+  color: var(--active-card-title-text);
 }
 
 .ac-d {
   margin: 0;
   font-size: 0.88rem;
   line-height: 1.45;
-  color: #cbd5e1;
+  color: var(--active-card-desc);
 }
 
 .ac-used {
@@ -2033,16 +2173,16 @@ function rerollActiveCardOnly() {
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #c4b5fd;
+  color: var(--active-card-used);
 }
 
 .btn-request {
   margin-top: 0.75rem;
   padding: 0.55rem 1rem;
   border-radius: 12px;
-  border: 1px solid rgba(167, 139, 250, 0.45);
-  background: rgba(88, 28, 135, 0.35);
-  color: #fff;
+  border: 1px solid var(--btn-request-border);
+  background: var(--btn-request-bg);
+  color: var(--btn-request-text);
   font-weight: 600;
   cursor: pointer;
 }
@@ -2059,17 +2199,17 @@ function rerollActiveCardOnly() {
 .btn-elim {
   padding: 0.45rem 1rem;
   border-radius: 12px;
-  border: 1px solid rgba(248, 113, 113, 0.35);
-  background: rgba(80, 20, 30, 0.35);
-  color: #fecaca;
+  border: 1px solid var(--btn-elim-out-border);
+  background: var(--btn-elim-out-bg);
+  color: var(--btn-elim-out-text);
   font-weight: 600;
   cursor: pointer;
 }
 
 .btn-elim.on {
-  border-color: rgba(74, 222, 128, 0.4);
-  background: rgba(22, 101, 52, 0.3);
-  color: #bbf7d0;
+  border-color: var(--btn-elim-on-border);
+  background: var(--btn-elim-on-bg);
+  color: var(--btn-elim-on-text);
 }
 
 .reveal-hint {
@@ -2172,9 +2312,9 @@ function rerollActiveCardOnly() {
 .gbtn {
   padding: 0.5rem 0.85rem;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.3);
-  color: #e2e8f0;
+  border: 1px solid var(--border-input);
+  background: var(--bg-muted);
+  color: var(--text-body);
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
@@ -2184,7 +2324,7 @@ function rerollActiveCardOnly() {
 }
 
 .gbtn:hover {
-  border-color: rgba(167, 139, 250, 0.35);
+  border-color: var(--border-strong);
   transform: scale(1.03);
 }
 
@@ -2197,7 +2337,7 @@ function rerollActiveCardOnly() {
 
 .hint-sc {
   font-size: 0.8rem;
-  color: rgba(186, 181, 200, 0.85);
+  color: var(--text-secondary);
   margin: 0 0 0.65rem;
   line-height: 1.4;
 }
@@ -2212,9 +2352,9 @@ function rerollActiveCardOnly() {
 .btn-primary {
   padding: 0.5rem 0.9rem;
   border-radius: 12px;
-  border: 1px solid rgba(167, 139, 250, 0.45);
-  background: rgba(88, 28, 135, 0.4);
-  color: #f5f3ff;
+  border: 1px solid var(--border-strong);
+  background: var(--accent-fill);
+  color: var(--text-title);
   font-weight: 600;
   cursor: pointer;
   transition: transform 0.15s ease;
@@ -2232,9 +2372,9 @@ function rerollActiveCardOnly() {
 .btn-soft {
   padding: 0.5rem 0.85rem;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(0, 0, 0, 0.35);
-  color: #e2e8f0;
+  border: 1px solid var(--btn-soft-border);
+  background: var(--btn-soft-bg);
+  color: var(--text-body);
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
@@ -2258,9 +2398,9 @@ function rerollActiveCardOnly() {
 .error {
   padding: 0.65rem 0.85rem;
   border-radius: 12px;
-  background: rgba(80, 20, 30, 0.4);
-  border: 1px solid rgba(248, 113, 113, 0.35);
-  color: #fecaca;
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+  color: var(--error-text);
   font-size: 0.85rem;
   margin-bottom: 1rem;
 }
@@ -2273,11 +2413,11 @@ function rerollActiveCardOnly() {
   justify-content: center;
   padding: 2rem;
   text-align: center;
-  color: #e2e8f0;
+  color: var(--text-body);
 }
 
 .denied-title {
-  color: #fecaca;
+  color: var(--error-text);
 }
 </style>
 
@@ -2290,16 +2430,11 @@ function rerollActiveCardOnly() {
   z-index: 99999;
   padding: 0.55rem 1.2rem;
   border-radius: 12px;
-  background: rgba(20, 83, 45, 0.95);
-  border: 1px solid rgba(74, 222, 128, 0.45);
-  color: #ecfdf5;
+  background: var(--bg-toast);
+  border: 1px solid var(--reveal-on-border);
+  color: var(--reveal-on-text);
   font-size: 0.88rem;
   font-weight: 600;
   pointer-events: none;
-}
-
-body {
-  background: radial-gradient(ellipse 100% 60% at 50% -10%, rgba(55, 25, 95, 0.35), transparent),
-    #06040f;
 }
 </style>

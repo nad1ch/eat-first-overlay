@@ -78,7 +78,7 @@ function isNominatedCard(p) {
 function showBadgesRow(p) {
   if (p.eliminated === true) return false
   if (isSpeak(p)) return true
-  return isVoteTargetCard(p) || isNominatedCard(p) || handUp(p)
+  return isVoteTargetCard(p) || isNominatedCard(p)
 }
 
 function handUp(p) {
@@ -189,6 +189,14 @@ const aliveSlotsForNom = computed(() => {
           }"
           @click="onCardClick(p)"
         >
+          <span
+            v-if="handUp(p) && p.eliminated !== true"
+            class="pcard-hand-corner"
+            aria-label="Піднята рука"
+            title="Піднята рука"
+          >
+            ✋
+          </span>
           <span v-if="p.eliminated === true" class="elim-badge" aria-hidden="true">ВИБУВ</span>
           <div v-else-if="showBadgesRow(p)" class="pcard-badges">
             <span v-if="isSpeak(p)" class="pcb pcb--speak">ГОВОРИТЬ</span>
@@ -198,7 +206,6 @@ const aliveSlotsForNom = computed(() => {
                 <span class="pcb pcb--nom">НОМІН.</span>
                 <span class="pcb pcb--nom-who">{{ nominatorsLine(p.id) }}</span>
               </template>
-              <span v-if="handUp(p)" class="pcb pcb--hand">РУКА</span>
             </template>
           </div>
           <span class="num">{{ slotNum(p.id) }}</span>
@@ -252,8 +259,8 @@ const aliveSlotsForNom = computed(() => {
 .roster {
   padding: 1rem 1.1rem;
   border-radius: 16px;
-  background: rgba(8, 4, 20, 0.88);
-  border: 1px solid rgba(168, 85, 247, 0.22);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   margin-bottom: 1rem;
 }
 
@@ -261,7 +268,7 @@ const aliveSlotsForNom = computed(() => {
   margin: 0 0 0.35rem;
   font-size: 0.88rem;
   font-weight: 800;
-  color: #ede9fe;
+  color: var(--text-heading);
   font-family: 'Orbitron', sans-serif;
   letter-spacing: 0.06em;
 }
@@ -270,7 +277,7 @@ const aliveSlotsForNom = computed(() => {
   margin: 0 0 0.85rem;
   font-size: 0.65rem;
   line-height: 1.35;
-  color: rgba(196, 181, 253, 0.4);
+  color: var(--text-muted);
 }
 
 .roster-shell {
@@ -346,11 +353,15 @@ const aliveSlotsForNom = computed(() => {
   text-overflow: ellipsis;
 }
 
-.pcb--hand {
-  color: rgba(226, 232, 240, 0.85);
-  background: rgba(30, 41, 59, 0.85);
-  border: 1px solid rgba(100, 116, 139, 0.4);
-  font-weight: 700;
+.pcard-hand-corner {
+  position: absolute;
+  left: 0.2rem;
+  top: 0.2rem;
+  z-index: 3;
+  font-size: 1rem;
+  line-height: 1;
+  filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.55));
+  pointer-events: none;
 }
 
 .pcard {
@@ -363,9 +374,9 @@ const aliveSlotsForNom = computed(() => {
   min-height: 4.85rem;
   padding: 0.45rem 0.35rem 0.5rem;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.35);
-  color: #e2e8f0;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-muted);
+  color: var(--text-body);
   cursor: pointer;
   transition:
     transform 0.15s ease,
@@ -470,7 +481,7 @@ const aliveSlotsForNom = computed(() => {
   font-family: 'Orbitron', sans-serif;
   font-size: 1.35rem;
   font-weight: 900;
-  color: #faf5ff;
+  color: var(--text-title);
   line-height: 1;
 }
 
@@ -479,7 +490,7 @@ const aliveSlotsForNom = computed(() => {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgba(196, 181, 253, 0.55);
+  color: var(--text-muted);
 }
 
 .pcard.speak .st {
@@ -504,9 +515,9 @@ const aliveSlotsForNom = computed(() => {
   top: 0.5rem;
   padding: 0.75rem 0.8rem;
   border-radius: 14px;
-  background: rgba(6, 4, 18, 0.95);
-  border: 1px solid rgba(168, 85, 247, 0.28);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  background: var(--bg-card-solid);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 8px 28px var(--shadow-deep);
 }
 
 .act-panel__id {
@@ -515,7 +526,7 @@ const aliveSlotsForNom = computed(() => {
   font-size: 1.1rem;
   font-weight: 900;
   letter-spacing: 0.12em;
-  color: #e9d5ff;
+  color: var(--text-heading);
   text-align: center;
 }
 
@@ -582,9 +593,9 @@ const aliveSlotsForNom = computed(() => {
   font-weight: 700;
   text-align: left;
   cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(30, 27, 55, 0.95);
-  color: #e2e8f0;
+  border: 1px solid var(--border-input);
+  background: var(--bg-card-soft);
+  color: var(--text-body);
   transition:
     transform 0.1s ease,
     border-color 0.15s;
@@ -608,7 +619,7 @@ const aliveSlotsForNom = computed(() => {
 .act-empty {
   margin: 0;
   font-size: 0.72rem;
-  color: rgba(148, 163, 184, 0.75);
+  color: var(--text-muted);
   text-align: center;
   padding: 1.2rem 0.25rem;
 }

@@ -103,9 +103,9 @@ const statusRibbon = computed(() => {
 .cc {
   padding: 1rem 1.1rem 1.15rem;
   border-radius: 16px;
-  background: rgba(8, 4, 20, 0.92);
-  border: 1px solid rgba(168, 85, 247, 0.45);
-  box-shadow: 0 0 48px rgba(168, 85, 247, 0.12);
+  background: var(--bg-card-solid);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 0 48px var(--accent-glow);
   margin-bottom: 1rem;
 }
 
@@ -115,7 +115,7 @@ const statusRibbon = computed(() => {
   font-weight: 800;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: rgba(196, 181, 253, 0.65);
+  color: var(--text-muted);
   font-family: 'Orbitron', sans-serif;
 }
 
@@ -127,9 +127,9 @@ const statusRibbon = computed(() => {
   font-weight: 800;
   letter-spacing: 0.05em;
   line-height: 1.35;
-  color: #e2e8f0;
-  background: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(168, 85, 247, 0.22);
+  color: var(--text-body);
+  background: var(--bg-muted-strong);
+  border: 1px solid var(--border);
   font-family: 'Orbitron', sans-serif;
   word-break: break-word;
 }
@@ -141,8 +141,8 @@ const statusRibbon = computed(() => {
 .cc-pult__act {
   padding: 0.65rem 0.75rem;
   border-radius: 12px;
-  background: rgba(0, 0, 0, 0.22);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-muted);
+  border: 1px solid var(--border-subtle);
 }
 
 .cc-footer {
@@ -150,7 +150,7 @@ const statusRibbon = computed(() => {
   flex-direction: column;
   gap: 0.65rem;
   padding-top: 0.5rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .cc-block--phase {
@@ -164,7 +164,7 @@ const statusRibbon = computed(() => {
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(196, 181, 253, 0.45);
+  color: var(--text-muted);
 }
 
 .cc-lab--mt {

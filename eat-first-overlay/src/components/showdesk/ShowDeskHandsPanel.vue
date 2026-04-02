@@ -42,8 +42,8 @@ const manyHands = computed(() => raised.value.length > 3)
   margin-top: 0.65rem;
   padding: 0.65rem 0.85rem 0.75rem;
   border-radius: 12px;
-  background: rgba(0, 0, 0, 0.28);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-muted);
+  border: 1px solid var(--border-subtle);
   transition: transform 0.12s ease;
 }
 
@@ -57,7 +57,7 @@ const manyHands = computed(() => raised.value.length > 3)
   font-weight: 800;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgba(196, 181, 253, 0.38);
+  color: var(--text-muted);
   font-family: 'Orbitron', sans-serif;
 }
 
@@ -69,7 +69,7 @@ const manyHands = computed(() => raised.value.length > 3)
 
 .hp-li {
   font-size: 0.72rem;
-  color: rgba(226, 232, 240, 0.88);
+  color: var(--text-body);
   padding: 0.15rem 0;
   font-family: 'Orbitron', sans-serif;
 }
@@ -79,14 +79,14 @@ const manyHands = computed(() => raised.value.length > 3)
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.06em;
-  color: rgba(254, 240, 138, 0.92);
+  color: var(--text-highlight);
   font-family: 'Orbitron', sans-serif;
 }
 
 .hp-empty {
   margin: 0 0 0.45rem;
   font-size: 0.66rem;
-  color: rgba(148, 163, 184, 0.6);
+  color: var(--text-muted);
 }
 
 .hp-clear {
@@ -95,9 +95,9 @@ const manyHands = computed(() => raised.value.length > 3)
   font-size: 0.68rem;
   font-weight: 600;
   cursor: pointer;
-  border: 1px solid rgba(251, 191, 36, 0.28);
-  background: rgba(55, 48, 40, 0.45);
-  color: #fef3c7;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-muted);
+  color: var(--text-body);
 }
 
 .hp-clear:hover {

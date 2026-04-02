@@ -44,9 +44,9 @@ const emit = defineEmits(['copy-personal', 'copy-global'])
 .desk-header {
   padding: 1.25rem 1.5rem;
   border-radius: 20px;
-  background: rgba(12, 10, 26, 0.75);
-  border: 1px solid rgba(124, 58, 237, 0.2);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-panel);
+  box-shadow: 0 8px 32px var(--shadow-elevated);
   margin-bottom: 1.25rem;
 }
 
@@ -63,7 +63,7 @@ const emit = defineEmits(['copy-personal', 'copy-global'])
   margin: 0 0 0.25rem;
   font-size: 1.35rem;
   font-weight: 700;
-  color: #f5f3ff;
+  color: var(--text-title);
   font-family: 'Orbitron', sans-serif;
   letter-spacing: 0.02em;
 }
@@ -71,15 +71,15 @@ const emit = defineEmits(['copy-personal', 'copy-global'])
 .desk-sub {
   margin: 0;
   font-size: 0.82rem;
-  color: rgba(196, 181, 253, 0.55);
+  color: var(--text-muted);
 }
 
 .desk-sub code {
   font-size: 0.85em;
   padding: 0.1rem 0.35rem;
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.35);
-  color: #e9d5ff;
+  background: var(--bg-code);
+  color: var(--text-heading);
 }
 
 .desk-stats {
@@ -92,9 +92,9 @@ const emit = defineEmits(['copy-personal', 'copy-global'])
   font-size: 0.72rem;
   padding: 0.35rem 0.65rem;
   border-radius: 999px;
-  background: rgba(88, 28, 135, 0.25);
-  border: 1px solid rgba(167, 139, 250, 0.25);
-  color: #ddd6fe;
+  background: var(--accent-fill-soft);
+  border: 1px solid var(--border-strong);
+  color: var(--text-heading);
 }
 
 .pill.dim {
@@ -102,7 +102,7 @@ const emit = defineEmits(['copy-personal', 'copy-global'])
 }
 
 .pill strong {
-  color: #fff;
+  color: var(--text-main);
   text-transform: capitalize;
 }
 
@@ -121,8 +121,8 @@ const emit = defineEmits(['copy-personal', 'copy-global'])
 .copy-block {
   padding: 0.65rem 0.75rem;
   border-radius: 14px;
-  background: rgba(0, 0, 0, 0.22);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-muted);
+  border: 1px solid var(--border-subtle);
 }
 
 .copy-label {
@@ -130,7 +130,7 @@ const emit = defineEmits(['copy-personal', 'copy-global'])
   font-size: 0.65rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(196, 181, 253, 0.45);
+  color: var(--text-muted);
   margin-bottom: 0.35rem;
 }
 
@@ -138,22 +138,23 @@ const emit = defineEmits(['copy-personal', 'copy-global'])
   margin: 0 0 0.5rem;
   font-size: 0.68rem;
   line-height: 1.35;
-  color: #cbd5e1;
+  color: var(--text-code);
   word-break: break-all;
 }
 
 .btn-copy {
   padding: 0.35rem 0.75rem;
   border-radius: 10px;
-  border: 1px solid rgba(167, 139, 250, 0.4);
-  background: rgba(88, 28, 135, 0.3);
-  color: #ede9fe;
+  border: 1px solid var(--border-strong);
+  background: var(--accent-fill);
+  color: var(--text-heading);
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
 }
 
 .btn-copy:hover {
-  background: rgba(109, 40, 217, 0.4);
+  background: var(--accent-fill-soft);
+  filter: brightness(1.08);
 }
 </style>

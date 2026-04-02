@@ -380,13 +380,20 @@ export async function saveCharacter(gameId, playerId, data) {
  * @returns {() => void} функція відписки
  */
 export function subscribeToCharacter(gameId, playerId, callback) {
-  return onSnapshot(playerDocRef(gameId, playerId), (snapshot) => {
-    if (!snapshot.exists()) {
+  return onSnapshot(
+    playerDocRef(gameId, playerId),
+    (snapshot) => {
+      if (!snapshot.exists()) {
+        callback(null)
+        return
+      }
+      callback(snapshot.data())
+    },
+    (err) => {
+      console.error('[subscribeToCharacter]', err)
       callback(null)
-      return
-    }
-    callback(snapshot.data())
-  })
+    },
+  )
 }
 
 /** Одноразове читання (для Control після перезавантаження). */

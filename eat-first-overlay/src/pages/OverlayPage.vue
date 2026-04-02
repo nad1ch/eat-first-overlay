@@ -269,6 +269,28 @@ const personalIsVoteTarget = computed(
     votingTargetId.value === personalPlayerId.value,
 )
 
+const personalVoteBannerVisible = computed(
+  () =>
+    isPersonal.value &&
+    votingActive.value &&
+    Boolean(votingTargetId.value) &&
+    singlePlayer.value != null,
+)
+
+const personalOverlayVoteTally = computed(() => {
+  const t = votingTargetId.value
+  if (!t) return { for: 0, against: 0 }
+  let forC = 0
+  let ag = 0
+  for (const v of votes.value) {
+    if (Number(v.round) !== roomRound.value) continue
+    if (String(v.targetPlayer) !== t) continue
+    if (v.choice === 'against') ag++
+    else forC++
+  }
+  return { for: forC, against: ag }
+})
+
 const votesThisRoundCount = computed(
   () => votes.value.filter((v) => Number(v.round) === roomRound.value).length,
 )
@@ -389,6 +411,23 @@ onUnmounted(() => {
       Немає даних для {{ personalPlayerId }}…
     </p>
 
+    <div
+      v-if="personalVoteBannerVisible"
+      class="overlay-vote-top"
+      role="status"
+      aria-live="polite"
+    >
+      <p class="overlay-vote-top__k">ГОЛОСУВАННЯ</p>
+      <p class="overlay-vote-top__line">Проти гравця {{ slotNumFromId(votingTargetId) }}</p>
+      <p v-if="personalIsVoteTarget" class="overlay-vote-top__warn">ТЕБЕ ГОЛОСУЮТЬ</p>
+      <p class="overlay-vote-top__sc">
+        👍 {{ personalOverlayVoteTally.for }}
+        <span class="overlay-vote-top__dot">·</span>
+        👎 {{ personalOverlayVoteTally.against }}
+      </p>
+      <p class="overlay-vote-top__hint">Голосуй у панелі гравця (control)</p>
+    </div>
+
     <div v-if="isPersonal" class="single-stage single-stage--hud">
       <OverlayPlayerCard
         v-if="singlePlayer"
@@ -399,7 +438,8 @@ onUnmounted(() => {
         :drama="dramaPersonal"
         :voting-active="votingActive"
         :voting-target-id="votingTargetId"
-        :vote-interactive="true"
+        :vote-interactive="false"
+        :hide-vote-strip="true"
         :game-id="gameId"
         :nominated-player-id="nominatedPlayerId"
         :nominated-by-id="nominatedById"
@@ -463,6 +503,8 @@ onUnmounted(() => {
   width: 100%;
   box-sizing: border-box;
   position: relative;
+  /* Завжди темний канвас для ефіру, незалежно від теми сайту */
+  background: #050308;
 }
 
 .overlay-root--round-pulse {
@@ -545,6 +587,79 @@ onUnmounted(() => {
   right: max(0.5rem, env(safe-area-inset-right, 0px));
   font-size: clamp(0.58rem, min(1.55vw, 1.65vh), 0.72rem);
   color: rgba(254, 240, 138, 0.92);
+}
+
+.overlay-vote-top {
+  position: fixed;
+  top: max(0.5rem, env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 45;
+  margin: 0;
+  padding: 0.45rem 1rem 0.55rem;
+  max-width: min(92vw, 28rem);
+  text-align: center;
+  pointer-events: none;
+  font-family: Orbitron, sans-serif;
+  border-radius: 12px;
+  background: rgba(8, 6, 22, 0.88);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+
+.overlay-vote-top__k {
+  margin: 0;
+  font-size: clamp(0.48rem, min(1.2vw, 1.35vh), 0.58rem);
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  color: rgba(125, 211, 252, 0.95);
+}
+
+.overlay-vote-top__line {
+  margin: 0.2rem 0 0;
+  font-size: clamp(0.62rem, min(1.65vw, 1.75vh), 0.78rem);
+  font-weight: 800;
+  color: #f8fafc;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.75);
+}
+
+.overlay-vote-top__warn {
+  margin: 0.35rem 0 0;
+  font-size: clamp(0.58rem, min(1.5vw, 1.6vh), 0.72rem);
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: #fecaca;
+  animation: overlayVotePulse 1.4s ease-in-out infinite;
+}
+
+@keyframes overlayVotePulse {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.overlay-vote-top__sc {
+  margin: 0.35rem 0 0;
+  font-size: clamp(0.7rem, min(1.85vw, 2vh), 0.88rem);
+  font-weight: 800;
+  color: #e2e8f0;
+}
+
+.overlay-vote-top__dot {
+  margin: 0 0.35rem;
+  opacity: 0.5;
+}
+
+.overlay-vote-top__hint {
+  margin: 0.3rem 0 0;
+  font-size: clamp(0.48rem, min(1.25vw, 1.35vh), 0.58rem);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: rgba(203, 213, 225, 0.88);
 }
 
 .overlay-root--global {

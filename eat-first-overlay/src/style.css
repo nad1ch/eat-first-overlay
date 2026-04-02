@@ -19,9 +19,8 @@ body {
     sans-serif;
   font-size: 16px;
   line-height: 1.45;
-  color: #e2e8f0;
-  background: radial-gradient(ellipse 120% 80% at 50% -20%, rgba(88, 28, 135, 0.35), transparent),
-    #0a0a12;
+  color: var(--text-body);
+  background: var(--bg-body);
   -webkit-font-smoothing: antialiased;
 }
 

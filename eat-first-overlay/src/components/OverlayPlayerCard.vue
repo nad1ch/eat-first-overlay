@@ -25,6 +25,8 @@ const props = defineProps({
   votingTargetId: { type: String, default: '' },
   /** Тільки персональний оверлей: кнопки голосу активні */
   voteInteractive: { type: Boolean, default: false },
+  /** Сховати смугу голосування на картці (батько показує зверху, напр. персональний оверлей) */
+  hideVoteStrip: { type: Boolean, default: false },
   gameId: { type: String, default: '' },
   nominatedPlayerId: { type: String, default: '' },
   /** Хто ініціював номінацію (slot p1…) — legacy */
@@ -454,7 +456,7 @@ async function submitVote(choice) {
         </ul>
       </div>
       <div
-        v-if="votingShown"
+        v-if="votingShown && !hideVoteStrip"
         class="vote-strip vote-strip--grid"
         :class="{ 'vote-strip--flash': voteFlash }"
         aria-label="Голосування"
@@ -630,7 +632,7 @@ async function submitVote(choice) {
     </div>
 
       <div
-        v-if="votingShown"
+        v-if="votingShown && !hideVoteStrip"
         class="vote-strip vote-strip--solo"
         :class="{ 'vote-strip--interactive': voteInteractive, 'vote-strip--flash': voteFlash }"
         aria-label="Голосування"

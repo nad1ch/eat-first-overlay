@@ -66,9 +66,8 @@ function backJoin() {
   flex-direction: column;
   justify-content: center;
   font-family: Inter, system-ui, sans-serif;
-  color: #e2e8f0;
-  background: radial-gradient(100% 60% at 50% 0%, rgba(88, 28, 135, 0.4), transparent),
-    #050308;
+  color: var(--text-body);
+  background: var(--bg-body);
 }
 
 .eyebrow {
@@ -77,7 +76,7 @@ function backJoin() {
   font-weight: 700;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: rgba(196, 181, 253, 0.45);
+  color: var(--text-muted);
 }
 
 .title {
@@ -85,17 +84,17 @@ function backJoin() {
   font-family: Orbitron, sans-serif;
   font-size: 1.5rem;
   font-weight: 800;
-  color: #faf5ff;
+  color: var(--text-title);
 }
 
 .hint {
   margin: 0 0 1.25rem;
   font-size: 0.85rem;
-  color: rgba(186, 181, 200, 0.9);
+  color: var(--text-secondary);
 }
 
 .hint strong {
-  color: #e9d5ff;
+  color: var(--text-heading);
 }
 
 .form {
@@ -108,31 +107,31 @@ function backJoin() {
   font-size: 0.65rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(196, 181, 253, 0.45);
+  color: var(--text-muted);
 }
 
 .inp {
   padding: 0.65rem 0.75rem;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(8, 6, 20, 0.92);
-  color: #f1f5f9;
+  border: 1px solid var(--border-input);
+  background: var(--bg-input);
+  color: var(--text-body);
   font-size: 0.95rem;
 }
 
 .err {
   margin: 0;
   font-size: 0.8rem;
-  color: #fecaca;
+  color: var(--error-text);
 }
 
 .btn {
   margin-top: 0.35rem;
   padding: 0.7rem 1rem;
   border-radius: 12px;
-  border: 1px solid rgba(168, 85, 247, 0.5);
-  background: rgba(88, 28, 135, 0.45);
-  color: #fff;
+  border: 1px solid var(--accent);
+  background: var(--accent-fill);
+  color: var(--text-main);
   font-weight: 700;
   cursor: pointer;
 }
@@ -143,7 +142,7 @@ function backJoin() {
   padding: 0;
   border: none;
   background: none;
-  color: rgba(196, 181, 253, 0.55);
+  color: var(--text-muted);
   font-size: 0.82rem;
   cursor: pointer;
   text-decoration: underline;
@@ -151,6 +150,6 @@ function backJoin() {
 }
 
 .link-back:hover {
-  color: #e9d5ff;
+  color: var(--text-heading);
 }
 </style>

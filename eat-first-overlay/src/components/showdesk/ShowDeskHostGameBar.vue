@@ -106,8 +106,8 @@ const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
 .top {
   padding: 0.75rem 1rem 0.85rem;
   border-radius: 16px;
-  background: rgba(6, 4, 18, 0.96);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-card-solid);
+  border: 1px solid var(--border-subtle);
   margin-bottom: 0.65rem;
   transition:
     box-shadow 0.25s ease,
@@ -115,8 +115,8 @@ const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
 }
 
 .top--vote-on {
-  border-color: rgba(45, 212, 191, 0.45);
-  box-shadow: 0 0 28px rgba(45, 212, 191, 0.18);
+  border-color: var(--border-teal);
+  box-shadow: 0 0 28px var(--glow-vote);
 }
 
 .top-round {
@@ -134,9 +134,9 @@ const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
   font-size: 1.35rem;
   font-weight: 700;
   cursor: pointer;
-  border: 1px solid rgba(100, 116, 139, 0.4);
-  background: rgba(15, 23, 42, 0.9);
-  color: #e2e8f0;
+  border: 1px solid var(--border-input);
+  background: var(--reveal-bg);
+  color: var(--text-body);
   transition: transform 0.1s ease;
 }
 
@@ -154,7 +154,7 @@ const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
   font-size: clamp(1.35rem, 5vw, 1.85rem);
   font-weight: 900;
   letter-spacing: 0.1em;
-  color: #f5f3ff;
+  color: var(--text-title);
   min-width: 7.5rem;
   text-align: center;
 }
@@ -165,11 +165,11 @@ const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
   font-size: 1rem;
   font-weight: 800;
   font-family: 'Orbitron', sans-serif;
-  color: #cbd5e1;
+  color: var(--text-code);
 }
 
 .top-target strong {
-  color: #fde047;
+  color: var(--text-highlight);
 }
 
 .top-hint {
@@ -194,9 +194,9 @@ const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
   font-size: 0.76rem;
   font-weight: 800;
   cursor: pointer;
-  border: 1px solid rgba(74, 222, 128, 0.5);
-  background: rgba(22, 101, 52, 0.45);
-  color: #bbf7d0;
+  border: 1px solid var(--reveal-on-border);
+  background: var(--reveal-on-bg);
+  color: var(--reveal-on-text);
 }
 
 .top-go:disabled {
@@ -210,9 +210,9 @@ const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
   font-size: 0.76rem;
   font-weight: 800;
   cursor: pointer;
-  border: 1px solid rgba(248, 113, 113, 0.45);
-  background: rgba(80, 20, 30, 0.55);
-  color: #fecaca;
+  border: 1px solid var(--reveal-off-border);
+  background: var(--reveal-off-bg);
+  color: var(--reveal-off-text);
 }
 
 .top-stop:disabled {
@@ -226,20 +226,20 @@ const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
   font-size: 0.55rem;
   font-weight: 900;
   letter-spacing: 0.16em;
-  color: #bbf7d0;
+  color: var(--reveal-on-text);
   font-family: 'Orbitron', sans-serif;
 }
 
 .top-live {
   padding-top: 0.45rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .top-live__k {
   font-size: 0.55rem;
   font-weight: 800;
   letter-spacing: 0.14em;
-  color: rgba(125, 211, 252, 0.45);
+  color: var(--text-cyan);
 }
 
 .top-score {
@@ -249,7 +249,7 @@ const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
   font-family: 'Orbitron', sans-serif;
   font-size: 0.85rem;
   font-weight: 900;
-  color: #f1f5f9;
+  color: var(--text-body);
 }
 
 .top-list {
@@ -267,18 +267,18 @@ const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
   gap: 0.35rem;
   font-size: 0.68rem;
   font-family: 'Orbitron', sans-serif;
-  color: rgba(226, 232, 240, 0.9);
+  color: var(--text-body);
   padding: 0.2rem 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .top-rm {
   width: 1.5rem;
   height: 1.5rem;
   border-radius: 6px;
-  border: 1px solid rgba(248, 113, 113, 0.35);
-  background: rgba(60, 20, 28, 0.5);
-  color: #fecaca;
+  border: 1px solid var(--reveal-off-border);
+  background: var(--reveal-off-bg);
+  color: var(--reveal-off-text);
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -286,6 +286,6 @@ const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
 .top-empty {
   margin: 0.2rem 0 0;
   font-size: 0.65rem;
-  color: rgba(148, 163, 184, 0.65);
+  color: var(--text-muted);
 }
 </style>
