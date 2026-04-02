@@ -12,8 +12,12 @@ import {
 } from '../services/gameService'
 import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
 import { millisFromFirestore } from '../utils/firestoreTime.js'
+import AppPageLoader from '../components/ui/AppPageLoader.vue'
 
 const route = useRoute()
+
+const gotGameRoomOv = ref(false)
+const gotPrimaryOv = ref(false)
 
 const gameId = computed(() => String(route.query.game ?? 'test1'))
 
@@ -72,9 +76,11 @@ function cleanupVotesSub() {
 }
 
 function setupGameRoom(gid) {
+  gotGameRoomOv.value = false
   cleanupGameRoom()
   unsubGameRoom = subscribeToGameRoom(gid, (data) => {
     gameRoom.value = normalizeGameRoomPayload(data && typeof data === 'object' ? data : {})
+    gotGameRoomOv.value = true
   })
 }
 
@@ -130,12 +136,14 @@ watch(
     const gid = gameId.value
     const pid = personalPlayerId.value
     aliveForCinema.value = 0
+    gotPrimaryOv.value = false
 
     if (pid) {
       players.value = []
       singlePlayer.value = null
       unsubscribe = subscribeToCharacter(gid, pid, (data) => {
         singlePlayer.value = data ? { id: pid, ...data } : null
+        gotPrimaryOv.value = true
       })
       unsubPlayersCount = subscribeToPlayers(gid, (list) => {
         aliveForCinema.value = list.filter((p) => p.eliminated !== true).length
@@ -144,11 +152,14 @@ watch(
       singlePlayer.value = null
       unsubscribe = subscribeToPlayers(gid, (list) => {
         players.value = list
+        gotPrimaryOv.value = true
       })
     }
   },
   { immediate: true },
 )
+
+const overlayPageReady = computed(() => gotGameRoomOv.value && gotPrimaryOv.value)
 
 /** Банер лише при зміні раунду в кімнаті (не прив’язано до фази) */
 const roundBannerVisible = ref(false)
@@ -378,6 +389,10 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <AppPageLoader
+    :visible="!overlayPageReady"
+    label="Синхронізуємо оверлей…"
+  />
   <div
     class="overlay-root"
     :class="{

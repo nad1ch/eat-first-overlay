@@ -414,6 +414,15 @@ html *::after {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  width: 100%;
+  align-items: stretch;
+}
+
+/* Маршрутні сторінки тягнуться на всю ширину під шапкою (інакше flex може стискати до контенту). */
+.app-shell-main > * {
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 /* Футер: бренд nad1ch (не показується на /overlay — див. App.vue) */

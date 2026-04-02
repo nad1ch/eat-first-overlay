@@ -3,6 +3,7 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { subscribeToGameRoom, subscribeToPlayers } from '../services/gameService'
 import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
+import AppPageLoader from '../components/ui/AppPageLoader.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -27,9 +28,16 @@ const gameRoomJoin = ref({})
 let unsub = null
 let unsubRoom = null
 
+const joinGotPlayers = ref(false)
+const joinGotRoom = ref(false)
+const joinLobbyReady = ref(false)
+
 watch(
   gameId,
   (gid) => {
+    joinGotPlayers.value = false
+    joinGotRoom.value = false
+    joinLobbyReady.value = false
     if (unsub) {
       unsub()
       unsub = null
@@ -40,12 +48,22 @@ watch(
     }
     unsub = subscribeToPlayers(gid, (list) => {
       players.value = Array.isArray(list) ? list : []
+      joinGotPlayers.value = true
     })
     unsubRoom = subscribeToGameRoom(gid, (d) => {
       gameRoomJoin.value = normalizeGameRoomPayload(d && typeof d === 'object' ? d : {})
+      joinGotRoom.value = true
     })
   },
   { immediate: true },
+)
+
+watch(
+  [joinGotPlayers, joinGotRoom],
+  () => {
+    if (joinGotPlayers.value && joinGotRoom.value) joinLobbyReady.value = true
+  },
+  { flush: 'post' },
 )
 
 onUnmounted(() => {
@@ -119,6 +137,10 @@ function handUpJoin(pid) {
 
 <template>
   <div class="join">
+    <AppPageLoader
+      :visible="!joinLobbyReady"
+      label="Підключаємось до кімнати…"
+    />
     <div class="join-bg" aria-hidden="true" />
 
     <header class="join-hero anim-slide-up">

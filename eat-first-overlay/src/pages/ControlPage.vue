@@ -49,6 +49,7 @@ import { syncHostControlChrome, clearHostControlChrome } from '../composables/ho
 import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
 import { normalizePlayerSlotId } from '../utils/playerSlot.js'
 import { formatGenderDisplay } from '../utils/genderDisplay.js'
+import AppPageLoader from '../components/ui/AppPageLoader.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -116,6 +117,11 @@ let unsubGameRoom = null
 let unsubPlayers = null
 let unsubVotes = null
 let unsubCharacter = null
+
+/** Перші знімки Firestore + картка персонажа — повноекранний лоадер лише при «холодному» старті / зміні game id. */
+const gotGameRoomSnap = ref(false)
+const gotPlayersSnap = ref(false)
+const bootstrappedControl = ref(false)
 
 const toast = ref('')
 let toastTimer = null
@@ -191,13 +197,18 @@ watch(
   [gameId, adminAccessDenied, isAdmin],
   () => {
     cleanupSubs()
+    gotGameRoomSnap.value = false
+    gotPlayersSnap.value = false
     if (adminAccessDenied.value) {
       gameRoom.value = {}
       allPlayers.value = []
+      bootstrappedControl.value = true
       return
     }
+    bootstrappedControl.value = false
     unsubGameRoom = subscribeToGameRoom(gameId.value, (d) => {
       gameRoom.value = normalizeGameRoomPayload(d && typeof d === 'object' ? d : {})
+      gotGameRoomSnap.value = true
     })
     unsubVotes = subscribeToVotes(gameId.value, (list) => {
       votes.value = list
@@ -205,9 +216,11 @@ watch(
     if (isAdmin.value) {
       unsubPlayers = subscribeToPlayers(gameId.value, (list) => {
         allPlayers.value = list
+        gotPlayersSnap.value = true
       })
     } else {
       allPlayers.value = []
+      gotPlayersSnap.value = true
     }
   },
   { immediate: true },
@@ -990,6 +1003,25 @@ watch(
   { immediate: true },
 )
 
+watch(
+  [gotGameRoomSnap, gotPlayersSnap, panelHydrating, isAdmin, adminAccessDenied],
+  () => {
+    if (adminAccessDenied.value) {
+      bootstrappedControl.value = true
+      return
+    }
+    if (!gotGameRoomSnap.value) return
+    if (isAdmin.value && !gotPlayersSnap.value) return
+    if (panelHydrating.value) return
+    bootstrappedControl.value = true
+  },
+  { flush: 'post' },
+)
+
+const showControlPageLoader = computed(
+  () => !adminAccessDenied.value && !bootstrappedControl.value,
+)
+
 onUnmounted(() => {
   clearHostControlChrome()
   clearTimeout(saveTimer)
@@ -1035,6 +1067,10 @@ function rerollActiveCardOnly() {
   </div>
 
   <div v-else class="desk">
+    <AppPageLoader
+      :visible="showControlPageLoader"
+      label="Підтягуємо кімнату та картку…"
+    />
     <div class="mode-strip" :class="{ admin: isAdmin, player: !isAdmin }">
       <span class="mode-label">{{ modeLabel }}</span>
       <span v-if="!isAdmin" class="status-pill" :data-s="myStatusLabel">{{ myStatusLabel }}</span>
@@ -1416,10 +1452,12 @@ function rerollActiveCardOnly() {
 
 <style scoped>
 .desk {
+  width: 100%;
   max-width: min(1200px, 100%);
   margin: 0 auto;
   padding: 0 1.25rem 4rem;
   box-sizing: border-box;
+  min-width: 0;
 }
 
 .admin-zone--live-priority.admin-card {
@@ -1747,18 +1785,18 @@ function rerollActiveCardOnly() {
   max-width: 100%;
   box-sizing: border-box;
   align-self: stretch;
-  container-type: inline-size;
-  container-name: player-char;
+  min-width: 0;
 }
 
-/* Дві колонки за замовчуванням (надійніше за один лише container query у scoped CSS) */
+/* Дві колонки: без container queries (уникаємо хибного max-width у scoped / containment) */
 .player-char-grid__traits.player-traits-cols {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  column-gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: clamp(0.65rem, 2vw, 1.15rem);
   row-gap: 0.5rem;
   align-items: start;
   width: 100%;
+  min-width: 0;
 }
 
 .player-traits-col {
@@ -1773,15 +1811,7 @@ function rerollActiveCardOnly() {
   margin-bottom: 0;
 }
 
-@media (max-width: 520px) {
-  .player-char-grid__traits.player-traits-cols {
-    grid-template-columns: 1fr;
-    column-gap: 0.5rem;
-  }
-}
-
-/* Додатково: якщо сама панель вузька (split view), лишаємо одну колонку */
-@container player-char (max-width: 480px) {
+@media (max-width: 540px) {
   .player-char-grid__traits.player-traits-cols {
     grid-template-columns: 1fr;
     column-gap: 0.5rem;
@@ -2103,6 +2133,7 @@ function rerollActiveCardOnly() {
   box-shadow: var(--panel-desk-shadow);
   width: 100%;
   max-width: 100%;
+  min-width: 0;
   box-sizing: border-box;
 }
 

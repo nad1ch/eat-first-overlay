@@ -92,6 +92,17 @@
   opacity: 0;
 }
 
+/* Повноекранний лоадер (AppPageLoader.vue → Teleport body) */
+.page-loader-fade-enter-active,
+.page-loader-fade-leave-active {
+  transition: opacity 0.32s var(--motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+.page-loader-fade-enter-from,
+.page-loader-fade-leave-to {
+  opacity: 0;
+}
+
 /* Фліп характеристик на оверлеї (OverlayPlayerCard) */
 .opc-flip-enter-active {
   animation: opcFlipIn 0.5s var(--motion-ease) both;
