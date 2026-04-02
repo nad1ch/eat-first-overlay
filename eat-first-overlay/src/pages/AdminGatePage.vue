@@ -39,7 +39,7 @@ function backJoin() {
 </script>
 
 <template>
-  <div class="gate">
+  <div class="gate anim-fade-in">
     <p class="eyebrow">Ведучий</p>
     <h1 class="title">Admin</h1>
     <p class="hint">Кімната: <strong>{{ gameId }}</strong></p>
@@ -57,17 +57,18 @@ function backJoin() {
 
 <style scoped>
 .gate {
-  min-height: 100vh;
+  flex: 1;
+  width: 100%;
   box-sizing: border-box;
-  padding: 2rem 1.25rem;
-  max-width: 400px;
+  padding: clamp(1.5rem, 4vh, 2.5rem) 1.25rem;
+  max-width: 22rem;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  font-family: Inter, system-ui, sans-serif;
+  font-family: var(--font-body);
   color: var(--text-body);
-  background: var(--bg-body);
+  background: transparent;
 }
 
 .eyebrow {
@@ -81,7 +82,7 @@ function backJoin() {
 
 .title {
   margin: 0.4rem 0 0.5rem;
-  font-family: Orbitron, sans-serif;
+  font-family: var(--font-display);
   font-size: 1.5rem;
   font-weight: 800;
   color: var(--text-title);

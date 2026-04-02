@@ -1,7 +1,8 @@
 <script setup>
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { subscribeToPlayers } from '../services/gameService'
+import { subscribeToGameRoom, subscribeToPlayers } from '../services/gameService'
+import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -22,7 +23,9 @@ const gameId = computed(() => {
 })
 
 const players = ref([])
+const gameRoomJoin = ref({})
 let unsub = null
+let unsubRoom = null
 
 watch(
   gameId,
@@ -31,8 +34,15 @@ watch(
       unsub()
       unsub = null
     }
+    if (unsubRoom) {
+      unsubRoom()
+      unsubRoom = null
+    }
     unsub = subscribeToPlayers(gid, (list) => {
       players.value = Array.isArray(list) ? list : []
+    })
+    unsubRoom = subscribeToGameRoom(gid, (d) => {
+      gameRoomJoin.value = normalizeGameRoomPayload(d && typeof d === 'object' ? d : {})
     })
   },
   { immediate: true },
@@ -40,6 +50,7 @@ watch(
 
 onUnmounted(() => {
   if (unsub) unsub()
+  if (unsubRoom) unsubRoom()
 })
 
 const SLOT_IDS = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10']
@@ -87,13 +98,30 @@ const globalOverlayUrl = computed(() => {
   if (typeof window === 'undefined') return h
   return new URL(h, window.location.origin).href
 })
+
+const TRAIT_KEYS = ['profession', 'health', 'phobia', 'luggage', 'fact', 'quirk']
+
+function slotOverlayOpen(p) {
+  if (!p || p.eliminated === true) return false
+  if (p.identityRevealed === true) return true
+  return TRAIT_KEYS.some((k) => {
+    const c = p[k]
+    return c && typeof c === 'object' && c.revealed === true
+  })
+}
+
+function handUpJoin(pid) {
+  const h = gameRoomJoin.value?.hands
+  if (!h || typeof h !== 'object') return false
+  return h[String(pid)] === true
+}
 </script>
 
 <template>
   <div class="join">
     <div class="join-bg" aria-hidden="true" />
 
-    <header class="join-hero">
+    <header class="join-hero anim-slide-up">
       <p class="eyebrow">Live show</p>
       <h1 class="title">Кого ми з’їмо першим</h1>
       <p class="lead">
@@ -102,13 +130,13 @@ const globalOverlayUrl = computed(() => {
       </p>
     </header>
 
-    <ol class="join-steps">
+    <ol class="join-steps anim-slide-up" style="animation-delay: 40ms">
       <li><span class="join-steps__n">1</span> Введи game id і обери <strong>свій</strong> слот нижче</li>
       <li><span class="join-steps__n">2</span> Відкрий свій overlay у OBS (кнопка «Оверлей» у слоті)</li>
       <li><span class="join-steps__n">3</span> Керуй картками з панелі гравця («Моя панель»)</li>
     </ol>
 
-    <div class="game-bar">
+    <div class="game-bar anim-slide-up" style="animation-delay: 80ms">
       <label class="lbl" for="gid">Game id</label>
       <div class="game-row">
         <input id="gid" v-model="gameInput" type="text" class="inp" autocomplete="off" />
@@ -116,21 +144,21 @@ const globalOverlayUrl = computed(() => {
       </div>
     </div>
 
-    <section class="roles" aria-labelledby="roles-title">
+    <section class="roles roles--clean" aria-labelledby="roles-title">
       <h2 id="roles-title" class="roles-title">Хто ти зараз?</h2>
       <p class="roles-hint">Ведучий і OBS — окремі входи. Гравець обирає слот у блоці нижче.</p>
-      <div class="cta-grid">
-        <button type="button" class="cta cta--play" @click="scrollToPlayerSlots">
+      <div class="cta-grid anim-stagger">
+        <button type="button" class="cta cta--play" style="--stagger-index: 0" @click="scrollToPlayerSlots">
           <span class="cta-ico" aria-hidden="true">🎤</span>
           <span class="cta-t">Я гравець</span>
           <span class="cta-d">Прокрутити до вибору слоту · потім «Моя панель»</span>
         </button>
-        <button type="button" class="cta cta--host" @click="goAdmin">
+        <button type="button" class="cta cta--host" style="--stagger-index: 1" @click="goAdmin">
           <span class="cta-ico" aria-hidden="true">🎮</span>
           <span class="cta-t">Я ведучий</span>
           <span class="cta-d">Пульт шоу · таймер · фази (ключ доступу)</span>
         </button>
-        <button type="button" class="cta cta--obs" @click="goGlobalOverlay">
+        <button type="button" class="cta cta--obs" style="--stagger-index: 2" @click="goGlobalOverlay">
           <span class="cta-ico" aria-hidden="true">🎥</span>
           <span class="cta-t">OBS · оверлей</span>
           <span class="cta-d">Глобальна сітка або джерело для сцени</span>
@@ -138,33 +166,7 @@ const globalOverlayUrl = computed(() => {
       </div>
     </section>
 
-    <section id="player-slots" class="cards-wrap" aria-labelledby="slots-title">
-      <h2 id="slots-title" class="sec-title">Обери свій слот</h2>
-      <p class="sec-sub sec-sub--emph">
-        Натисни <strong>свій</strong> номер (як оголосив ведучий). «Моя панель» — тільки твої карти; не заходь у чужий
-        слот.
-      </p>
-      <div class="cards">
-        <div
-          v-for="p in slotsForGrid"
-          :key="p.id"
-          class="pcard"
-          :class="{ elim: p.eliminated === true, 'pcard--empty': !(p.name && String(p.name).trim()) }"
-        >
-          <span class="num">Слот {{ slotNum(p.id) }}</span>
-          <span class="nm">{{ (p.name && String(p.name).trim()) || 'Ще без імені в кімнаті' }}</span>
-          <span v-if="p.eliminated" class="badge">вибув</span>
-          <div class="pcard-actions">
-            <button type="button" class="pcard-btn pcard-btn--primary" @click="openPlayerControl(p.id)">
-              Моя панель
-            </button>
-            <button type="button" class="pcard-btn" @click="openPersonalOverlay(p.id)">OBS оверлей</button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="obs-hint" aria-labelledby="obs-hint-title">
+    <section class="obs-hint anim-slide-up" style="animation-delay: 0.12s" aria-labelledby="obs-hint-title">
       <h2 id="obs-hint-title" class="obs-hint__title">OBS · швидкий старт</h2>
       <ol class="obs-hint__list">
         <li>Джерело: <strong>Browser</strong> (або Browser Source).</li>
@@ -177,6 +179,43 @@ const globalOverlayUrl = computed(() => {
         <code class="obs-hint__code">{{ globalOverlayUrl }}</code>
       </p>
     </section>
+
+    <section id="player-slots" class="cards-wrap anim-slide-up" style="animation-delay: 0.16s" aria-labelledby="slots-title">
+      <h2 id="slots-title" class="sec-title">Обери свій слот</h2>
+      <p class="sec-sub sec-sub--emph">
+        Натисни <strong>свій</strong> номер (як оголосив ведучий). «Моя панель» — тільки твої карти; не заходь у чужий
+        слот.
+      </p>
+      <div class="cards">
+        <div
+          v-for="p in slotsForGrid"
+          :key="p.id"
+          class="pcard anim-scale-in"
+          :class="{ elim: p.eliminated === true, 'pcard--empty': !(p.name && String(p.name).trim()) }"
+        >
+          <span class="num">Слот {{ slotNum(p.id) }}</span>
+          <span class="nm">{{ (p.name && String(p.name).trim()) || 'Ще без імені в кімнаті' }}</span>
+          <span v-if="p.eliminated" class="badge">вибув</span>
+          <div class="pcard-status-row">
+            <span
+              class="pcard-ov"
+              :class="{ 'pcard-ov--open': slotOverlayOpen(p) }"
+              :title="slotOverlayOpen(p) ? 'Є відкриті дані на оверлеї' : 'Дані для глядачів закриті'"
+            >
+              {{ slotOverlayOpen(p) ? 'Оверлей: відкрито' : 'Оверлей: закрито' }}
+            </span>
+            <span v-if="handUpJoin(p.id)" class="pcard-hand" title="Піднята рука">✋</span>
+          </div>
+          <div class="pcard-actions">
+            <button type="button" class="pcard-btn pcard-btn--primary" @click="openPlayerControl(p.id)">
+              Моя панель
+            </button>
+            <button type="button" class="pcard-btn" @click="openPersonalOverlay(p.id)">OBS оверлей</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </div>
 </template>
 
@@ -188,7 +227,7 @@ const globalOverlayUrl = computed(() => {
   padding: clamp(1.5rem, 4vw, 2.5rem) clamp(1rem, 3vw, 1.75rem) 3.5rem;
   max-width: min(52rem, 100%);
   margin: 0 auto;
-  font-family: Inter, system-ui, sans-serif;
+  font-family: var(--font-body);
   color: var(--text-body);
   overflow-x: hidden;
 }
@@ -260,7 +299,7 @@ const globalOverlayUrl = computed(() => {
   border-radius: 8px;
   font-size: 0.68rem;
   font-weight: 800;
-  font-family: Orbitron, sans-serif;
+  font-family: var(--font-display);
   color: var(--text-heading);
   background: var(--accent-fill);
   border: 1px solid var(--border-strong);
@@ -270,6 +309,13 @@ const globalOverlayUrl = computed(() => {
   margin-bottom: 0;
 }
 
+.roles--clean {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  padding: 0;
+}
+
 .roles-title {
   margin: 0 0 0.35rem;
   text-align: center;
@@ -277,7 +323,7 @@ const globalOverlayUrl = computed(() => {
   font-weight: 800;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  font-family: Orbitron, sans-serif;
+  font-family: var(--font-display);
   color: var(--text-muted);
 }
 
@@ -300,7 +346,7 @@ const globalOverlayUrl = computed(() => {
 
 .title {
   margin: 0.5rem 0 0.4rem;
-  font-family: Orbitron, sans-serif;
+  font-family: var(--font-display);
   font-size: clamp(1.4rem, 4.5vw, 1.85rem);
   font-weight: 800;
   color: var(--text-title);
@@ -563,6 +609,39 @@ const globalOverlayUrl = computed(() => {
   color: var(--text-muted);
   font-weight: 600;
   font-size: 0.78rem;
+}
+
+.pcard-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  min-height: 1.35rem;
+}
+
+.pcard-ov {
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.22rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.pcard-ov--open {
+  border-color: var(--reveal-on-border);
+  color: var(--reveal-on-text);
+  background: var(--reveal-on-bg);
+}
+
+.pcard-hand {
+  font-size: 0.9rem;
+  line-height: 1;
+  filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.35));
 }
 
 .pcard-actions {

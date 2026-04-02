@@ -472,24 +472,26 @@ async function submitVote(choice) {
         </p>
         <ul class="stats">
           <li v-for="row in fieldConfig" :key="row.key">
-            <span
-              :key="valueRevealKey(player, row.key)"
-            class="stat-cell"
-            :class="{
-                'stat-cell--label': !chunkForDisplay(player, row.key).revealed,
-                'stat-cell--open': chunkForDisplay(player, row.key).revealed,
-                'stat-cell--wave': chunkForDisplay(player, row.key).revealed,
-                'value--revealed': chunkForDisplay(player, row.key).revealed,
-                'stat-cell--drama': drama && chunkForDisplay(player, row.key).revealed,
-              }"
-            >
-              <template v-if="!chunkForDisplay(player, row.key).revealed">
-                {{ fieldLabelUi(row.key) }}
-              </template>
-              <template v-else>
-                {{ statDisplay(player, row.key).text }}
-              </template>
-            </span>
+            <Transition name="opc-flip" mode="out-in">
+              <span
+                :key="valueRevealKey(player, row.key)"
+                class="stat-cell"
+                :class="{
+                  'stat-cell--label': !chunkForDisplay(player, row.key).revealed,
+                  'stat-cell--open': chunkForDisplay(player, row.key).revealed,
+                  'stat-cell--wave': chunkForDisplay(player, row.key).revealed,
+                  'value--revealed': chunkForDisplay(player, row.key).revealed,
+                  'stat-cell--drama': drama && chunkForDisplay(player, row.key).revealed,
+                }"
+              >
+                <template v-if="!chunkForDisplay(player, row.key).revealed">
+                  {{ fieldLabelUi(row.key) }}
+                </template>
+                <template v-else>
+                  {{ statDisplay(player, row.key).text }}
+                </template>
+              </span>
+            </Transition>
           </li>
         </ul>
       </div>
@@ -632,39 +634,43 @@ async function submitVote(choice) {
 
       <div class="hud-block hud-bl">
         <div v-for="key in HUD_LEFT" :key="key" class="hud-stat">
-          <span
-            :key="valueRevealKey(player, key)"
-            class="hud-stat-inner"
-            :class="{
-              'hud-stat-inner--label': !chunkFor(player, key).revealed,
-              'hud-stat-inner--open': chunkFor(player, key).revealed,
-              'hud-stat-inner--wave': chunkFor(player, key).revealed,
-              'value--revealed': chunkFor(player, key).revealed,
-              'hud-stat-inner--drama': drama && chunkFor(player, key).revealed,
-            }"
-          >
-            <template v-if="!chunkFor(player, key).revealed">{{ fieldLabelUi(key) }}</template>
-            <template v-else>{{ statDisplay(player, key).text }}</template>
-          </span>
+          <Transition name="opc-flip" mode="out-in">
+            <span
+              :key="valueRevealKey(player, key)"
+              class="hud-stat-inner"
+              :class="{
+                'hud-stat-inner--label': !chunkFor(player, key).revealed,
+                'hud-stat-inner--open': chunkFor(player, key).revealed,
+                'hud-stat-inner--wave': chunkFor(player, key).revealed,
+                'value--revealed': chunkFor(player, key).revealed,
+                'hud-stat-inner--drama': drama && chunkFor(player, key).revealed,
+              }"
+            >
+              <template v-if="!chunkFor(player, key).revealed">{{ fieldLabelUi(key) }}</template>
+              <template v-else>{{ statDisplay(player, key).text }}</template>
+            </span>
+          </Transition>
         </div>
       </div>
 
       <div class="hud-block hud-br">
         <div v-for="key in HUD_RIGHT" :key="key" class="hud-stat">
-          <span
-            :key="valueRevealKey(player, key)"
-            class="hud-stat-inner"
-            :class="{
-              'hud-stat-inner--label': !chunkFor(player, key).revealed,
-              'hud-stat-inner--open': chunkFor(player, key).revealed,
-              'hud-stat-inner--wave': chunkFor(player, key).revealed,
-              'value--revealed': chunkFor(player, key).revealed,
-              'hud-stat-inner--drama': drama && chunkFor(player, key).revealed,
-            }"
-          >
-            <template v-if="!chunkFor(player, key).revealed">{{ fieldLabelUi(key) }}</template>
-            <template v-else>{{ statDisplay(player, key).text }}</template>
-          </span>
+          <Transition name="opc-flip" mode="out-in">
+            <span
+              :key="valueRevealKey(player, key)"
+              class="hud-stat-inner"
+              :class="{
+                'hud-stat-inner--label': !chunkFor(player, key).revealed,
+                'hud-stat-inner--open': chunkFor(player, key).revealed,
+                'hud-stat-inner--wave': chunkFor(player, key).revealed,
+                'value--revealed': chunkFor(player, key).revealed,
+                'hud-stat-inner--drama': drama && chunkFor(player, key).revealed,
+              }"
+            >
+              <template v-if="!chunkFor(player, key).revealed">{{ fieldLabelUi(key) }}</template>
+              <template v-else>{{ statDisplay(player, key).text }}</template>
+            </span>
+          </Transition>
         </div>
       </div>
     </div>
@@ -1386,6 +1392,7 @@ async function submitVote(choice) {
 
 .stats li {
   margin: 0;
+  width: 100%;
 }
 
 .stat-cell {
@@ -2152,6 +2159,7 @@ async function submitVote(choice) {
 
 .hud-stat {
   margin-bottom: 0.4rem;
+  width: 100%;
 }
 
 .hud-stat:last-child {

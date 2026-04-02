@@ -2,14 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ADMIN_KEY } from '../config/access.js'
-import {
-  rollFieldValue,
-  rollKeysIntoCharacter,
-  rollRandomIntoCharacter,
-  ages,
-  genders,
-  pickNameForGender,
-} from '../data/randomPools.js'
+import { rollFieldValue, rollRandomIntoCharacter, ages, genders, pickNameForGender } from '../data/randomPools.js'
 import { scenarioIds, getScenarioLabel, getScenarioHint } from '../data/scenarios.js'
 import {
   GAME_TITLE,
@@ -36,6 +29,7 @@ import {
   resetGameRoomControls,
   setGamePhase,
   regenerateAllPlayersRandom,
+  regenerateAllPlayersActiveCards,
   setGameNominations,
   nominationsFromRoom,
   setRoomVoting,
@@ -53,6 +47,7 @@ import ShowPlayersRoster from '../components/showdesk/ShowPlayersRoster.vue'
 import { playRevealFlipSound, playVoteSubmitSound } from '../utils/voteUiSound.js'
 import { syncHostControlChrome, clearHostControlChrome } from '../composables/hostControlChrome.js'
 import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
+import { normalizePlayerSlotId } from '../utils/playerSlot.js'
 import { formatGenderDisplay } from '../utils/genderDisplay.js'
 
 const route = useRoute()
@@ -65,7 +60,7 @@ const isAdmin = computed(() => wantsAdmin.value && adminKeyOk.value)
 const adminAccessDenied = computed(() => wantsAdmin.value && !adminKeyOk.value)
 
 const gameId = computed(() => String(route.query.game ?? 'test1'))
-const playerId = computed(() => String(route.query.player ?? 'p1'))
+const playerId = computed(() => normalizePlayerSlotId(route.query.player))
 
 const modeLabel = computed(() => {
   if (adminAccessDenied.value) return 'Access denied'
@@ -84,6 +79,8 @@ const overlayHrefPersonal = computed(() => ({
 }))
 
 const syncing = ref(false)
+/** Перший snap персонажа з Firestore (лоадер на панелі). */
+const panelHydrating = ref(false)
 const loadError = ref(null)
 const newPlayerId = ref('')
 const draftGameId = ref('')
@@ -98,6 +95,14 @@ watch(
 
 const PLAYER_SLOTS = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10']
 const PHASE_OPTIONS = ['intro', 'discussion', 'voting', 'final']
+
+/** Порядок колонок на екрані гравця (широкий layout). */
+const PLAYER_TRAIT_COL_LEFT = fieldConfig.filter((f) =>
+  ['profession', 'health', 'phobia'].includes(f.key),
+)
+const PLAYER_TRAIT_COL_RIGHT = fieldConfig.filter((f) =>
+  ['luggage', 'fact', 'quirk'].includes(f.key),
+)
 
 const selectedScenario = ref('classic_crash')
 const timerSpeakerSlot = ref('p1')
@@ -235,6 +240,13 @@ const selectedDeskPlayerId = ref('')
 
 watch(gameId, () => {
   selectedDeskPlayerId.value = ''
+})
+
+/** Документ гравця для редактора: у ведучого — вибраний слот у ростері, інакше з URL. */
+const editorPlayerId = computed(() => {
+  if (!isAdmin.value) return playerId.value
+  const sel = String(selectedDeskPlayerId.value || '').trim()
+  return sel ? normalizePlayerSlotId(sel) : playerId.value
 })
 
 const raisedHandsCount = computed(() => {
@@ -441,11 +453,12 @@ function eliminatedBySlot() {
   return m
 }
 
-/** Наступний живий у порядку p1…p10 + старт таймера 30s */
+/** Лише стан з Firestore — без оптимістичного UI (ведучий може скинути руки, гравець має одразу бачити). */
 const myHandRaised = computed(() => gameRoom.value?.hands?.[playerId.value] === true)
 
 async function setMyHandRaised(raised) {
-  if (myHandRaised.value === raised) return
+  const up = gameRoom.value?.hands?.[playerId.value] === true
+  if (up === raised) return
   try {
     loadError.value = null
     await setGameHandRaised(gameId.value, playerId.value, raised)
@@ -775,11 +788,6 @@ function generateRandomCharacter() {
   rollRandomIntoCharacter(characterState, { scenarioId: selectedScenario.value })
 }
 
-function generateCoreOnly() {
-  if (!isAdmin.value) return
-  rollKeysIntoCharacter(characterState, CORE_FIELD_KEYS, selectedScenario.value)
-}
-
 async function globalRollField(fieldKey) {
   if (!isAdmin.value) return
   try {
@@ -812,6 +820,17 @@ async function regenerateAllPlayers() {
   }
 }
 
+async function regenerateActiveCardsForAllPlayers() {
+  if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    await regenerateAllPlayersActiveCards(gameId.value)
+    showToast('Активні карти оновлено для всіх')
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
 async function confirmActiveCardEffect() {
   if (!isAdmin.value) return
   const eid = String(characterState.activeCard?.effectId || '')
@@ -823,7 +842,7 @@ async function confirmActiveCardEffect() {
     loadError.value = null
     const res = await applyActiveCardEffect(
       gameId.value,
-      playerId.value,
+      editorPlayerId.value,
       eid,
       scenarioForRolls.value,
     )
@@ -831,13 +850,13 @@ async function confirmActiveCardEffect() {
       showToast(res.message)
       return
     }
-    const fresh = await fetchCharacter(gameId.value, playerId.value)
+    const fresh = await fetchCharacter(gameId.value, editorPlayerId.value)
     syncing.value = true
     applyRemoteCharacterData(characterState, fresh)
     characterState.activeCard.used = true
     characterState.activeCardRequest = false
     syncing.value = false
-    await saveCharacter(gameId.value, playerId.value, snapshotCharacter(characterState))
+    await saveCharacter(gameId.value, editorPlayerId.value, snapshotCharacter(characterState))
     showToast(res.message)
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
@@ -847,7 +866,7 @@ async function confirmActiveCardEffect() {
 async function clearCardRequest() {
   if (!isAdmin.value) return
   characterState.activeCardRequest = false
-  await saveCharacter(gameId.value, playerId.value, snapshotCharacter(characterState))
+  await saveCharacter(gameId.value, editorPlayerId.value, snapshotCharacter(characterState))
   showToast('Запит знято')
 }
 
@@ -889,6 +908,16 @@ function goToPlayer(id) {
   navigateQuery({ player: String(id).trim() || 'p1' })
 }
 
+/** URL збігається з вибраним слотом — після оновлення сторінки той самий гравець у редакторі. */
+watch(
+  () => String(selectedDeskPlayerId.value || '').trim(),
+  (sel) => {
+    if (!isAdmin.value || !sel) return
+    const n = normalizePlayerSlotId(sel)
+    if (n !== playerId.value) navigateQuery({ player: n })
+  },
+)
+
 function applyNewGame() {
   if (!isAdmin.value) return
   const g = String(draftGameId.value).trim() || 'test1'
@@ -908,7 +937,7 @@ function scheduleSave() {
   saveTimer = setTimeout(async () => {
     try {
       loadError.value = null
-      await saveCharacter(gameId.value, playerId.value, snapshotCharacter(characterState))
+      await saveCharacter(gameId.value, editorPlayerId.value, snapshotCharacter(characterState))
     } catch (e) {
       loadError.value = e instanceof Error ? e.message : String(e)
     }
@@ -921,24 +950,40 @@ watch(characterState, () => {
 }, { deep: true })
 
 watch(
-  [gameId, playerId, adminAccessDenied],
-  () => {
+  [gameId, editorPlayerId, adminAccessDenied],
+  async ([gid, pid, denied], oldTuple) => {
+    clearTimeout(saveTimer)
+    saveTimer = null
+
     if (unsubCharacter) {
       unsubCharacter()
       unsubCharacter = null
     }
-    if (adminAccessDenied.value) return
-    const gid = gameId.value
-    const pid = playerId.value
+    panelHydrating.value = false
+
+    if (denied) return
     if (!gid || !pid) return
+
+    if (oldTuple && !oldTuple[2]) {
+      const [og, op] = oldTuple
+      if (op && (og !== gid || op !== pid)) {
+        try {
+          await saveCharacter(og, op, snapshotCharacter(characterState))
+        } catch (e) {
+          console.warn('[control] save before switching editor slot', e)
+        }
+      }
+    }
+
     loadError.value = null
+    panelHydrating.value = true
     unsubCharacter = subscribeToCharacter(gid, pid, (data) => {
-      if (data == null) return
       syncing.value = true
       try {
-        applyRemoteCharacterData(characterState, data)
+        if (data != null) applyRemoteCharacterData(characterState, data)
       } finally {
         syncing.value = false
+        panelHydrating.value = false
       }
     })
   },
@@ -958,6 +1003,11 @@ onUnmounted(() => {
 
 const playerRevealLocked = computed(
   () => !isAdmin.value && Boolean(characterState.eliminated),
+)
+
+const activeCardPanelKey = computed(
+  () =>
+    `${characterState.activeCard.used ? 'u' : 'a'}-${characterState.activeCardRequest ? 'r' : 'n'}-${String(characterState.activeCard.title ?? '').slice(0, 24)}`,
 )
 
 function toggleEliminated() {
@@ -1013,7 +1063,7 @@ function rerollActiveCardOnly() {
       </section>
 
       <section
-        class="admin-zone admin-zone--players admin-card"
+        class="admin-zone admin-zone--players"
         :class="{ 'admin-zone--nominated-active': nominatedPlayerActive }"
         aria-label="Гравці"
       >
@@ -1022,7 +1072,7 @@ function rerollActiveCardOnly() {
           v-model:selected-player-id="selectedDeskPlayerId"
           :players="allPlayers"
           :hands-map="gameRoom.hands || {}"
-          :current-player-id="playerId"
+          :current-player-id="editorPlayerId"
           :spotlight-player-id="String(gameRoom.activePlayer || '')"
           :speaker-id="String(gameRoom.currentSpeaker || '')"
           :voting-target-id="String(gameRoom.voting?.targetPlayer || '')"
@@ -1054,11 +1104,15 @@ function rerollActiveCardOnly() {
           <button type="button" class="btn-neon btn-neon--compact" @click="generateRandomCharacter">
             Generate Player
           </button>
-          <button type="button" class="btn-neon btn-neon--soft btn-neon--compact" @click="generateCoreOnly">
-            Усі 6 карт
-          </button>
           <button type="button" class="btn-neon btn-neon--wide btn-neon--compact" @click="regenerateAllPlayers">
-            Усі гравці
+            Generate all players
+          </button>
+          <button
+            type="button"
+            class="btn-neon btn-neon--soft btn-neon--compact"
+            @click="regenerateActiveCardsForAllPlayers"
+          >
+            Active cards — all players
           </button>
         </div>
         <p class="hint-sc hint-sc--tight hint-sc--muted">{{ getScenarioHint(selectedScenario) }}</p>
@@ -1089,25 +1143,19 @@ function rerollActiveCardOnly() {
     <div v-else class="player-hero">
       <h1 class="player-title">{{ GAME_TITLE }}</h1>
       <p class="player-phase">Фаза: {{ String(gameRoom.gamePhase || 'intro') }}</p>
-      <div class="hand-seg" role="group" aria-label="Піднята рука">
+      <div class="hand-toggle" role="group" aria-label="Піднята рука">
         <button
           type="button"
-          class="hand-seg__btn"
-          :class="{ 'hand-seg__btn--on': !myHandRaised }"
-          :aria-pressed="!myHandRaised"
-          @click="setMyHandRaised(false)"
-        >
-          Опущено
-        </button>
-        <button
-          type="button"
-          class="hand-seg__btn"
-          :class="{ 'hand-seg__btn--on': myHandRaised }"
+          class="hand-icon-btn"
+          :class="{ 'hand-icon-btn--up': myHandRaised }"
           :aria-pressed="myHandRaised"
-          @click="setMyHandRaised(true)"
+          :aria-label="myHandRaised ? 'Опустити руку' : 'Підняти руку'"
+          :title="myHandRaised ? 'Рука піднята — натисни, щоб опустити' : 'Рука опущена — натисни, щоб підняти'"
+          @click="setMyHandRaised(!myHandRaised)"
         >
-          ✋ Піднято
+          <span class="hand-icon-btn__ico" aria-hidden="true">✋</span>
         </button>
+        <span class="hand-toggle__caption">{{ myHandRaised ? 'Піднято' : 'Опущено' }}</span>
       </div>
     </div>
 
@@ -1138,8 +1186,15 @@ function rerollActiveCardOnly() {
 
     <p v-if="loadError" class="error">{{ loadError }}</p>
 
-    <section class="panel editor-panel editor-panel--calm">
-      <h2 class="panel-kicker">{{ isAdmin ? `Редактор: ${playerId}` : 'Твій персонаж' }}</h2>
+    <section
+      class="panel editor-panel editor-panel--calm"
+      :class="{ 'editor-panel--hydrating': panelHydrating }"
+    >
+      <div v-if="panelHydrating" class="panel-hydrate-overlay" aria-busy="true" aria-label="Завантаження">
+        <span class="panel-hydrate-spinner" />
+        <span class="panel-hydrate-label">Завантаження картки…</span>
+      </div>
+      <h2 class="panel-kicker">{{ isAdmin ? `Редактор: ${editorPlayerId}` : 'Твій персонаж' }}</h2>
 
       <div v-if="isAdmin" class="trait-block trait-block--identity">
         <div class="trait-toolbar">
@@ -1148,24 +1203,14 @@ function rerollActiveCardOnly() {
             <button type="button" class="icon-btn icon-btn--reroll" title="Перегенерувати" @click="rerollIdentity">
               🎲
             </button>
-            <div class="reveal-pair">
-              <button
-                type="button"
-                class="reveal-btn"
-                :class="{ 'reveal-btn--green': characterState.identityRevealed }"
-                @click="revealIdentity(true)"
-              >
-                ВІДКРИТО
-              </button>
-              <button
-                type="button"
-                class="reveal-btn"
-                :class="{ 'reveal-btn--red': !characterState.identityRevealed }"
-                @click="revealIdentity(false)"
-              >
-                ЗАКРИТО
-              </button>
-            </div>
+            <button
+              type="button"
+              class="reveal-toggle"
+              :class="{ 'reveal-toggle--open': characterState.identityRevealed }"
+              @click="revealIdentity(!characterState.identityRevealed)"
+            >
+              {{ characterState.identityRevealed ? 'Відкрито' : 'Закрито' }}
+            </button>
           </div>
         </div>
         <div class="meta-grid">
@@ -1184,20 +1229,86 @@ function rerollActiveCardOnly() {
         </div>
       </div>
 
-      <div v-else class="trait-block trait-block--player trait-block--identity">
-        <div class="trait-toolbar">
-          <span class="trait-label">Профіль</span>
-        </div>
-        <Transition name="stat-reveal" mode="out-in">
-          <div v-if="characterState.identityRevealed" key="id-on" class="identity-reveal-block">
-            <p class="pv-line"><span class="mk">Ім’я</span> {{ characterState.name || '—' }}</p>
-            <p class="pv-line">
-              <span class="mk">Вік · стать</span> {{ characterState.age || '—' }} ·
-              {{ formatGenderDisplay(characterState.gender) }}
-            </p>
+      <div v-else class="player-char-grid">
+        <div class="trait-block trait-block--player trait-block--identity player-char-grid__identity">
+          <div class="trait-toolbar">
+            <span class="trait-label">Профіль</span>
+            <button
+              v-if="!playerRevealLocked"
+              type="button"
+              class="reveal-toggle reveal-toggle--player"
+              :class="{ 'reveal-toggle--open': characterState.identityRevealed }"
+              @click="revealIdentity(!characterState.identityRevealed)"
+            >
+              {{ characterState.identityRevealed ? 'Відкрито' : 'Закрито' }}
+            </button>
           </div>
-          <p v-else key="id-off" class="pv-hidden">••••••</p>
-        </Transition>
+          <Transition name="stat-reveal" mode="out-in">
+            <div v-if="characterState.identityRevealed" key="id-on" class="identity-reveal-block">
+              <p class="pv-line"><span class="mk">Ім’я</span> {{ characterState.name || '—' }}</p>
+              <p class="pv-line">
+                <span class="mk">Вік · стать</span> {{ characterState.age || '—' }} ·
+                {{ formatGenderDisplay(characterState.gender) }}
+              </p>
+            </div>
+            <p v-else key="id-off" class="pv-hidden">••••••</p>
+          </Transition>
+        </div>
+
+        <div class="player-char-grid__traits player-traits-cols">
+          <div class="player-traits-col" aria-label="Професія, здоров’я, фобія">
+            <div v-for="row in PLAYER_TRAIT_COL_LEFT" :key="row.key" class="trait-block trait-block--player">
+              <div class="trait-toolbar">
+                <span class="trait-label">{{ row.label }}</span>
+                <button
+                  v-if="!playerRevealLocked"
+                  type="button"
+                  class="reveal-toggle reveal-toggle--player"
+                  :class="{ 'reveal-toggle--open': characterState[row.key].revealed }"
+                  @click="revealTrait(row.key, !characterState[row.key].revealed)"
+                >
+                  {{ characterState[row.key].revealed ? 'Відкрито' : 'Закрито' }}
+                </button>
+              </div>
+              <Transition name="stat-reveal" mode="out-in">
+                <p
+                  v-if="characterState[row.key].revealed"
+                  :key="'open-' + row.key"
+                  class="trait-value-preview trait-value-preview--on"
+                >
+                  {{ characterState[row.key].value || '—' }}
+                </p>
+                <p v-else :key="'shut-' + row.key" class="trait-value-preview trait-value-preview--off">••••••</p>
+              </Transition>
+            </div>
+          </div>
+          <div class="player-traits-col" aria-label="Багаж, факт, особливість">
+            <div v-for="row in PLAYER_TRAIT_COL_RIGHT" :key="row.key" class="trait-block trait-block--player">
+              <div class="trait-toolbar">
+                <span class="trait-label">{{ row.label }}</span>
+                <button
+                  v-if="!playerRevealLocked"
+                  type="button"
+                  class="reveal-toggle reveal-toggle--player"
+                  :class="{ 'reveal-toggle--open': characterState[row.key].revealed }"
+                  @click="revealTrait(row.key, !characterState[row.key].revealed)"
+                >
+                  {{ characterState[row.key].revealed ? 'Відкрито' : 'Закрито' }}
+                </button>
+              </div>
+              <Transition name="stat-reveal" mode="out-in">
+                <p
+                  v-if="characterState[row.key].revealed"
+                  :key="'open-' + row.key"
+                  class="trait-value-preview trait-value-preview--on"
+                >
+                  {{ characterState[row.key].value || '—' }}
+                </p>
+                <p v-else :key="'shut-' + row.key" class="trait-value-preview trait-value-preview--off">••••••</p>
+              </Transition>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div v-if="isAdmin" class="traits-stack">
@@ -1213,63 +1324,17 @@ function rerollActiveCardOnly() {
               >
                 🎲
               </button>
-              <div class="reveal-pair">
-                <button
-                  type="button"
-                  class="reveal-btn"
-                  :class="{ 'reveal-btn--green': characterState[row.key].revealed }"
-                  @click="revealTrait(row.key, true)"
-                >
-                  ВІДКРИТО
-                </button>
-                <button
-                  type="button"
-                  class="reveal-btn"
-                  :class="{ 'reveal-btn--red': !characterState[row.key].revealed }"
-                  @click="revealTrait(row.key, false)"
-                >
-                  ЗАКРИТО
-                </button>
-              </div>
+              <button
+                type="button"
+                class="reveal-toggle"
+                :class="{ 'reveal-toggle--open': characterState[row.key].revealed }"
+                @click="revealTrait(row.key, !characterState[row.key].revealed)"
+              >
+                {{ characterState[row.key].revealed ? 'Відкрито' : 'Закрито' }}
+              </button>
             </div>
           </div>
           <input v-model="characterState[row.key].value" type="text" class="input trait-value-input" />
-        </div>
-      </div>
-
-      <div v-else class="traits-stack traits-stack--player">
-        <div v-for="row in fieldConfig" :key="row.key" class="trait-block trait-block--player">
-          <div class="trait-toolbar">
-            <span class="trait-label">{{ row.label }}</span>
-            <div v-if="!playerRevealLocked" class="reveal-pair reveal-pair--player">
-              <button
-                type="button"
-                class="reveal-btn"
-                :class="{ 'reveal-btn--green': characterState[row.key].revealed }"
-                @click="revealTrait(row.key, true)"
-              >
-                ВІДКРИТО
-              </button>
-              <button
-                type="button"
-                class="reveal-btn"
-                :class="{ 'reveal-btn--red': !characterState[row.key].revealed }"
-                @click="revealTrait(row.key, false)"
-              >
-                ЗАКРИТО
-              </button>
-            </div>
-          </div>
-          <Transition name="stat-reveal" mode="out-in">
-            <p
-              v-if="characterState[row.key].revealed"
-              :key="'open-' + row.key"
-              class="trait-value-preview trait-value-preview--on"
-            >
-              {{ characterState[row.key].value || '—' }}
-            </p>
-            <p v-else :key="'shut-' + row.key" class="trait-value-preview trait-value-preview--off">••••••</p>
-          </Transition>
         </div>
       </div>
 
@@ -1311,22 +1376,24 @@ function rerollActiveCardOnly() {
             </button>
           </div>
         </template>
-        <template v-else>
-          <p class="ac-t">{{ characterState.activeCard.title || '—' }}</p>
-          <p class="ac-d">{{ characterState.activeCard.description || '—' }}</p>
-          <p v-if="characterState.activeCard.used" class="ac-used">Використано</p>
-          <p v-else-if="characterState.activeCardRequest" class="ac-pending">
-            Очікує підтвердження ведучого
-          </p>
-          <button
-            v-else
-            type="button"
-            class="btn-request"
-            @click="requestCardFromHost"
-          >
-            Використати карту
-          </button>
-        </template>
+        <Transition v-else name="ac-swap" mode="out-in">
+          <div :key="activeCardPanelKey" class="active-card-player-block">
+            <p class="ac-t">{{ characterState.activeCard.title || '—' }}</p>
+            <p class="ac-d">{{ characterState.activeCard.description || '—' }}</p>
+            <p v-if="characterState.activeCard.used" class="ac-used">Використано</p>
+            <p v-else-if="characterState.activeCardRequest" class="ac-pending">
+              Очікує підтвердження ведучого
+            </p>
+            <button
+              v-else
+              type="button"
+              class="btn-request"
+              @click="requestCardFromHost"
+            >
+              Використати карту
+            </button>
+          </div>
+        </Transition>
       </div>
 
       <div v-if="isAdmin" class="elim-row">
@@ -1373,7 +1440,20 @@ function rerollActiveCardOnly() {
   box-shadow: var(--panel-desk-shadow);
 }
 
-.admin-zone--players.admin-card :deep(.roster) {
+.admin-zone--players {
+  border-radius: 16px;
+  padding: clamp(0.75rem, 2vw, 1rem) 12px 12px;
+  background: var(--bg-card-solid);
+  border: 1px solid var(--border);
+  box-sizing: border-box;
+  box-shadow: var(--panel-desk-shadow);
+}
+
+.admin-zone--players :deep(.roster--embedded) {
+  margin-bottom: 0;
+}
+
+.admin-zone--players :deep(.roster) {
   background: transparent;
   border: none;
   margin-bottom: 0;
@@ -1423,6 +1503,10 @@ function rerollActiveCardOnly() {
   border: 1px solid var(--danger-border);
   box-shadow: 0 0 22px var(--danger-glow);
   background: var(--danger-bg);
+}
+
+.admin-zone--players.admin-zone--nominated-active {
+  padding: 0.65rem 0.5rem 0.85rem;
 }
 
 .zone-kicker {
@@ -1595,6 +1679,157 @@ function rerollActiveCardOnly() {
   border-color: var(--border-editor-calm);
 }
 
+.editor-panel--calm .trait-block--identity {
+  background: transparent;
+  border: none;
+  padding-left: 0;
+  padding-right: 0;
+  padding-top: 0;
+  border-radius: 0;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.editor-panel--calm .trait-block--identity .field-label {
+  margin-bottom: 0.45rem;
+}
+
+.editor-panel--hydrating {
+  position: relative;
+  pointer-events: none;
+  opacity: 0.88;
+}
+
+.panel-hydrate-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.85rem;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--bg-editor-calm) 82%, transparent);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+
+.panel-hydrate-spinner {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  border: 3px solid color-mix(in srgb, var(--border-strong) 55%, transparent);
+  border-top-color: var(--accent-fill);
+  animation: panelSpin 0.72s linear infinite;
+}
+
+.panel-hydrate-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+@keyframes panelSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.player-char-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  align-self: stretch;
+  container-type: inline-size;
+  container-name: player-char;
+}
+
+/* Дві колонки: зліва професія/здоров’я/фобія, справа багаж/факт/особливість */
+.player-char-grid__traits.player-traits-cols {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.player-traits-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.player-traits-cols .trait-block--player {
+  width: 100%;
+  margin-bottom: 0;
+}
+
+/* За шириною картки (не лише viewport): зручно при вузькому вікні чи split-screen */
+@container player-char (min-width: 520px) {
+  .player-char-grid__traits.player-traits-cols {
+    grid-template-columns: 1fr 1fr;
+    column-gap: 1rem;
+    row-gap: 0.5rem;
+    align-items: start;
+  }
+}
+
+/* Fallback без container queries */
+@supports not (container-type: inline-size) {
+  @media (min-width: 560px) {
+    .player-char-grid__traits.player-traits-cols {
+      grid-template-columns: 1fr 1fr;
+      column-gap: 1rem;
+      row-gap: 0.5rem;
+      align-items: start;
+    }
+  }
+}
+
+.active-card-player-block {
+  min-height: 2rem;
+}
+
+.ac-swap-enter-active {
+  animation: acSwapIn 0.42s var(--motion-ease, cubic-bezier(0.22, 1, 0.36, 1)) both;
+}
+
+.ac-swap-leave-active {
+  animation: acSwapOut 0.28s ease both;
+}
+
+@keyframes acSwapIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes acSwapOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+    filter: blur(3px);
+  }
+}
+
 .editor-panel--calm .input:focus,
 .editor-panel--calm .textarea:focus,
 .editor-panel--calm .trait-value-input:focus,
@@ -1678,40 +1913,76 @@ function rerollActiveCardOnly() {
   color: var(--text-muted);
 }
 
-.hand-seg {
-  display: inline-flex;
-  margin-top: 1rem;
-  padding: 3px;
-  border-radius: 14px;
-  border: 1px solid var(--btn-hand-border);
-  background: var(--bg-muted);
-  gap: 3px;
+.hand-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1.1rem;
+  flex-wrap: wrap;
 }
 
-.hand-seg__btn {
-  padding: 0.5rem 0.85rem;
-  border-radius: 10px;
+.hand-toggle__caption {
   font-size: 0.78rem;
   font-weight: 700;
-  cursor: pointer;
-  border: 1px solid transparent;
-  background: transparent;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-muted);
+}
+
+.hand-icon-btn {
+  width: 3.35rem;
+  height: 3.35rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid var(--btn-hand-border);
+  background: var(--bg-muted-strong);
+  cursor: pointer;
   transition:
-    background 0.15s ease,
-    color 0.15s ease,
-    border-color 0.15s ease;
+    transform 0.18s ease,
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.22s ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.hand-seg__btn:hover {
-  color: var(--text-body);
+.hand-icon-btn__ico {
+  font-size: 1.45rem;
+  line-height: 1;
+  filter: grayscale(0.35);
+  opacity: 0.65;
+  transition:
+    filter 0.2s ease,
+    opacity 0.2s ease,
+    transform 0.2s ease;
 }
 
-.hand-seg__btn--on {
+.hand-icon-btn:hover {
+  transform: scale(1.05);
+  border-color: rgba(251, 191, 36, 0.45);
+}
+
+.hand-icon-btn:focus-visible {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 3px;
+}
+
+.hand-icon-btn--up {
   border-color: var(--btn-hand-up-border);
   background: var(--btn-hand-up-bg);
-  color: var(--btn-hand-up-text);
-  box-shadow: 0 0 12px rgba(251, 191, 36, 0.12);
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.35);
+}
+
+.hand-icon-btn--up .hand-icon-btn__ico {
+  filter: grayscale(0);
+  opacity: 1;
+  transform: scale(1.08);
+}
+
+.hand-icon-btn:active {
+  transform: scale(0.96);
 }
 
 .player-vote-panel {
@@ -1835,6 +2106,9 @@ function rerollActiveCardOnly() {
   background: var(--bg-card-soft);
   border: 1px solid var(--border-panel);
   box-shadow: var(--panel-desk-shadow);
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .panel-kicker {
@@ -1919,7 +2193,8 @@ function rerollActiveCardOnly() {
   color: var(--text-muted);
 }
 
-.traits-stack--player .trait-label {
+.traits-stack--player .trait-label,
+.player-traits-cols .trait-label {
   color: var(--editor-trait-label);
 }
 
@@ -1971,71 +2246,65 @@ function rerollActiveCardOnly() {
   box-shadow: 0 4px 14px rgba(251, 191, 36, 0.15);
 }
 
-.reveal-pair {
-  display: inline-flex;
-  gap: 0.35rem;
-  flex-wrap: wrap;
-}
-
-.reveal-pair--player {
-  justify-content: flex-end;
-}
-
-.reveal-btn {
-  padding: 0.34rem 0.55rem;
-  border-radius: 10px;
+.reveal-toggle {
+  flex-shrink: 0;
+  min-width: 6.75rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
   font-size: 0.58rem;
   font-weight: 900;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   cursor: pointer;
-  border: 1px solid var(--reveal-border);
-  background: var(--reveal-bg);
-  color: var(--text-secondary);
+  border: 1px solid var(--reveal-off-border);
+  background: var(--reveal-off-bg);
+  color: var(--reveal-off-text);
+  box-shadow: 0 0 10px var(--reveal-off-glow);
   transition:
-    transform 0.12s ease,
+    transform 0.14s var(--motion-ease, ease),
     box-shadow 0.2s ease,
-    border-color 0.15s ease;
+    border-color 0.2s ease,
+    background 0.2s ease,
+    color 0.2s ease;
 }
 
-.reveal-btn:hover {
-  transform: scale(1.05);
+.reveal-toggle--player {
+  min-width: 5.75rem;
+  font-size: 0.52rem;
 }
 
-.reveal-btn--green {
+.reveal-toggle:hover {
+  transform: scale(1.04);
+}
+
+.reveal-toggle--open {
   border-color: var(--reveal-on-border);
   background: var(--reveal-on-bg);
   color: var(--reveal-on-text);
-  box-shadow: 0 0 14px var(--reveal-on-glow);
-}
-
-.reveal-btn--red {
-  border-color: var(--reveal-off-border);
-  background: var(--reveal-off-bg);
-  color: var(--reveal-off-text);
-  box-shadow: 0 0 12px var(--reveal-off-glow);
+  box-shadow: 0 0 16px var(--reveal-on-glow);
 }
 
 .stat-reveal-enter-active {
-  animation: revealStat 0.48s ease both;
+  animation: revealStat 0.52s var(--motion-ease, cubic-bezier(0.22, 1, 0.36, 1)) both;
 }
 
 .stat-reveal-leave-active {
-  animation: hideStat 0.34s ease both;
+  animation: hideStat 0.36s var(--motion-ease, cubic-bezier(0.4, 0, 0.2, 1)) both;
 }
 
 @keyframes revealStat {
   0% {
     opacity: 0;
-    transform: perspective(400px) rotateX(-12deg) translateY(8px) scale(0.94);
-    filter: blur(5px);
+    transform: perspective(520px) rotateX(-14deg) translateY(10px) scale(0.92);
+    filter: blur(6px);
   }
-  55% {
-    transform: perspective(400px) rotateX(4deg) scale(1.02);
+  50% {
+    transform: perspective(520px) rotateX(5deg) scale(1.03);
     filter: blur(0);
   }
   100% {
     opacity: 1;
-    transform: perspective(400px) rotateX(0deg) scale(1);
+    transform: perspective(520px) rotateX(0deg) scale(1);
     filter: blur(0);
   }
 }
@@ -2043,13 +2312,13 @@ function rerollActiveCardOnly() {
 @keyframes hideStat {
   0% {
     opacity: 1;
-    transform: perspective(400px) rotateX(0deg) scale(1);
+    transform: perspective(520px) rotateX(0deg) scale(1);
     filter: blur(0);
   }
   100% {
     opacity: 0;
-    transform: perspective(400px) rotateX(10deg) scale(0.93);
-    filter: blur(4px);
+    transform: perspective(520px) rotateX(12deg) translateY(-6px) scale(0.9);
+    filter: blur(5px);
   }
 }
 
@@ -2110,9 +2379,12 @@ function rerollActiveCardOnly() {
 
 .meta-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
   margin-bottom: 1rem;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 @media (max-width: 640px) {
@@ -2251,7 +2523,7 @@ function rerollActiveCardOnly() {
 }
 
 .ac-t {
-  margin: 0 0 0.35rem;
+  margin: 0 0 0.55rem;
   font-weight: 700;
   color: var(--active-card-title-text);
 }

@@ -5,6 +5,9 @@
 
 :root,
 [data-theme='dark'] {
+  --font-body: 'Plus Jakarta Sans', system-ui, 'Segoe UI', sans-serif;
+  --font-display: 'Orbitron', system-ui, sans-serif;
+
   color-scheme: dark;
 
   --bg-main: #0b0714;
@@ -139,6 +142,9 @@
 }
 
 [data-theme='light'] {
+  --font-body: 'Plus Jakarta Sans', system-ui, 'Segoe UI', sans-serif;
+  --font-display: 'Orbitron', system-ui, sans-serif;
+
   color-scheme: light;
 
   --bg-main: #e2e8f0;
@@ -320,13 +326,15 @@ html *::after {
   width: 100%;
 }
 
+/* Пульт: одна нижня межа для всього блоку (без другої смуги під рядком бренду) */
 .app-shell-header--host {
-  padding: 0.4rem 0.85rem 0.15rem;
+  padding: 0.4rem 0.85rem 0.35rem;
+  border-bottom: 1px solid var(--border-subtle);
+  box-shadow: 0 6px 24px var(--shadow-elevated);
 }
 
-.app-shell-header--vote-on {
-  border-bottom-color: rgba(56, 189, 248, 0.35);
-  box-shadow: 0 4px 20px var(--shadow-elevated);
+.app-shell-header--host.app-shell-header--vote-on {
+  border-bottom-color: rgba(56, 189, 248, 0.28);
 }
 
 .app-shell-brand {
@@ -334,10 +342,81 @@ html *::after {
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-display);
   color: var(--text-muted);
 }
 
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
 .app-shell-main {
-  min-height: calc(100vh - 3rem);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Футер: бренд nad1ch (не показується на /overlay — див. App.vue) */
+.app-site-footer {
+  flex-shrink: 0;
+  margin-top: auto;
+  padding: 0.85rem 1.25rem 1.1rem;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-card-soft);
+}
+
+.app-site-footer__inner {
+  max-width: 920px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.app-site-footer__logo-wrap {
+  flex-shrink: 0;
+  padding: 4px;
+  border-radius: 12px;
+  background: #050308;
+  border: 1px solid var(--border-subtle);
+  line-height: 0;
+}
+
+.app-site-footer__logo {
+  display: block;
+  width: 2.75rem;
+  height: 2.75rem;
+  object-fit: contain;
+}
+
+.app-site-footer__meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.app-site-footer__nick {
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-heading);
+}
+
+.app-site-footer__copy {
+  margin: 0;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+  max-width: 36rem;
+}
+
+[data-theme='light'] .app-site-footer__logo-wrap {
+  background: #0a0614;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
 }

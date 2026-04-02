@@ -195,8 +195,8 @@ function act(name, ...args) {
 <style scoped>
 .hcc {
   width: 100%;
-  padding: 0.35rem 0 0.2rem;
-  border-top: 1px solid var(--border-subtle);
+  padding: 0.25rem 0 0;
+  border-top: none;
   transition:
     box-shadow 0.25s ease,
     border-color 0.25s ease;
@@ -204,9 +204,9 @@ function act(name, ...args) {
 
 .hcc--vote-on {
   box-shadow: none;
-  border-bottom: 1px solid rgba(56, 189, 248, 0.22);
-  padding-bottom: 0.45rem;
-  margin-bottom: 0.1rem;
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
 }
 
 .hcc-split {

@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import { normalizePlayerSlotId } from '../../utils/playerSlot.js'
 
 const props = defineProps({
   players: { type: Array, default: () => [] },
@@ -82,7 +83,8 @@ function showBadgesRow(p) {
 }
 
 function handUp(p) {
-  return props.handsMap?.[String(p.id)] === true
+  const id = normalizePlayerSlotId(String(p.id))
+  return props.handsMap?.[id] === true
 }
 
 const playersSorted = computed(() => {
@@ -157,8 +159,8 @@ const aliveSlotsForNom = computed(() => {
 </script>
 
 <template>
-  <section class="roster">
-    <h2 class="block-title">Гравці</h2>
+  <section class="roster" :class="{ 'roster--embedded': useHostPanel }">
+    <h2 v-if="!useHostPanel" class="block-title">Гравці</h2>
     <p class="roster-hint">
       {{
         useHostPanel
@@ -279,6 +281,19 @@ const aliveSlotsForNom = computed(() => {
   font-size: 0.65rem;
   line-height: 1.35;
   color: var(--text-muted);
+}
+
+.roster--embedded {
+  padding: 0;
+  margin-bottom: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.roster--embedded .roster-hint {
+  margin-top: 0;
 }
 
 .roster-shell {

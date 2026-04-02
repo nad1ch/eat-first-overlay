@@ -7,11 +7,14 @@ import {
   onSnapshot,
   setDoc,
   getDoc,
+  runTransaction,
   Timestamp,
   writeBatch,
 } from 'firebase/firestore'
 import { ADMIN_KEY } from '../config/access.js'
+import { pickRandomActiveCardTemplate } from '../data/activeCards.js'
 import { buildRandomPlayerDocument } from '../data/randomPools.js'
+import { normalizePlayerSlotId } from '../utils/playerSlot.js'
 import { db } from '../firebase.js'
 
 function gameDocRef(gameId) {
@@ -20,6 +23,26 @@ function gameDocRef(gameId) {
 
 function playerDocRef(gameId, playerId) {
   return doc(db, 'games', gameId, 'players', playerId)
+}
+
+/** Зліпити мапу піднятих рук з документа кімнати (включаючи legacy-поля "hands.p1" на корені). */
+function collectRaisedHandsMapFromGameData(data) {
+  if (!data || typeof data !== 'object') return {}
+  const h = {}
+  const rawHands = data.hands
+  if (rawHands && typeof rawHands === 'object' && !Array.isArray(rawHands)) {
+    for (const [k, v] of Object.entries(rawHands)) {
+      if (v === true) h[normalizePlayerSlotId(k)] = true
+    }
+  }
+  const prefix = 'hands.'
+  for (const key of Object.keys(data)) {
+    if (typeof key !== 'string' || !key.startsWith(prefix)) continue
+    const slot = key.slice(prefix.length)
+    if (!slot) continue
+    if (data[key] === true) h[normalizePlayerSlotId(slot)] = true
+  }
+  return h
 }
 
 /**
@@ -140,7 +163,7 @@ export async function resetGameRoomControls(gameId) {
       nominatedPlayer: deleteField(),
       nominatedBy: deleteField(),
       nominations: deleteField(),
-      hands: deleteField(),
+      hands: {},
       voting: deleteField(),
       key: ADMIN_KEY,
     },
@@ -268,11 +291,7 @@ export async function resetRoomRoundCounter(gameId) {
 }
 
 export async function clearAllHands(gameId) {
-  await setDoc(
-    gameDocRef(gameId),
-    { hands: deleteField(), key: ADMIN_KEY },
-    { merge: true },
-  )
+  await saveGameRoom(gameId, { hands: {} })
 }
 
 /** Голосування на кімнаті: { active, targetPlayer }. */
@@ -288,18 +307,29 @@ export async function setRoomVoting(gameId, active, targetPlayer) {
 
 /**
  * Піднята рука гравця: games/{gameId}.hands.{playerId}
+ *
+ * Транзакція + update({ hands: next }): поле `hands` цілком замінюється на `next`,
+ * тож видалені слоти реально зникають у БД. set(merge) на вкладену мапу глибоко зливає
+ * ключі й лишав старі true — ведучий не бачив «опущену» руку.
+ * Rules: змінюється лише `hands`.
+ *
  * @param {boolean} raised
  */
 export async function setGameHandRaised(gameId, playerId, raised) {
-  const pid = String(playerId ?? '').trim()
-  if (!pid) return
-  await setDoc(
-    gameDocRef(gameId),
-    {
-      [`hands.${pid}`]: Boolean(raised),
-    },
-    { merge: true },
-  )
+  const raw = String(playerId ?? '').trim()
+  if (!raw) return
+  const pid = normalizePlayerSlotId(playerId)
+  const ref = gameDocRef(gameId)
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref)
+    if (!snap.exists()) {
+      throw new Error('Документ кімнати не знайдено. Відкрий гру на пульті ведучого.')
+    }
+    const next = { ...collectRaisedHandsMapFromGameData(snap.data()) }
+    if (raised) next[pid] = true
+    else delete next[pid]
+    tx.update(ref, { hands: next })
+  })
 }
 
 /**
@@ -335,6 +365,30 @@ export async function regenerateAllPlayersRandom(gameId, scenarioId) {
   for (const d of snapshot.docs) {
     const docPayload = buildRandomPlayerDocument(sid)
     await setDoc(d.ref, { ...docPayload, key: ADMIN_KEY }, { merge: true })
+  }
+}
+
+/** Нова випадкова активна карта для кожного гравця в кімнаті. */
+export async function regenerateAllPlayersActiveCards(gameId) {
+  const colRef = collection(db, 'games', gameId, 'players')
+  const snapshot = await getDocs(colRef)
+  for (const d of snapshot.docs) {
+    const t = pickRandomActiveCardTemplate()
+    await setDoc(
+      d.ref,
+      {
+        activeCard: {
+          title: t.title,
+          description: t.description,
+          used: false,
+          effectId: t.effectId,
+          templateId: t.templateId,
+        },
+        activeCardRequest: false,
+        key: ADMIN_KEY,
+      },
+      { merge: true },
+    )
   }
 }
 

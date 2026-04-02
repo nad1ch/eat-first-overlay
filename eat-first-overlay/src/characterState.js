@@ -1,5 +1,6 @@
 import { reactive } from 'vue'
 import { pickRandomActiveCardTemplate } from './data/activeCards.js'
+import { normalizeGenderForStorage } from './utils/genderDisplay.js'
 
 export const GAME_TITLE = 'Кого ми з’їмо першим'
 
@@ -82,7 +83,7 @@ export function applyRemoteCharacterData(target, data) {
   else target.name = ''
   if (typeof data.age === 'string') target.age = data.age
   else target.age = ''
-  if (typeof data.gender === 'string') target.gender = data.gender
+  if (typeof data.gender === 'string') target.gender = normalizeGenderForStorage(data.gender)
   else target.gender = ''
   for (const key of FIELD_KEYS) {
     const chunk = data[key]
@@ -104,7 +105,7 @@ export function snapshotCharacter(target = characterState) {
     identityRevealed: Boolean(target.identityRevealed),
     name: target.name,
     age: target.age,
-    gender: target.gender,
+    gender: normalizeGenderForStorage(target.gender),
     activeCard: {
       title: target.activeCard.title,
       description: target.activeCard.description,

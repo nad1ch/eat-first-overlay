@@ -14,8 +14,13 @@ const hostChromeOn = computed(() => hostControlChromeStore.active === true)
 
 const votingGlow = computed(() => Boolean(hostControlChromeStore.gameRoom?.voting?.active))
 
+/** М’який перехід між сторінками (оверлей — лише fade). */
+const routeTransition = computed(() => (route.path === '/overlay' ? 'route-fade' : 'route-slide'))
+
 const themeIcon = computed(() => (theme.value === 'dark' ? '☀️' : '🌙'))
 const themeLabel = computed(() => (theme.value === 'dark' ? 'Світла тема' : 'Темна тема'))
+
+const footerYear = new Date().getFullYear()
 </script>
 
 <template>
@@ -42,17 +47,39 @@ const themeLabel = computed(() => (theme.value === 'dark' ? 'Світла тем
       <HostControlChromeBar v-if="hostChromeOn" />
     </header>
     <main class="app-shell-main" :class="{ 'app-shell-main--full': !showChrome }">
-      <RouterView />
+      <RouterView v-slot="{ Component }">
+        <Transition :name="routeTransition" mode="out-in">
+          <component :is="Component" :key="route.fullPath" />
+        </Transition>
+      </RouterView>
     </main>
+
+    <footer v-if="showChrome" class="app-site-footer">
+      <div class="app-site-footer__inner">
+        <div class="app-site-footer__logo-wrap">
+          <img
+            class="app-site-footer__logo"
+            src="/brand-nad1ch.png"
+            width="44"
+            height="44"
+            alt="Логотип nad1ch"
+          />
+        </div>
+        <div class="app-site-footer__meta">
+          <span class="app-site-footer__nick">nad1ch</span>
+          <p class="app-site-footer__copy">
+            © {{ footerYear }} nad1ch. Усі права захищено. «Кого ми з’їмо першим» — оригінальний
+            інтерфейс шоу.
+          </p>
+        </div>
+      </div>
+    </footer>
   </div>
 </template>
 
 <style scoped>
-.app-layout {
-  min-height: 100vh;
-}
-
 .app-shell-main--full {
+  flex: 1;
   min-height: 100vh;
 }
 </style>

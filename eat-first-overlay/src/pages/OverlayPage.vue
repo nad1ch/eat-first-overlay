@@ -413,12 +413,16 @@ onUnmounted(() => {
       <p class="eyebrow">Глобальний оверлей · {{ gameId }}</p>
       <h1 class="title">Кого ми з’їмо першим</h1>
       <p class="board-status">{{ globalStatusLine }}</p>
-      <p v-if="players.length === 0" class="empty">Очікуємо гравців у Firestore…</p>
+      <div v-if="players.length === 0" class="overlay-firestore-wait" role="status">
+        <span class="overlay-firestore-wait__spin" aria-hidden="true" />
+        <span class="overlay-firestore-wait__txt">Очікуємо гравців у Firestore…</span>
+      </div>
     </header>
 
-    <p v-if="isPersonal && !singlePlayer" class="personal-wait" role="status">
-      Немає даних для {{ personalPlayerId }}…
-    </p>
+    <div v-if="isPersonal && !singlePlayer" class="personal-wait" role="status">
+      <span class="personal-wait__spin" aria-hidden="true" />
+      <span class="personal-wait__msg">Немає даних для {{ personalPlayerId }}…</span>
+    </div>
 
     <div
       v-if="personalVoteBannerVisible"
@@ -816,10 +820,31 @@ onUnmounted(() => {
   text-shadow: 0 0 28px rgba(168, 85, 247, 0.2);
 }
 
-.empty {
-  margin: 0.75rem 0 0;
-  font-size: 0.85rem;
-  color: rgba(186, 181, 200, 0.85);
+.overlay-firestore-wait {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0.85rem 0 0;
+  padding: 0.55rem 0.75rem;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  animation: ui-slide-up 0.55s var(--motion-ease, cubic-bezier(0.22, 1, 0.36, 1)) both;
+}
+
+.overlay-firestore-wait__spin {
+  flex-shrink: 0;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  border: 2px solid rgba(168, 85, 247, 0.25);
+  border-top-color: rgba(196, 181, 253, 0.95);
+  animation: panelSpin 0.7s linear infinite;
+}
+
+.overlay-firestore-wait__txt {
+  font-size: 0.82rem;
+  color: rgba(226, 220, 255, 0.88);
 }
 
 .personal-wait {
@@ -827,12 +852,38 @@ onUnmounted(() => {
   top: 0.35rem;
   left: 50%;
   transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
   margin: 0;
-  padding: 0.25rem 0.6rem;
+  padding: 0.35rem 0.75rem;
   font-size: 0.65rem;
-  color: rgba(226, 220, 255, 0.75);
+  color: rgba(226, 220, 255, 0.85);
   z-index: 10;
   pointer-events: none;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(168, 85, 247, 0.22);
+  animation: ui-fade-in 0.4s ease both;
+}
+
+.personal-wait__spin {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  border: 2px solid rgba(168, 85, 247, 0.3);
+  border-top-color: rgba(251, 191, 36, 0.9);
+  animation: panelSpin 0.65s linear infinite;
+}
+
+.personal-wait__msg {
+  white-space: nowrap;
+}
+
+@keyframes panelSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .single-stage--hud {
