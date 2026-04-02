@@ -297,7 +297,6 @@ export async function setGameHandRaised(gameId, playerId, raised) {
     gameDocRef(gameId),
     {
       [`hands.${pid}`]: Boolean(raised),
-      key: ADMIN_KEY,
     },
     { merge: true },
   )

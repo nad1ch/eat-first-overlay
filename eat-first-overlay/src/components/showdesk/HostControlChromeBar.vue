@@ -41,6 +41,16 @@ const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
 
 const phaseLabel = computed(() => String(store.gameRoom?.gamePhase || 'intro'))
 
+const raisedHandSlots = computed(() => {
+  const h = store.gameRoom?.hands
+  if (!h || typeof h !== 'object') return []
+  return Object.keys(h)
+    .filter((k) => h[k] === true)
+    .sort((a, b) =>
+      String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' }),
+    )
+})
+
 function act(name, ...args) {
   const fn = store.actions?.[name]
   if (typeof fn === 'function') fn(...args)
@@ -52,6 +62,10 @@ function act(name, ...args) {
     <div class="hcc-split">
       <aside class="hcc-left">
         <p class="hcc-summary" role="status" :title="store.summaryLine">{{ store.summaryLine }}</p>
+        <p v-if="raisedHandSlots.length" class="hcc-hands-row" role="status">
+          ✋ Підняті:
+          <strong>{{ raisedHandSlots.map(slotNum).join(', ') }}</strong>
+        </p>
 
         <div class="hcc-left-round">
           <span class="hcc-left-lab">Раунд</span>
@@ -181,7 +195,7 @@ function act(name, ...args) {
 <style scoped>
 .hcc {
   width: 100%;
-  padding: 0.25rem 0 0.1rem;
+  padding: 0.35rem 0 0.2rem;
   border-top: 1px solid var(--border-subtle);
   transition:
     box-shadow 0.25s ease,
@@ -189,22 +203,25 @@ function act(name, ...args) {
 }
 
 .hcc--vote-on {
-  box-shadow: inset 0 0 18px var(--glow-vote);
+  box-shadow: none;
+  border-bottom: 1px solid rgba(56, 189, 248, 0.22);
+  padding-bottom: 0.45rem;
+  margin-bottom: 0.1rem;
 }
 
 .hcc-split {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: 0.65rem 1rem;
+  gap: 1rem 1.85rem;
 }
 
 .hcc-left {
   flex: 0 1 280px;
   max-width: 100%;
-  padding: 0.15rem 0.35rem 0.15rem 0;
+  padding: 0.5rem 0.85rem 0.5rem 0;
   border-right: 1px solid var(--border-subtle);
-  margin-right: 0.15rem;
+  margin-right: 0.45rem;
 }
 
 @media (max-width: 800px) {
@@ -217,8 +234,23 @@ function act(name, ...args) {
   }
 }
 
+.hcc-hands-row {
+  margin: 0 0 0.5rem;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.hcc-hands-row strong {
+  color: var(--text-highlight);
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 800;
+}
+
 .hcc-summary {
-  margin: 0 0 0.45rem;
+  margin: 0 0 0.55rem;
   padding: 0.28rem 0.45rem;
   border-radius: 8px;
   background: var(--bg-muted);
@@ -243,7 +275,7 @@ function act(name, ...args) {
 }
 
 .hcc-left-lab--spaced {
-  margin-top: 0.45rem;
+  margin-top: 0.62rem;
 }
 
 .hcc-left-round {
@@ -379,7 +411,7 @@ function act(name, ...args) {
   flex: 1 1 420px;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.55rem;
+  gap: 0.85rem;
   min-width: min(100%, 320px);
 }
 
@@ -390,10 +422,11 @@ function act(name, ...args) {
 }
 
 .hcc-panel {
-  padding: 0.45rem 0.55rem 0.55rem;
-  border-radius: 12px;
+  padding: 0.65rem 0.75rem 0.75rem;
+  border-radius: 14px;
   border: 1px solid var(--border);
   background: var(--bg-muted);
+  box-shadow: 0 2px 12px var(--shadow-elevated);
 }
 
 .hcc-panel-title {

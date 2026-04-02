@@ -56,7 +56,7 @@ const emit = defineEmits(['copy-personal', 'copy-global'])
   justify-content: space-between;
   gap: 1rem;
   align-items: flex-start;
-  margin-bottom: 1rem;
+  margin-bottom: 1.35rem;
 }
 
 .desk-title {

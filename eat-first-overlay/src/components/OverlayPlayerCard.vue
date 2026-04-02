@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { fieldConfig } from '../characterState'
+import { formatGenderDisplay } from '../utils/genderDisplay.js'
 import { saveVote } from '../services/gameService'
 import { playVoteSubmitSound } from '../utils/voteUiSound.js'
 
@@ -44,6 +45,8 @@ const props = defineProps({
   idleWaiting: { type: Boolean, default: false },
   /** Глобальна сітка: >3 рук у грі — не показувати ✋ на картці */
   suppressHandBadge: { type: Boolean, default: false },
+  /** Глобальний оверлей: показувати заповнені поля глядачу навіть без прапорця revealed (елімінує «зниклі» блоки на стрімі) */
+  audienceMode: { type: Boolean, default: false },
 })
 
 const labelByKey = computed(() =>
@@ -63,7 +66,7 @@ function chunkFor(player, key) {
 }
 
 function statDisplay(player, fieldKey) {
-  const c = chunkFor(player, fieldKey)
+  const c = chunkForDisplay(player, fieldKey)
   if (!c.revealed) return { mode: 'label', text: labelByKey.value[fieldKey] }
   const v = String(c.value ?? '').trim()
   return { mode: 'value', text: v.length ? v : '—' }
@@ -84,8 +87,43 @@ function displayAgeGenderLine(player) {
   const a = String(player.age ?? '').trim()
   const g = String(player.gender ?? '').trim()
   const left = a.length ? a : '—'
-  const right = g.length ? g : '—'
+  const right = g.length ? formatGenderDisplay(g) : '—'
   return { hidden: false, text: `${left} · ${right}` }
+}
+
+function identityRevealedForOverlay(player) {
+  if (props.audienceMode && (String(player.name ?? '').trim() || String(player.age ?? '').trim()))
+    return true
+  return identityRevealed(player)
+}
+
+function displayNameLineOverlay(player) {
+  if (props.audienceMode) {
+    const n = String(player.name ?? '').trim()
+    if (n) return { hidden: false, text: n }
+  }
+  return displayNameLine(player)
+}
+
+function displayAgeGenderLineOverlay(player) {
+  if (props.audienceMode) {
+    const a = String(player.age ?? '').trim()
+    const g = String(player.gender ?? '').trim()
+    if (a || g) {
+      const left = a.length ? a : '—'
+      const right = g.length ? formatGenderDisplay(g) : '—'
+      return { hidden: false, text: `${left} · ${right}` }
+    }
+  }
+  return displayAgeGenderLine(player)
+}
+
+function chunkForDisplay(player, key) {
+  const c = chunkFor(player, key)
+  if (!props.audienceMode) return c
+  const v = String(c.value ?? '').trim()
+  if (v) return { ...c, revealed: true }
+  return c
 }
 
 function isEliminated(player) {
@@ -119,7 +157,7 @@ const deathSvgSrc = computed(() => {
 })
 
 function valueRevealKey(player, rowKey) {
-  const r = chunkFor(player, rowKey).revealed
+  const r = chunkForDisplay(player, rowKey).revealed
   return `${player.id}-${rowKey}-${r ? 'open' : 'closed'}`
 }
 
@@ -425,12 +463,12 @@ async function submitVote(choice) {
           <p v-if="nominatorsUi" class="nominee-nom-who">{{ nominatorsUi }}</p>
         </template>
         <h2 class="card-grid-name">
-          <span v-if="!identityRevealed(player)" class="placeholder">•••</span>
-          <span v-else>{{ displayNameLine(player).text }}</span>
+          <span v-if="!identityRevealedForOverlay(player)" class="placeholder">•••</span>
+          <span v-else>{{ displayNameLineOverlay(player).text }}</span>
         </h2>
         <p class="card-grid-meta">
-          <span v-if="!identityRevealed(player)" class="placeholder">••• · •••</span>
-          <span v-else>{{ displayAgeGenderLine(player).text }}</span>
+          <span v-if="!identityRevealedForOverlay(player)" class="placeholder">••• · •••</span>
+          <span v-else>{{ displayAgeGenderLineOverlay(player).text }}</span>
         </p>
         <ul class="stats">
           <li v-for="row in fieldConfig" :key="row.key">
@@ -438,14 +476,14 @@ async function submitVote(choice) {
               :key="valueRevealKey(player, row.key)"
             class="stat-cell"
             :class="{
-                'stat-cell--label': !chunkFor(player, row.key).revealed,
-                'stat-cell--open': chunkFor(player, row.key).revealed,
-                'stat-cell--wave': chunkFor(player, row.key).revealed,
-                'value--revealed': chunkFor(player, row.key).revealed,
-                'stat-cell--drama': drama && chunkFor(player, row.key).revealed,
+                'stat-cell--label': !chunkForDisplay(player, row.key).revealed,
+                'stat-cell--open': chunkForDisplay(player, row.key).revealed,
+                'stat-cell--wave': chunkForDisplay(player, row.key).revealed,
+                'value--revealed': chunkForDisplay(player, row.key).revealed,
+                'stat-cell--drama': drama && chunkForDisplay(player, row.key).revealed,
               }"
             >
-              <template v-if="!chunkFor(player, row.key).revealed">
+              <template v-if="!chunkForDisplay(player, row.key).revealed">
                 {{ fieldLabelUi(row.key) }}
               </template>
               <template v-else>
@@ -698,7 +736,7 @@ async function submitVote(choice) {
   background: rgba(12, 8, 28, 0.92);
   border: 1px solid rgba(168, 85, 247, 0.28);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
-  overflow: hidden;
+  overflow: visible;
   transition:
     transform 0.4s ease,
     box-shadow 0.4s ease,

@@ -52,6 +52,8 @@ import ShowDeskHeader from '../components/showdesk/ShowDeskHeader.vue'
 import ShowPlayersRoster from '../components/showdesk/ShowPlayersRoster.vue'
 import { playRevealFlipSound, playVoteSubmitSound } from '../utils/voteUiSound.js'
 import { syncHostControlChrome, clearHostControlChrome } from '../composables/hostControlChrome.js'
+import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
+import { formatGenderDisplay } from '../utils/genderDisplay.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -190,7 +192,7 @@ watch(
       return
     }
     unsubGameRoom = subscribeToGameRoom(gameId.value, (d) => {
-      gameRoom.value = d && typeof d === 'object' ? d : {}
+      gameRoom.value = normalizeGameRoomPayload(d && typeof d === 'object' ? d : {})
     })
     unsubVotes = subscribeToVotes(gameId.value, (list) => {
       votes.value = list
@@ -442,12 +444,12 @@ function eliminatedBySlot() {
 /** Наступний живий у порядку p1…p10 + старт таймера 30s */
 const myHandRaised = computed(() => gameRoom.value?.hands?.[playerId.value] === true)
 
-async function toggleMyHand() {
+async function setMyHandRaised(raised) {
+  if (myHandRaised.value === raised) return
   try {
     loadError.value = null
-    const next = !myHandRaised.value
-    await setGameHandRaised(gameId.value, playerId.value, next)
-    showToast(next ? '✋ Руку піднято' : 'Руку опущено')
+    await setGameHandRaised(gameId.value, playerId.value, raised)
+    showToast(raised ? '✋ Руку піднято' : 'Руку опущено')
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -622,10 +624,29 @@ async function hostVotingStart() {
   }
 }
 
+/** Локальний журнал завершених голосувань для ведучого (не в Firestore). */
+const hostVoteLog = ref([])
+
+function slotLabelShort(id) {
+  const s = String(id ?? '')
+  const m = s.match(/^p(\d+)$/i)
+  return m ? m[1] : s.replace(/^p/i, '') || s
+}
+
 async function hostFinishVoting() {
   if (!isAdmin.value) return
   try {
     loadError.value = null
+    const target = String(gameRoom.value?.voting?.targetPlayer ?? '').trim()
+    const rr = roomRoundLive.value
+    const list = [...votesLiveRound.value]
+    const parts = list.map(
+      (v) => `${slotLabelShort(v.id)} ${v.choice === 'against' ? 'проти' : 'за'}`,
+    )
+    const time = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })
+    const line = `${time} · R${rr} · ціль ${target || '—'} · ${parts.length ? parts.join(', ') : 'немає голосів'}`
+    hostVoteLog.value = [{ id: `${Date.now()}-${Math.random()}`, line }, ...hostVoteLog.value].slice(0, 40)
+
     await setRoomVoting(gameId.value, false, '')
     await clearAllVotes(gameId.value)
     showToast('Голосування завершено')
@@ -680,15 +701,15 @@ async function adminNextSpeaker() {
   let from = 0
   if (cur && slots.includes(cur)) from = slots.indexOf(cur) + 1
 
+  const sec = Math.max(1, Math.floor(Number(speakingDuration.value) || 30))
   for (let step = 0; step < slots.length; step++) {
     const slot = slots[(from + step) % slots.length]
     if (elim[slot] !== true) {
       try {
         loadError.value = null
-        speakingDuration.value = 30
         timerSpeakerSlot.value = slot
-        await startSpeakingTimer(gameId.value, slot, 30)
-        showToast(`${slot} · 30s`)
+        await startSpeakingTimer(gameId.value, slot, sec)
+        showToast(`${slot} · ${sec}s`)
       } catch (e) {
         loadError.value = e instanceof Error ? e.message : String(e)
       }
@@ -983,6 +1004,12 @@ function rerollActiveCardOnly() {
           @copy-personal="copyPersonal"
           @copy-global="copyGlobal"
         />
+        <details v-if="hostVoteLog.length" class="vote-log-details">
+          <summary class="vote-log-details__sum">Журнал голосувань ({{ hostVoteLog.length }})</summary>
+          <ul class="vote-log-details__list">
+            <li v-for="row in hostVoteLog" :key="row.id" class="vote-log-details__li">{{ row.line }}</li>
+          </ul>
+        </details>
       </section>
 
       <section
@@ -1062,9 +1089,26 @@ function rerollActiveCardOnly() {
     <div v-else class="player-hero">
       <h1 class="player-title">{{ GAME_TITLE }}</h1>
       <p class="player-phase">Фаза: {{ String(gameRoom.gamePhase || 'intro') }}</p>
-      <button type="button" class="btn-hand" :class="{ up: myHandRaised }" @click="toggleMyHand">
-        {{ myHandRaised ? '✋ Опустити руку' : '✋ Підняти руку' }}
-      </button>
+      <div class="hand-seg" role="group" aria-label="Піднята рука">
+        <button
+          type="button"
+          class="hand-seg__btn"
+          :class="{ 'hand-seg__btn--on': !myHandRaised }"
+          :aria-pressed="!myHandRaised"
+          @click="setMyHandRaised(false)"
+        >
+          Опущено
+        </button>
+        <button
+          type="button"
+          class="hand-seg__btn"
+          :class="{ 'hand-seg__btn--on': myHandRaised }"
+          :aria-pressed="myHandRaised"
+          @click="setMyHandRaised(true)"
+        >
+          ✋ Піднято
+        </button>
+      </div>
     </div>
 
     <div v-if="showPlayerVotingUi" class="player-vote-panel">
@@ -1134,8 +1178,8 @@ function rerollActiveCardOnly() {
             <input v-model="characterState.age" type="text" class="input" />
           </div>
           <div>
-            <label class="field-label">Гендер</label>
-            <input v-model="characterState.gender" type="text" class="input" />
+            <label class="field-label">Стать</label>
+            <input v-model="characterState.gender" type="text" class="input" placeholder="Чоловік / Жінка …" />
           </div>
         </div>
       </div>
@@ -1147,7 +1191,10 @@ function rerollActiveCardOnly() {
         <Transition name="stat-reveal" mode="out-in">
           <div v-if="characterState.identityRevealed" key="id-on" class="identity-reveal-block">
             <p class="pv-line"><span class="mk">Ім’я</span> {{ characterState.name || '—' }}</p>
-            <p class="pv-line"><span class="mk">Вік · гендер</span> {{ characterState.age || '—' }} · {{ characterState.gender || '—' }}</p>
+            <p class="pv-line">
+              <span class="mk">Вік · стать</span> {{ characterState.age || '—' }} ·
+              {{ formatGenderDisplay(characterState.gender) }}
+            </p>
           </div>
           <p v-else key="id-off" class="pv-hidden">••••••</p>
         </Transition>
@@ -1256,7 +1303,7 @@ function rerollActiveCardOnly() {
             <button
               v-if="!characterState.activeCardRequest"
               type="button"
-              class="btn-primary"
+              class="btn-primary btn-primary--solid"
               :disabled="characterState.activeCard.used"
               @click="confirmActiveCardEffect"
             >
@@ -1304,7 +1351,7 @@ function rerollActiveCardOnly() {
 .desk {
   max-width: 920px;
   margin: 0 auto;
-  padding: 0 1.25rem 3.5rem;
+  padding: 0 1.25rem 4rem;
   box-sizing: border-box;
 }
 
@@ -1314,7 +1361,7 @@ function rerollActiveCardOnly() {
 }
 
 .admin-zone {
-  margin-bottom: 1.1rem;
+  margin-bottom: 1.65rem;
 }
 
 .admin-card {
@@ -1386,6 +1433,39 @@ function rerollActiveCardOnly() {
   text-transform: uppercase;
   color: var(--text-muted-soft);
   font-family: 'Orbitron', sans-serif;
+}
+
+.admin-zone--players > .zone-kicker {
+  margin-bottom: 0.85rem;
+}
+
+.vote-log-details {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-muted);
+  font-size: 0.68rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.vote-log-details__sum {
+  cursor: pointer;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.vote-log-details__list {
+  margin: 0.45rem 0 0;
+  padding: 0 0 0 1rem;
+  max-height: 7.5rem;
+  overflow-y: auto;
+}
+
+.vote-log-details__li {
+  margin: 0.2rem 0;
 }
 
 .admin-zone--generate {
@@ -1540,8 +1620,8 @@ function rerollActiveCardOnly() {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.65rem 0;
-  margin-bottom: 0.5rem;
+  padding: 0.75rem 0;
+  margin-bottom: 0.85rem;
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -1598,30 +1678,40 @@ function rerollActiveCardOnly() {
   color: var(--text-muted);
 }
 
-.btn-hand {
+.hand-seg {
+  display: inline-flex;
   margin-top: 1rem;
-  padding: 0.55rem 1rem;
-  border-radius: 12px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
+  padding: 3px;
+  border-radius: 14px;
   border: 1px solid var(--btn-hand-border);
-  background: var(--btn-hand-bg);
-  color: var(--btn-hand-text);
+  background: var(--bg-muted);
+  gap: 3px;
+}
+
+.hand-seg__btn {
+  padding: 0.5rem 0.85rem;
+  border-radius: 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
   transition:
-    transform 0.12s ease,
-    border-color 0.12s ease;
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
 }
 
-.btn-hand:hover {
-  transform: scale(1.03);
-  border-color: var(--btn-hand-border-hover);
+.hand-seg__btn:hover {
+  color: var(--text-body);
 }
 
-.btn-hand.up {
+.hand-seg__btn--on {
   border-color: var(--btn-hand-up-border);
   background: var(--btn-hand-up-bg);
   color: var(--btn-hand-up-text);
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.12);
 }
 
 .player-vote-panel {
@@ -1739,8 +1829,8 @@ function rerollActiveCardOnly() {
 }
 
 .panel {
-  padding: 1.25rem 1.35rem;
-  margin-bottom: 1.25rem;
+  padding: 1.35rem 1.45rem;
+  margin-bottom: 1.75rem;
   border-radius: 20px;
   background: var(--bg-card-soft);
   border: 1px solid var(--border-panel);
@@ -2013,6 +2103,7 @@ function rerollActiveCardOnly() {
 }
 
 .side-tools--inline {
+  margin-top: 1.2rem;
   margin-bottom: 1.1rem;
   padding: 0.85rem 1rem;
 }
@@ -2123,11 +2214,16 @@ function rerollActiveCardOnly() {
 }
 
 .active-card-box {
-  padding: 1rem;
+  padding: 1.15rem 1.2rem;
   border-radius: 16px;
   background: var(--active-card-surface-bg);
   border: 1px solid var(--active-card-surface-border);
-  margin-bottom: 1rem;
+  margin-top: 0.35rem;
+  margin-bottom: 1.35rem;
+}
+
+.active-card-box .input + .textarea {
+  margin-top: 0.85rem;
 }
 
 .ac-title {
@@ -2367,6 +2463,17 @@ function rerollActiveCardOnly() {
 .btn-primary:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.btn-primary--solid {
+  background: var(--btn-primary-solid-bg);
+  color: var(--btn-primary-solid-text);
+  border-color: var(--btn-primary-solid-border);
+}
+
+.btn-primary--solid:not(:disabled):hover {
+  background: var(--btn-primary-solid-hover);
+  border-color: var(--btn-primary-solid-border);
 }
 
 .btn-soft {

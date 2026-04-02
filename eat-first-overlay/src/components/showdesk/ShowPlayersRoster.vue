@@ -257,15 +257,16 @@ const aliveSlotsForNom = computed(() => {
 
 <style scoped>
 .roster {
-  padding: 1rem 1.1rem;
+  padding: 1.15rem 1.2rem 1.25rem;
   border-radius: 16px;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  margin-bottom: 1rem;
+  margin-bottom: 1.35rem;
+  box-shadow: var(--panel-desk-shadow, none);
 }
 
 .block-title {
-  margin: 0 0 0.35rem;
+  margin: 0 0 0.55rem;
   font-size: 0.88rem;
   font-weight: 800;
   color: var(--text-heading);
@@ -274,7 +275,7 @@ const aliveSlotsForNom = computed(() => {
 }
 
 .roster-hint {
-  margin: 0 0 0.85rem;
+  margin: 0 0 1.05rem;
   font-size: 0.65rem;
   line-height: 1.35;
   color: var(--text-muted);

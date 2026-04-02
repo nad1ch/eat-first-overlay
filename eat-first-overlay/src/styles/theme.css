@@ -129,6 +129,10 @@
   --btn-hand-up-border: rgba(74, 222, 128, 0.45);
   --btn-hand-up-bg: rgba(22, 101, 52, 0.35);
   --btn-hand-up-text: #bbf7d0;
+  --btn-primary-solid-bg: rgba(109, 40, 217, 0.85);
+  --btn-primary-solid-hover: rgba(139, 92, 246, 0.95);
+  --btn-primary-solid-text: #faf5ff;
+  --btn-primary-solid-border: rgba(196, 181, 253, 0.45);
   --btn-request-border: rgba(167, 139, 250, 0.45);
   --btn-request-bg: rgba(88, 28, 135, 0.35);
   --btn-request-text: #ffffff;
@@ -259,6 +263,10 @@
   --btn-hand-up-border: #16a34a;
   --btn-hand-up-bg: #bbf7d0;
   --btn-hand-up-text: #14532d;
+  --btn-primary-solid-bg: #5b21b6;
+  --btn-primary-solid-hover: #6d28d9;
+  --btn-primary-solid-text: #ffffff;
+  --btn-primary-solid-border: #4c1d95;
   --btn-request-border: rgba(91, 33, 182, 0.55);
   --btn-request-bg: #6d28d9;
   --btn-request-text: #ffffff;
@@ -317,11 +325,8 @@ html *::after {
 }
 
 .app-shell-header--vote-on {
-  border-bottom-color: var(--border-cyan-strong);
-  box-shadow:
-    0 4px 20px var(--shadow-elevated),
-    0 0 36px var(--glow-vote),
-    inset 0 0 28px var(--glow-vote-inner);
+  border-bottom-color: rgba(56, 189, 248, 0.35);
+  box-shadow: 0 4px 20px var(--shadow-elevated);
 }
 
 .app-shell-brand {

@@ -42,14 +42,11 @@ onUnmounted(() => {
   if (unsub) unsub()
 })
 
-const sortedPlayers = computed(() => {
-  const list = [...players.value]
-  list.sort((a, b) => {
-    const na = parseInt(String(a.id).replace(/\D/g, ''), 10) || 0
-    const nb = parseInt(String(b.id).replace(/\D/g, ''), 10) || 0
-    return na - nb
-  })
-  return list
+const SLOT_IDS = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10']
+
+const slotsForGrid = computed(() => {
+  const map = new Map(players.value.map((p) => [String(p.id), p]))
+  return SLOT_IDS.map((id) => map.get(id) || { id, name: '', eliminated: false })
 })
 
 function slotNum(id) {
@@ -63,12 +60,18 @@ function openPersonalOverlay(pid) {
   router.push({ path: '/overlay', query: { game: gameId.value, player: String(pid).trim() } })
 }
 
-function goGlobalOverlay() {
-  router.push({ path: '/overlay', query: { game: gameId.value } })
+function openPlayerControl(pid) {
+  router.push({ path: '/control', query: { game: gameId.value, player: String(pid).trim() } })
 }
 
-function goPlayerControl() {
-  router.push({ path: '/control', query: { game: gameId.value, player: 'p1' } })
+function scrollToPlayerSlots() {
+  requestAnimationFrame(() => {
+    document.getElementById('player-slots')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
+}
+
+function goGlobalOverlay() {
+  router.push({ path: '/overlay', query: { game: gameId.value } })
 }
 
 function goAdmin() {
@@ -100,9 +103,9 @@ const globalOverlayUrl = computed(() => {
     </header>
 
     <ol class="join-steps">
-      <li><span class="join-steps__n">1</span> Обери свою роль</li>
-      <li><span class="join-steps__n">2</span> Відкрий свій overlay</li>
-      <li><span class="join-steps__n">3</span> Встав у OBS / virtual camera</li>
+      <li><span class="join-steps__n">1</span> Введи game id і обери <strong>свій</strong> слот нижче</li>
+      <li><span class="join-steps__n">2</span> Відкрий свій overlay у OBS (кнопка «Оверлей» у слоті)</li>
+      <li><span class="join-steps__n">3</span> Керуй картками з панелі гравця («Моя панель»)</li>
     </ol>
 
     <div class="game-bar">
@@ -115,12 +118,12 @@ const globalOverlayUrl = computed(() => {
 
     <section class="roles" aria-labelledby="roles-title">
       <h2 id="roles-title" class="roles-title">Хто ти зараз?</h2>
-      <p class="roles-hint">Три входи — без зайвого тексту в ефірі.</p>
+      <p class="roles-hint">Ведучий і OBS — окремі входи. Гравець обирає слот у блоці нижче.</p>
       <div class="cta-grid">
-        <button type="button" class="cta cta--play" @click="goPlayerControl">
+        <button type="button" class="cta cta--play" @click="scrollToPlayerSlots">
           <span class="cta-ico" aria-hidden="true">🎤</span>
           <span class="cta-t">Я гравець</span>
-          <span class="cta-d">Панель слоту · карти · активна карта</span>
+          <span class="cta-d">Прокрутити до вибору слоту · потім «Моя панель»</span>
         </button>
         <button type="button" class="cta cta--host" @click="goAdmin">
           <span class="cta-ico" aria-hidden="true">🎮</span>
@@ -135,11 +138,37 @@ const globalOverlayUrl = computed(() => {
       </div>
     </section>
 
+    <section id="player-slots" class="cards-wrap" aria-labelledby="slots-title">
+      <h2 id="slots-title" class="sec-title">Обери свій слот</h2>
+      <p class="sec-sub sec-sub--emph">
+        Натисни <strong>свій</strong> номер (як оголосив ведучий). «Моя панель» — тільки твої карти; не заходь у чужий
+        слот.
+      </p>
+      <div class="cards">
+        <div
+          v-for="p in slotsForGrid"
+          :key="p.id"
+          class="pcard"
+          :class="{ elim: p.eliminated === true, 'pcard--empty': !(p.name && String(p.name).trim()) }"
+        >
+          <span class="num">Слот {{ slotNum(p.id) }}</span>
+          <span class="nm">{{ (p.name && String(p.name).trim()) || 'Ще без імені в кімнаті' }}</span>
+          <span v-if="p.eliminated" class="badge">вибув</span>
+          <div class="pcard-actions">
+            <button type="button" class="pcard-btn pcard-btn--primary" @click="openPlayerControl(p.id)">
+              Моя панель
+            </button>
+            <button type="button" class="pcard-btn" @click="openPersonalOverlay(p.id)">OBS оверлей</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section class="obs-hint" aria-labelledby="obs-hint-title">
       <h2 id="obs-hint-title" class="obs-hint__title">OBS · швидкий старт</h2>
       <ol class="obs-hint__list">
         <li>Джерело: <strong>Browser</strong> (або Browser Source).</li>
-        <li>Встав URL персонального оверлею (знизу, по слоту) або глобального — залежно від сцени.</li>
+        <li>Встав URL з кнопки «OBS оверлей» у своєму слоті або глобальний — залежно від сцени.</li>
         <li>Розмір: на весь кадр джерела; у властивостях увімкни прозорість фону, якщо є.</li>
         <li>Оновлення: за потреби ввімкни «Refresh browser when scene becomes active».</li>
       </ol>
@@ -147,26 +176,6 @@ const globalOverlayUrl = computed(() => {
         <span class="obs-hint__url-label">Приклад глобального URL</span>
         <code class="obs-hint__code">{{ globalOverlayUrl }}</code>
       </p>
-    </section>
-
-    <section class="cards-wrap">
-      <h2 class="sec-title">Персональні оверлеї</h2>
-      <p class="sec-sub">Клік по слоту — тільки цей гравець у OBS (камера + HUD).</p>
-      <p v-if="sortedPlayers.length === 0" class="empty">Ще немає гравців у Firestore для цієї кімнати.</p>
-      <div v-else class="cards">
-        <button
-          v-for="p in sortedPlayers"
-          :key="p.id"
-          type="button"
-          class="pcard"
-          :class="{ elim: p.eliminated === true }"
-          @click="openPersonalOverlay(p.id)"
-        >
-          <span class="num">Гравець {{ slotNum(p.id) }}</span>
-          <span class="nm">{{ (p.name && String(p.name).trim()) || '—' }}</span>
-          <span v-if="p.eliminated" class="badge">вибув</span>
-        </button>
-      </div>
     </section>
   </div>
 </template>
@@ -196,14 +205,27 @@ const globalOverlayUrl = computed(() => {
 .join-steps,
 .game-bar,
 .roles,
-.cards-wrap {
+.cards-wrap,
+.obs-hint {
   position: relative;
   z-index: 1;
 }
 
+.join-hero {
+  margin-bottom: clamp(1.5rem, 4vw, 2.5rem);
+  text-align: center;
+}
+
+.game-bar,
+.roles,
+.cards-wrap,
+.obs-hint {
+  margin-top: clamp(1.35rem, 3.8vw, 2.15rem);
+}
+
 .join-steps {
   list-style: none;
-  margin: 0 auto 1.35rem;
+  margin: 0 auto;
   padding: 0.85rem 1rem;
   border-radius: 14px;
   border: 1px solid var(--border);
@@ -245,7 +267,7 @@ const globalOverlayUrl = computed(() => {
 }
 
 .roles {
-  margin-bottom: 1.75rem;
+  margin-bottom: 0;
 }
 
 .roles-title {
@@ -265,11 +287,6 @@ const globalOverlayUrl = computed(() => {
   font-size: 0.78rem;
   color: var(--text-secondary);
   line-height: 1.4;
-}
-
-.join-hero {
-  margin-bottom: 1.5rem;
-  text-align: center;
 }
 
 .eyebrow {
@@ -300,12 +317,12 @@ const globalOverlayUrl = computed(() => {
 }
 
 .game-bar {
-  margin-bottom: 1.5rem;
-  padding: 1rem 1.15rem;
+  margin-bottom: 0;
+  padding: 1.1rem 1.25rem;
   border-radius: 16px;
   background: var(--bg-card-solid);
   border: 1px solid var(--border-strong);
-  box-shadow: 0 0 24px var(--accent-glow);
+  box-shadow: var(--shadow-card, 0 0 24px var(--accent-glow));
 }
 
 .lbl {
@@ -354,10 +371,8 @@ const globalOverlayUrl = computed(() => {
 }
 
 .obs-hint {
-  position: relative;
-  z-index: 1;
-  margin-bottom: 2rem;
-  padding: 1.1rem 1.2rem 1.2rem;
+  margin-bottom: 0;
+  padding: 1.2rem 1.3rem 1.35rem;
   border-radius: 16px;
   border: 1px solid var(--border-cyan);
   background: var(--bg-obs-hint);
@@ -484,8 +499,16 @@ const globalOverlayUrl = computed(() => {
   line-height: 1.35;
 }
 
+.cards-wrap {
+  padding: 1.15rem 1.2rem 1.3rem;
+  border-radius: 18px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-card-solid);
+  box-shadow: var(--shadow-card, none);
+}
+
 .sec-title {
-  margin: 0 0 0.35rem;
+  margin: 0 0 0.65rem;
   font-size: 0.9rem;
   font-weight: 700;
   font-family: Orbitron, sans-serif;
@@ -493,10 +516,19 @@ const globalOverlayUrl = computed(() => {
 }
 
 .sec-sub {
-  margin: 0 0 1rem;
+  margin: 0 0 1.15rem;
   font-size: 0.78rem;
   color: var(--text-muted);
-  line-height: 1.4;
+  line-height: 1.45;
+}
+
+.sec-sub--emph {
+  color: var(--text-secondary);
+  max-width: 40rem;
+}
+
+.sec-sub--emph strong {
+  color: var(--text-heading);
 }
 
 .empty {
@@ -507,31 +539,66 @@ const globalOverlayUrl = computed(() => {
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
+  gap: 0.85rem;
 }
 
 .pcard {
   text-align: left;
-  padding: 0.85rem 1rem;
+  padding: 0.95rem 1rem 0.85rem;
   border-radius: 14px;
-  border: 1px solid var(--cta-border);
+  border: 1px solid var(--border-panel);
   background: var(--pcard-bg);
   color: inherit;
-  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+  box-shadow: var(--shadow-card, none);
+}
+
+.pcard--empty .nm {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.78rem;
+}
+
+.pcard-actions {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  transition:
-    transform 0.18s ease,
-    border-color 0.18s,
-    box-shadow 0.18s;
+  margin-top: 0.25rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--border-subtle);
 }
 
-.pcard:hover {
-  transform: translateY(-2px) scale(1.02);
+.pcard-btn {
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid var(--border-input);
+  background: var(--bg-muted);
+  color: var(--text-body);
+  transition:
+    transform 0.12s ease,
+    border-color 0.15s ease;
+}
+
+.pcard-btn:hover {
+  transform: scale(1.02);
   border-color: var(--border-strong);
-  box-shadow: 0 8px 32px var(--glow-purple-lg);
+}
+
+.pcard-btn--primary {
+  border-color: var(--border-strong);
+  background: var(--accent-fill);
+  color: var(--text-title);
+  font-weight: 800;
 }
 
 .pcard.elim {
@@ -539,8 +606,9 @@ const globalOverlayUrl = computed(() => {
   border-color: rgba(185, 28, 28, 0.35);
 }
 
-.pcard.elim:hover {
-  box-shadow: 0 8px 24px rgba(185, 28, 28, 0.15);
+.pcard.elim .pcard-btn {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .num {

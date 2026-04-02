@@ -15,7 +15,7 @@ function pick(arr) {
 
 export const ages = ['20', '22', '24', '26', '28', '30', '32', '35', '38', '41', '45']
 
-export const genders = ['Чол.', 'Жін.', 'Non-binary', 'Не вказано']
+export const genders = ['Чоловік', 'Жінка', 'Non-binary', 'Не вказано']
 
 const namesMale = [
   'Олексій',
@@ -68,8 +68,8 @@ export const displayNames = [...namesMale, ...namesFemale]
 
 export function pickNameForGender(gender) {
   const g = String(gender || '')
-  if (g === 'Чол.') return pick(namesMale)
-  if (g === 'Жін.') return pick(namesFemale)
+  if (g === 'Чол.' || g === 'Чоловік' || /^чол/i.test(g)) return pick(namesMale)
+  if (g === 'Жін.' || g === 'Жінка' || /^жін/i.test(g)) return pick(namesFemale)
   return pick([...namesNeutral, ...namesMale, ...namesFemale])
 }
 

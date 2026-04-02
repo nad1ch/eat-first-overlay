@@ -10,6 +10,7 @@ import {
   subscribeToVotes,
   nominationsFromRoom,
 } from '../services/gameService'
+import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
 import { millisFromFirestore } from '../utils/firestoreTime.js'
 
 const route = useRoute()
@@ -73,7 +74,7 @@ function cleanupVotesSub() {
 function setupGameRoom(gid) {
   cleanupGameRoom()
   unsubGameRoom = subscribeToGameRoom(gid, (data) => {
-    gameRoom.value = data && typeof data === 'object' ? data : {}
+    gameRoom.value = normalizeGameRoomPayload(data && typeof data === 'object' ? data : {})
   })
 }
 
@@ -195,6 +196,13 @@ const dramaMode = computed(() => {
 
 /** Персональний оверлей: та сама «напруга», коли в грі лишилось 3. */
 const dramaPersonal = computed(() => isPersonal.value && aliveForCinema.value === 3)
+
+const globalStatusLine = computed(() => {
+  const ph = String(gameRoom.value?.gamePhase || 'intro')
+  const r = Math.min(8, Math.max(1, Math.floor(Number(gameRoom.value?.round) || 1)))
+  const n = players.value.length
+  return `Фаза: ${ph} · Раунд ${r} · У кімнаті: ${n}`
+})
 
 /** Тільки глобальна сітка: на персональному оверлеї без vignette/фільтра по центру вебки */
 const overlayDrama = computed(() => dramaMode.value)
@@ -402,8 +410,9 @@ onUnmounted(() => {
       v-if="!isPersonal"
       class="board-head"
     >
-      <p class="eyebrow">Оверлей · {{ gameId }}</p>
+      <p class="eyebrow">Глобальний оверлей · {{ gameId }}</p>
       <h1 class="title">Кого ми з’їмо першим</h1>
+      <p class="board-status">{{ globalStatusLine }}</p>
       <p v-if="players.length === 0" class="empty">Очікуємо гравців у Firestore…</p>
     </header>
 
@@ -455,31 +464,34 @@ onUnmounted(() => {
       />
     </div>
 
-    <div v-else class="grid" :class="{ 'grid--cinema': cinemaGrid }">
-      <OverlayPlayerCard
-        v-for="p in players"
-        :key="p.id"
-        :player="p"
-        :is-spotlight="isSpotlightPlayer(p)"
-        :is-timer-target="isTimerPlayer(p)"
-        :dimmed="gridDimNonSpeakers && !isTimerPlayer(p)"
-        :cinema="cinemaGrid"
-        :drama="dramaMode"
-        :voting-active="votingActive"
-        :voting-target-id="votingTargetId"
-        :vote-interactive="false"
-        :game-id="gameId"
-        :nominated-player-id="nominatedPlayerId"
-        :nominated-by-id="nominatedById"
-        :nominators-line="nominatorsLineFor(p.id)"
-        :room-round="roomRound"
-        :votes-received="votesForTarget(p.id)"
-        :has-voted-this-round="false"
-        :is-vote-target-self="false"
-        :hand-raised="isHandRaised(p)"
-        :suppress-hand-badge="handsClusterMode"
-        v-bind="cardTimerProps(p)"
-      />
+    <div v-else class="board-frame" :class="{ 'board-frame--cinema': cinemaGrid }">
+      <div class="grid" :class="{ 'grid--cinema': cinemaGrid }">
+        <OverlayPlayerCard
+          v-for="p in players"
+          :key="p.id"
+          :player="p"
+          audience-mode
+          :is-spotlight="isSpotlightPlayer(p)"
+          :is-timer-target="isTimerPlayer(p)"
+          :dimmed="gridDimNonSpeakers && !isTimerPlayer(p)"
+          :cinema="cinemaGrid"
+          :drama="dramaMode"
+          :voting-active="votingActive"
+          :voting-target-id="votingTargetId"
+          :vote-interactive="false"
+          :game-id="gameId"
+          :nominated-player-id="nominatedPlayerId"
+          :nominated-by-id="nominatedById"
+          :nominators-line="nominatorsLineFor(p.id)"
+          :room-round="roomRound"
+          :votes-received="votesForTarget(p.id)"
+          :has-voted-this-round="false"
+          :is-vote-target-self="false"
+          :hand-raised="isHandRaised(p)"
+          :suppress-hand-badge="handsClusterMode"
+          v-bind="cardTimerProps(p)"
+        />
+      </div>
     </div>
     </div>
 
@@ -663,14 +675,12 @@ onUnmounted(() => {
 }
 
 .overlay-root--global {
-  padding: 1rem 1rem 2rem;
+  padding: clamp(0.85rem, 2vw, 1.35rem) clamp(0.75rem, 2vw, 1.5rem) 2rem;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(
-    180deg,
-    rgba(8, 6, 22, 0.92) 0%,
-    rgba(6, 4, 18, 0.97) 100%
-  );
+  background:
+    radial-gradient(ellipse 120% 80% at 50% -20%, rgba(88, 28, 135, 0.35), transparent 55%),
+    linear-gradient(180deg, #070510 0%, #030208 100%);
 }
 
 .overlay-root--personal {
@@ -753,10 +763,38 @@ onUnmounted(() => {
 
 .board-head {
   text-align: center;
-  margin-bottom: 1.25rem;
+  margin-bottom: 1.1rem;
   max-width: 960px;
   margin-left: auto;
   margin-right: auto;
+}
+
+.board-status {
+  margin: 0.5rem 0 0;
+  font-size: clamp(0.68rem, 1.5vw, 0.82rem);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-family: 'Orbitron', sans-serif;
+  color: rgba(196, 181, 253, 0.72);
+}
+
+.board-frame {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: clamp(0.85rem, 2vw, 1.35rem);
+  border-radius: 20px;
+  border: 1px solid rgba(168, 85, 247, 0.22);
+  background: linear-gradient(165deg, rgba(12, 8, 28, 0.55) 0%, rgba(6, 4, 16, 0.35) 100%);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.board-frame--cinema {
+  max-width: 1320px;
+  padding-bottom: 1rem;
 }
 
 .eyebrow {
@@ -769,12 +807,13 @@ onUnmounted(() => {
 
 .title {
   margin: 0;
-  font-size: clamp(1.05rem, 2.4vw, 1.45rem);
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-size: clamp(1.2rem, 2.8vw, 1.75rem);
+  font-weight: 800;
+  letter-spacing: 0.02em;
   color: #f5f3ff;
   font-family: 'Orbitron', sans-serif;
-  line-height: 1.2;
+  line-height: 1.15;
+  text-shadow: 0 0 28px rgba(168, 85, 247, 0.2);
 }
 
 .empty {

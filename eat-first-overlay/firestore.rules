@@ -4,7 +4,14 @@ service cloud.firestore {
   match /databases/{database}/documents {
     match /games/{gameId} {
       allow read: if true;
-      allow write: if request.resource.data.key == "123456";
+      // Адмін-ключ для керування кімнатою; окремо — лише оновлення мапи hands (гравець піднімає руку без ключа).
+      allow create: if request.resource.data.key == "123456";
+      allow update: if request.resource.data.key == "123456"
+        || (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hands'])
+          && request.resource.data.hands is map
+        );
+      allow delete: if false;
 
       // Публічне голосування з персонального оверлею (без admin key)
       match /votes/{voterId} {
