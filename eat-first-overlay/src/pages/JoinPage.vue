@@ -225,7 +225,7 @@ function handUpJoin(pid) {
   min-height: 100vh;
   box-sizing: border-box;
   padding: clamp(1.5rem, 4vw, 2.5rem) clamp(1rem, 3vw, 1.75rem) 3.5rem;
-  max-width: min(52rem, 100%);
+  max-width: min(75rem, 100%);
   margin: 0 auto;
   font-family: var(--font-body);
   color: var(--text-body);
@@ -410,10 +410,23 @@ function handUpJoin(pid) {
   transform: scale(1.04);
 }
 
+/* «Хто ти зараз?»: на широкому екрані — 3 картки в один ряд */
 .cta-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(15.5rem, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
+}
+
+@media (min-width: 560px) {
+  .cta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 900px) {
+  .cta-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .obs-hint {
@@ -583,10 +596,29 @@ function handUpJoin(pid) {
   color: var(--text-muted);
 }
 
+/* «Обери свій слот»: на великому екрані — 5×2 (два рядки), далі адаптивно */
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
   gap: 0.85rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 520px) {
+  .cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 720px) {
+  .cards {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 900px) {
+  .cards {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
 }
 
 .pcard {

@@ -1416,7 +1416,7 @@ function rerollActiveCardOnly() {
 
 <style scoped>
 .desk {
-  max-width: 920px;
+  max-width: min(1200px, 100%);
   margin: 0 auto;
   padding: 0 1.25rem 4rem;
   box-sizing: border-box;
@@ -1751,11 +1751,13 @@ function rerollActiveCardOnly() {
   container-name: player-char;
 }
 
-/* Дві колонки: зліва професія/здоров’я/фобія, справа багаж/факт/особливість */
+/* Дві колонки за замовчуванням (надійніше за один лише container query у scoped CSS) */
 .player-char-grid__traits.player-traits-cols {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.5rem;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 1rem;
+  row-gap: 0.5rem;
+  align-items: start;
   width: 100%;
 }
 
@@ -1771,25 +1773,18 @@ function rerollActiveCardOnly() {
   margin-bottom: 0;
 }
 
-/* За шириною картки (не лише viewport): зручно при вузькому вікні чи split-screen */
-@container player-char (min-width: 520px) {
+@media (max-width: 520px) {
   .player-char-grid__traits.player-traits-cols {
-    grid-template-columns: 1fr 1fr;
-    column-gap: 1rem;
-    row-gap: 0.5rem;
-    align-items: start;
+    grid-template-columns: 1fr;
+    column-gap: 0.5rem;
   }
 }
 
-/* Fallback без container queries */
-@supports not (container-type: inline-size) {
-  @media (min-width: 560px) {
-    .player-char-grid__traits.player-traits-cols {
-      grid-template-columns: 1fr 1fr;
-      column-gap: 1rem;
-      row-gap: 0.5rem;
-      align-items: start;
-    }
+/* Додатково: якщо сама панель вузька (split view), лишаємо одну колонку */
+@container player-char (max-width: 480px) {
+  .player-char-grid__traits.player-traits-cols {
+    grid-template-columns: 1fr;
+    column-gap: 0.5rem;
   }
 }
 

@@ -726,15 +726,16 @@ async function submitVote(choice) {
 .card-grid {
   --cg-pad-x: clamp(0.75rem, min(2.8vw, 3.2vh), 1.45rem);
   --cg-pad-y: clamp(0.85rem, min(3vw, 3.4vh), 1.5rem);
-  --cg-stat-gap: clamp(0.42rem, min(1.8vw, 2.2vh), 0.75rem);
-  --cg-stat-pad-y: clamp(0.52rem, min(2.2vw, 2.6vh), 1.05rem);
-  --cg-stat-pad-x: clamp(0.58rem, min(2.6vw, 3vh), 1.2rem);
-  --cg-stat-fs: clamp(0.9rem, min(2.8vw, 3.2vh), 1.22rem);
-  --cg-id-fs: clamp(0.68rem, min(2vw, 2.2vh), 0.88rem);
+  /* +20%: картки характеристик, номер слота, цифра таймера, голосування */
+  --cg-stat-gap: clamp(0.504rem, min(2.16vw, 2.64vh), 0.9rem);
+  --cg-stat-pad-y: clamp(0.624rem, min(2.64vw, 3.12vh), 1.26rem);
+  --cg-stat-pad-x: clamp(0.696rem, min(3.12vw, 3.6vh), 1.44rem);
+  --cg-stat-fs: clamp(1.08rem, min(3.36vw, 3.84vh), 1.464rem);
+  --cg-id-fs: clamp(0.816rem, min(2.4vw, 2.64vh), 1.056rem);
   --cg-name-fs: clamp(1.05rem, min(2.8vw, 3.4vh), 1.42rem);
   --cg-meta-fs: clamp(0.88rem, min(2.2vw, 2.8vh), 1.12rem);
-  --cg-timer: clamp(3.25rem, min(10vw, 11vh), 5.5rem);
-  --cg-timer-num: clamp(0.68rem, min(2vw, 2.4vh), 0.9rem);
+  --cg-timer: clamp(3.9rem, min(12vw, 13.2vh), 6.6rem);
+  --cg-timer-num: clamp(0.816rem, min(2.4vw, 2.88vh), 1.08rem);
 
   position: relative;
   padding: 0;
@@ -753,7 +754,7 @@ async function submitVote(choice) {
 
 @media (min-width: 1600px) {
   .card-grid {
-    --cg-stat-fs: clamp(1rem, 1.1vw, 1.35rem);
+    --cg-stat-fs: clamp(1.2rem, 1.32vw, 1.62rem);
   }
 }
 
@@ -998,7 +999,7 @@ async function submitVote(choice) {
 .vote-strip__title {
   margin: 0 0 0.15rem;
   font-family: Orbitron, sans-serif;
-  font-size: clamp(0.52rem, min(1.5vw, 1.65vh), 0.62rem);
+  font-size: clamp(0.624rem, min(1.8vw, 1.98vh), 0.744rem);
   font-weight: 800;
   letter-spacing: 0.22em;
   color: rgba(226, 232, 240, 0.88);
@@ -1007,7 +1008,7 @@ async function submitVote(choice) {
 
 .vote-strip__target {
   margin: 0 0 0.32rem;
-  font-size: clamp(0.62rem, min(1.75vw, 1.9vh), 0.78rem);
+  font-size: clamp(0.744rem, min(2.1vw, 2.28vh), 0.936rem);
   font-weight: 700;
   letter-spacing: 0.14em;
   color: rgba(250, 245, 255, 0.95);
@@ -1035,7 +1036,7 @@ async function submitVote(choice) {
   justify-content: center;
   gap: 0.65rem 1rem;
   font-family: Orbitron, sans-serif;
-  font-size: clamp(0.85rem, min(2.4vw, 2.6vh), 1.05rem);
+  font-size: clamp(1.02rem, min(2.88vw, 3.12vh), 1.26rem);
   font-weight: 900;
   letter-spacing: 0.06em;
   color: #f8fafc;
@@ -1043,7 +1044,7 @@ async function submitVote(choice) {
 }
 
 .vote-score--solo {
-  font-size: clamp(0.92rem, min(2.6vw, 2.8vh), 1.12rem);
+  font-size: clamp(1.104rem, min(3.12vw, 3.36vh), 1.344rem);
 }
 
 .vote-score__n {
@@ -1068,7 +1069,7 @@ async function submitVote(choice) {
 
 .vote-strip__voted-only {
   margin: 0.35rem 0 0;
-  font-size: clamp(0.72rem, min(2vw, 2.2vh), 0.88rem);
+  font-size: clamp(0.864rem, min(2.4vw, 2.64vh), 1.056rem);
   font-weight: 800;
   letter-spacing: 0.12em;
   color: rgba(186, 230, 253, 0.92);
@@ -1078,7 +1079,7 @@ async function submitVote(choice) {
 .vote-strip__dramatic {
   margin: 0 0 0.28rem;
   font-family: Orbitron, sans-serif;
-  font-size: clamp(0.58rem, min(1.6vw, 1.75vh), 0.72rem);
+  font-size: clamp(0.696rem, min(1.92vw, 2.1vh), 0.864rem);
   font-weight: 900;
   letter-spacing: 0.28em;
   color: #fecaca;
@@ -1093,7 +1094,7 @@ async function submitVote(choice) {
   flex-wrap: wrap;
   justify-content: center;
   gap: 0.35rem 0.5rem;
-  font-size: clamp(0.55rem, min(1.45vw, 1.55vh), 0.68rem);
+  font-size: clamp(0.66rem, min(1.74vw, 1.86vh), 0.816rem);
   color: rgba(226, 232, 240, 0.88);
   line-height: 1.3;
 }
@@ -1165,7 +1166,7 @@ async function submitVote(choice) {
 
 .vote-strip__ack {
   margin: 0.45rem 0 0;
-  font-size: clamp(0.62rem, min(1.75vw, 1.9vh), 0.8rem);
+  font-size: clamp(0.744rem, min(2.1vw, 2.28vh), 0.96rem);
   font-weight: 800;
   letter-spacing: 0.1em;
   color: #bbf7d0;
@@ -1189,7 +1190,7 @@ async function submitVote(choice) {
   gap: 0.25rem;
   padding: 0.35rem 0.65rem;
   border-radius: 12px;
-  font-size: clamp(0.78rem, min(2.2vw, 2.4vh), 0.95rem);
+  font-size: clamp(0.936rem, min(2.64vw, 2.88vh), 1.14rem);
   font-weight: 700;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(12, 8, 24, 0.82);
@@ -1229,7 +1230,7 @@ async function submitVote(choice) {
 }
 
 .vote-btn__lbl {
-  font-size: 0.62rem;
+  font-size: 0.744rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   opacity: 0.85;
@@ -1240,7 +1241,7 @@ async function submitVote(choice) {
   align-items: center;
   justify-content: center;
   padding: 0.3rem 0.5rem;
-  font-size: clamp(0.85rem, min(2.4vw, 2.6vh), 1rem);
+  font-size: clamp(1.02rem, min(2.88vw, 3.12vh), 1.2rem);
   opacity: 0.75;
   filter: grayscale(0.2);
 }
@@ -1414,7 +1415,7 @@ async function submitVote(choice) {
 .stat-cell--label {
   color: rgba(148, 140, 180, 0.78);
   font-weight: 700;
-  font-size: clamp(0.72rem, min(2.1vw, 2.5vh), 0.92rem);
+  font-size: clamp(0.864rem, min(2.52vw, 3vh), 1.104rem);
   letter-spacing: 0.1em;
   font-family: ui-monospace, 'Cascadia Mono', monospace;
 }
@@ -1557,28 +1558,29 @@ async function submitVote(choice) {
   --hud-top-max: min(52vw, clamp(13rem, 36vmin, 26rem));
   --hud-pad-side: clamp(0.78rem, min(2.8vw, 3.2vh), 1.55rem);
   --hud-pad-top: clamp(0.68rem, min(2.2vw, 2.8vh), 1.25rem);
-  --hud-stat-gap: clamp(0.45rem, min(1.7vw, 2vh), 0.85rem);
-  --hud-stat-pad-y: clamp(0.68rem, min(2.8vw, 3.2vh), 1.35rem);
-  --hud-stat-pad-x: clamp(0.75rem, min(3.2vw, 3.6vh), 1.55rem);
-  --hud-stat-font: clamp(0.98rem, min(3.3vw, 3.6vh), 1.55rem);
+  /* +20%: характеристики, великий номер слота, таймер, голосування (ті ж класи) */
+  --hud-stat-gap: clamp(0.54rem, min(2.04vw, 2.4vh), 1.02rem);
+  --hud-stat-pad-y: clamp(0.816rem, min(3.36vw, 3.84vh), 1.62rem);
+  --hud-stat-pad-x: clamp(0.9rem, min(3.84vw, 4.32vh), 1.86rem);
+  --hud-stat-font: clamp(1.176rem, min(3.96vw, 4.32vh), 1.86rem);
   --hud-name: clamp(1.2rem, min(3.8vw, 4.2vh), 1.95rem);
   --hud-sub: clamp(1.02rem, min(2.9vw, 3.4vh), 1.38rem);
-  --hud-slot: clamp(2.25rem, min(7.5vw, 8.5vh), 4.25rem);
-  --hud-timer-ring: clamp(5.15rem, min(14vw, 15vh), 8rem);
-  --hud-timer-fs: clamp(0.88rem, min(2.8vw, 3vh), 1.22rem);
+  --hud-slot: clamp(2.7rem, min(9vw, 10.2vh), 5.1rem);
+  --hud-timer-ring: clamp(6.18rem, min(16.8vw, 18vh), 9.6rem);
+  --hud-timer-fs: clamp(1.056rem, min(3.36vw, 3.6vh), 1.464rem);
   --hud-br: clamp(14px, 2.2vmin, 20px);
 }
 
 @media (max-width: 480px) {
   .hud-root--solo {
     --hud-side-max: min(48vw, 17.5rem);
-    --hud-stat-font: clamp(0.85rem, min(3.4vw, 3.6vh), 1.15rem);
+    --hud-stat-font: clamp(1.02rem, min(4.08vw, 4.32vh), 1.38rem);
   }
 }
 
 @media (min-width: 1920px) {
   .hud-root--solo {
-    --hud-stat-font: clamp(1.05rem, 1.05vw, 1.5rem);
+    --hud-stat-font: clamp(1.26rem, 1.26vw, 1.8rem);
     --hud-side-max: min(40vw, 38rem);
   }
 }
@@ -2188,7 +2190,7 @@ async function submitVote(choice) {
 .hud-stat-inner--label {
   color: rgba(148, 140, 180, 0.82);
   font-weight: 700;
-  font-size: clamp(0.72rem, min(2.4vw, 2.7vh), 0.95rem);
+  font-size: clamp(0.864rem, min(2.88vw, 3.24vh), 1.14rem);
   letter-spacing: 0.1em;
   font-family: ui-monospace, 'Cascadia Mono', monospace;
 }

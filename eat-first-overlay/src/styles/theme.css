@@ -326,6 +326,63 @@ html *::after {
   width: 100%;
 }
 
+.app-shell-header__end {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-shrink: 0;
+}
+
+.app-shell-mini-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  line-height: 1;
+  text-decoration: none;
+  color: inherit;
+  border-radius: 12px;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+}
+
+.app-shell-mini-brand:hover {
+  opacity: 0.9;
+}
+
+.app-shell-mini-brand:focus-visible {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 3px;
+}
+
+.app-shell-mini-brand:active {
+  transform: scale(0.98);
+}
+
+.app-shell-mini-brand__logo {
+  display: block;
+  width: 2rem;
+  height: 2rem;
+  object-fit: contain;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: #050308;
+  box-sizing: border-box;
+}
+
+.app-shell-mini-brand__nick {
+  font-family: var(--font-display);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-heading);
+}
+
+[data-theme='light'] .app-shell-mini-brand__logo {
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.08);
+}
+
 /* Пульт: одна нижня межа для всього блоку (без другої смуги під рядком бренду) */
 .app-shell-header--host {
   padding: 0.4rem 0.85rem 0.35rem;
@@ -369,11 +426,33 @@ html *::after {
 }
 
 .app-site-footer__inner {
-  max-width: 920px;
+  max-width: min(1200px, 100%);
   margin: 0 auto;
   display: flex;
   align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
   gap: 0.85rem;
+  text-align: center;
+}
+
+.app-site-footer__brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.85rem;
+  text-decoration: none;
+  color: inherit;
+  border-radius: 14px;
+  transition: opacity 0.15s ease;
+}
+
+.app-site-footer__brand-link:hover {
+  opacity: 0.9;
+}
+
+.app-site-footer__brand-link:focus-visible {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 3px;
 }
 
 .app-site-footer__logo-wrap {
@@ -396,7 +475,9 @@ html *::after {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 0.2rem;
+  text-align: center;
 }
 
 .app-site-footer__nick {
@@ -414,6 +495,7 @@ html *::after {
   line-height: 1.45;
   color: var(--text-muted);
   max-width: 36rem;
+  text-align: center;
 }
 
 [data-theme='light'] .app-site-footer__logo-wrap {
