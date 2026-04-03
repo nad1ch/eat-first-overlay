@@ -61,7 +61,8 @@
     "key": "Klucz",
     "wrongKey": "Nieprawidłowy klucz dostępu.",
     "submit": "Wejdź do control",
-    "back": "← Do lobby"
+    "back": "← Do lobby",
+    "forgetSaved": "Zapomnij zapisany klucz prowadzącego na tym urządzeniu"
   },
   "loader": {
     "default": "Ładowanie…",
@@ -212,6 +213,7 @@
     "accessDenied": "Brak dostępu",
     "deniedBefore": "Nieprawidłowy lub brak ",
     "deniedAfter": " dla prowadzącego.",
+    "hostForgetKey": "Zapomnij klucz (wyjdź z panelu)",
     "modeHost": "Prowadzący",
     "modePlayer": "Gracz",
     "voteLog": "Dziennik głosowań ({n})",

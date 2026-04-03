@@ -61,7 +61,8 @@
     "key": "Schlüssel",
     "wrongKey": "Ungültiger Zugangsschlüssel.",
     "submit": "Zu Control gehen",
-    "back": "← Zur Lobby"
+    "back": "← Zur Lobby",
+    "forgetSaved": "Gespeicherten Host-Schlüssel auf diesem Gerät löschen"
   },
   "loader": {
     "default": "Laden…",
@@ -212,6 +213,7 @@
     "accessDenied": "Zugriff verweigert",
     "deniedBefore": "Ungültig oder fehlend ",
     "deniedAfter": " für den Host.",
+    "hostForgetKey": "Schlüssel vergessen (Host-Panel verlassen)",
     "modeHost": "Host",
     "modePlayer": "Spieler",
     "voteLog": "Abstimmungsprotokoll ({n})",

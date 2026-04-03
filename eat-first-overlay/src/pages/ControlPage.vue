@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ADMIN_KEY } from '../config/access.js'
@@ -55,6 +55,12 @@ import { syncHostControlChrome, clearHostControlChrome } from '../composables/ho
 import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
 import { normalizePlayerSlotId } from '../utils/playerSlot.js'
 import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId.js'
+import { getValidatedPersistedHostKey, clearHostAccessSession } from '../utils/persistedHostSession.js'
+import {
+  saveLastPlayerSlot,
+  getValidatedLastPlayerSlot,
+  routeHasExplicitPlayerSlot,
+} from '../utils/persistedPlayerSlot.js'
 import { formatGenderDisplay } from '../utils/genderDisplay.js'
 import AppPageLoader from '../ui/molecules/AppPageLoader.vue'
 import ConfirmDialog from '../ui/molecules/ConfirmDialog.vue'
@@ -65,7 +71,15 @@ const router = useRouter()
 const { t, te } = useI18n()
 
 const wantsAdmin = computed(() => String(route.query.role ?? '').toLowerCase() === 'admin')
-const urlKey = computed(() => String(route.query.key ?? '').trim())
+const urlKey = computed(() => {
+  const q = String(route.query.key ?? '').trim()
+  if (q !== '') return q
+  if (wantsAdmin.value) {
+    const p = getValidatedPersistedHostKey(ADMIN_KEY)
+    return p ?? ''
+  }
+  return ''
+})
 const adminKeyOk = computed(() => urlKey.value === ADMIN_KEY)
 const isAdmin = computed(() => wantsAdmin.value && adminKeyOk.value)
 const adminAccessDenied = computed(() => wantsAdmin.value && !adminKeyOk.value)
@@ -110,6 +124,11 @@ watch(
   },
   { immediate: true },
 )
+
+watch([gameId, playerId, isAdmin], ([gid, pid, adm]) => {
+  if (adm || !gid || !pid) return
+  saveLastPlayerSlot(gid, pid)
+})
 
 const PLAYER_SLOTS = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10']
 const PHASE_OPTIONS = ['intro', 'discussion', 'voting', 'final']
@@ -157,6 +176,23 @@ onMounted(() => {
   tickTimer = window.setInterval(() => {
     tick.value = Date.now()
   }, 250)
+  nextTick(() => {
+    if (route.path !== '/control' || wantsAdmin.value) return
+    const q = route.query
+    if (routeHasExplicitPlayerSlot(q)) {
+      saveLastPlayerSlot(gameId.value, playerId.value)
+      return
+    }
+    const last = getValidatedLastPlayerSlot(gameId.value)
+    if (last) {
+      router.replace({
+        path: '/control',
+        query: { ...q, player: last },
+      })
+      return
+    }
+    saveLastPlayerSlot(gameId.value, playerId.value)
+  })
 })
 
 const personalUrlAbsolute = computed(() => {
@@ -1086,6 +1122,11 @@ function goToPlayer(id) {
   navigateQuery({ player: String(id).trim() || 'p1' })
 }
 
+function hostForgetSavedAndLeave() {
+  clearHostAccessSession()
+  router.push({ path: '/join', query: { game: gameId.value } })
+}
+
 /** URL збігається з вибраним слотом — після оновлення сторінки той самий гравець у редакторі. */
 watch(
   () => String(selectedDeskPlayerId.value || '').trim(),
@@ -1258,6 +1299,14 @@ function rerollActiveCardOnly() {
     <div class="mode-strip" :class="{ admin: isAdmin, player: !isAdmin }">
       <span class="mode-label">{{ modeLabel }}</span>
       <span v-if="!isAdmin" class="status-pill" :data-s="myStatusLabel">{{ myStatusLabel }}</span>
+      <button
+        v-if="isAdmin"
+        type="button"
+        class="host-forget-btn"
+        @click="hostForgetSavedAndLeave"
+      >
+        {{ t('control.hostForgetKey') }}
+      </button>
     </div>
 
     <template v-if="isAdmin">
@@ -2133,6 +2182,25 @@ function rerollActiveCardOnly() {
 
 .mode-strip.admin {
   border-color: var(--border-panel);
+}
+
+.host-forget-btn {
+  margin-left: auto;
+  padding: 0.28rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.host-forget-btn:hover {
+  color: var(--error-text);
+  border-color: rgba(248, 113, 113, 0.35);
 }
 
 .mode-label {

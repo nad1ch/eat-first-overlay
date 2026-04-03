@@ -4,6 +4,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ADMIN_KEY } from '../config/access.js'
 import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId.js'
+import {
+  saveHostAccessSession,
+  getValidatedPersistedHostKey,
+  clearHostAccessSession,
+} from '../utils/persistedHostSession.js'
 
 const { t } = useI18n()
 
@@ -25,6 +30,10 @@ watch(gameId, (g) => setPersistedGameId(g))
 
 onMounted(() => {
   if (typeof window === 'undefined') return
+  if (getValidatedPersistedHostKey(ADMIN_KEY)) {
+    router.replace({ path: '/control', query: { game: gameId.value, role: 'admin' } })
+    return
+  }
   const g = route.query.game
   if (g != null && String(g).trim()) return
   const p = getPersistedGameId()
@@ -44,10 +53,17 @@ function submit() {
     err.value = t('admin.wrongKey')
     return
   }
+  saveHostAccessSession(ADMIN_KEY)
   router.replace({
     path: '/control',
-    query: { game: gameId.value, role: 'admin', key: ADMIN_KEY },
+    query: { game: gameId.value, role: 'admin' },
   })
+}
+
+function forgetSavedHost() {
+  clearHostAccessSession()
+  keyInput.value = ''
+  err.value = ''
 }
 
 function backJoin() {
@@ -69,6 +85,7 @@ function backJoin() {
     </form>
 
     <button type="button" class="link-back" @click="backJoin">{{ t('admin.back') }}</button>
+    <button type="button" class="link-forget" @click="forgetSavedHost">{{ t('admin.forgetSaved') }}</button>
   </div>
 </template>
 
@@ -169,5 +186,23 @@ function backJoin() {
 
 .link-back:hover {
   color: var(--text-heading);
+}
+
+.link-forget {
+  margin-top: 0.65rem;
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  opacity: 0.85;
+}
+
+.link-forget:hover {
+  color: var(--error-text);
 }
 </style>

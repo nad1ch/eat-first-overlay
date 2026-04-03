@@ -61,7 +61,8 @@
     "key": "Key",
     "wrongKey": "Invalid access key.",
     "submit": "Enter control",
-    "back": "← Back to lobby"
+    "back": "← Back to lobby",
+    "forgetSaved": "Forget saved host key on this device"
   },
   "loader": {
     "default": "Loading…",
@@ -212,6 +213,7 @@
     "accessDenied": "Access denied",
     "deniedBefore": "Invalid or missing ",
     "deniedAfter": " for the host.",
+    "hostForgetKey": "Forget key (leave host panel)",
     "modeHost": "Host",
     "modePlayer": "Player",
     "voteLog": "Vote log ({n})",
