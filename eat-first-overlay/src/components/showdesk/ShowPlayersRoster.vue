@@ -16,7 +16,7 @@ const props = defineProps({
   selectedPlayerId: { type: String, default: '' },
   /** Режим ведучого: сітка + панель без модалки */
   useHostPanel: { type: Boolean, default: false },
-  /** Слоти для чипів «хто виставляє» */
+  /** Слоти для чипів «кого номінують» (ціль номінації) */
   playerSlots: { type: Array, default: () => [] },
 })
 
@@ -138,16 +138,17 @@ function cmd(type) {
   emit('host-command', { type, playerId: id })
 }
 
-function pairActive(bySlot) {
-  const t = String(props.selectedPlayerId || '').trim()
-  const b = String(bySlot || '').trim()
-  if (!t || !b) return false
-  return props.nominations.some((n) => String(n.target) === t && String(n.by) === b)
+/** Обрана картка = хто виставляє (by); chip = кого виставляють (target). */
+function pairActive(targetSlot) {
+  const by = String(props.selectedPlayerId || '').trim()
+  const t = String(targetSlot || '').trim()
+  if (!t || !by) return false
+  return props.nominations.some((n) => String(n.target) === t && String(n.by) === by)
 }
 
-function toggleNom(bySlot) {
-  const target = String(props.selectedPlayerId || '').trim()
-  const by = String(bySlot || '').trim()
+function toggleNom(targetSlot) {
+  const by = String(props.selectedPlayerId || '').trim()
+  const target = String(targetSlot || '').trim()
   if (!target || !by || selectedEliminated.value) return
   emit('toggle-nomination', { target, by })
 }
@@ -228,7 +229,7 @@ const aliveSlotsForNom = computed(() => {
             <button v-else type="button" class="act-btn" @click="cmd('speaker')">✖ Забрати спікера</button>
 
             <p class="act-sub">⚖️ Номінувати</p>
-            <p class="act-micro">Вибери хто виставляє:</p>
+            <p class="act-micro">Обраний слот виставляє. Обери, кого він номінує:</p>
             <div class="act-chips">
               <button
                 v-for="slot in aliveSlotsForNom"

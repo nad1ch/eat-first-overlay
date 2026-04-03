@@ -55,7 +55,7 @@ const streamerTwitchUrl = 'https://www.twitch.tv/nad1ch'
           >
             <img
               class="app-shell-mini-brand__logo"
-              src="/brand-nad1ch.png"
+              src="/brand-nad1ch-transparent.png"
               width="32"
               height="32"
               alt=""
@@ -95,7 +95,7 @@ const streamerTwitchUrl = 'https://www.twitch.tv/nad1ch'
           <div class="app-site-footer__logo-wrap">
             <img
               class="app-site-footer__logo"
-              src="/brand-nad1ch.png"
+              src="/brand-nad1ch-transparent.png"
               width="44"
               height="44"
               alt=""
