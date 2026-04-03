@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "brand:png": "node scripts/optimize-brand-png.mjs"
   },
   "dependencies": {
     "firebase": "^12.11.0",
@@ -16,6 +17,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.5",
+    "sharp": "^0.34.5",
     "vite": "^8.0.1"
   }
 }
