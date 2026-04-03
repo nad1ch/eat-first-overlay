@@ -1,5 +1,9 @@
 import { initializeApp } from 'firebase/app'
-import { initializeFirestore, persistentLocalCache } from 'firebase/firestore'
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from 'firebase/firestore'
 
 export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -12,5 +16,12 @@ export const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig)
 
-/** IndexedDB-кеш: менше повторних читань при поверненні на сайт; слухачі лишаються потрібні. */
-export const db = initializeFirestore(app, { localCache: persistentLocalCache() })
+/**
+ * IndexedDB-кеш із синхронізацією між вкладками — інакше друга вкладка з тим самим origin
+ * не отримує exclusive lock і Firestore падає в memory cache з попередженням у консолі.
+ */
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager(),
+  }),
+})

@@ -90,6 +90,57 @@
   font-weight: 800;
 }
 
+.hcc-hands-bar--empty {
+  opacity: 0.92;
+}
+
+.hcc-hands-empty {
+  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.hcc-round-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--ui-space-5);
+  width: 100%;
+}
+
+.hcc-revive-all {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: var(--ui-control-compact-pad-y) var(--ui-control-compact-pad-x);
+  min-height: var(--ui-control-compact-min-h);
+  border-radius: var(--ui-control-compact-radius);
+  font-size: var(--ui-control-compact-font);
+  font-weight: var(--ui-control-compact-weight);
+  line-height: var(--ui-control-compact-line);
+  cursor: pointer;
+  border: 1px solid rgba(52, 211, 153, 0.42);
+  background: color-mix(in srgb, rgba(16, 185, 129, 0.22) 55%, var(--bg-muted-strong));
+  color: var(--text-title);
+  -webkit-tap-highlight-color: transparent;
+  text-align: center;
+  max-width: min(100%, 12rem);
+}
+
+.hcc-revive-all:hover {
+  border-color: rgba(52, 211, 153, 0.65);
+  background: color-mix(in srgb, rgba(16, 185, 129, 0.32) 60%, var(--bg-muted-strong));
+}
+
+.hcc-revive-all:focus {
+  outline: none;
+}
+
+.hcc-revive-all:focus-visible {
+  outline: 2px solid var(--border-cyan-strong);
+  outline-offset: 1px;
+}
+
 .hcc-left-lab {
   margin: 0 0 var(--ui-space-1);
   font-size: var(--ui-type-overline-size);
@@ -338,6 +389,16 @@
 .hcc-clear-hands:hover {
   border-color: rgba(251, 191, 36, 0.45);
   color: var(--text-highlight);
+}
+
+.hcc-clear-hands:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.hcc-clear-hands:disabled:hover {
+  border-color: var(--border-input);
+  color: var(--text-body);
 }
 
 .hcc-target-block {

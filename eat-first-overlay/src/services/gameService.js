@@ -16,6 +16,7 @@ import { pickRandomActiveCardTemplate } from '../data/activeCards.js'
 import { buildRandomPlayerDocument } from '../data/randomPools.js'
 import { normalizePlayerSlotId } from '../utils/playerSlot.js'
 import { db } from '../firebase.js'
+import { debugDelete } from '../utils/debugDelete.js'
 import { logListenerDetach } from '../utils/appLogger.js'
 
 function gameDocRef(gameId) {
@@ -44,6 +45,42 @@ function collectRaisedHandsMapFromGameData(data) {
     if (data[key] === true) h[normalizePlayerSlotId(slot)] = true
   }
   return h
+}
+
+/** Мапа «готовий до гри»: games/{gameId}.playersReady.{playerId} === true */
+function collectPlayersReadyMapFromGameData(data) {
+  if (!data || typeof data !== 'object') return {}
+  const out = {}
+  const raw = data.playersReady
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    for (const [k, v] of Object.entries(raw)) {
+      if (v === true) out[normalizePlayerSlotId(k)] = true
+    }
+  }
+  return out
+}
+
+/**
+ * Гравець позначає готовність (без admin key; лише поле playersReady).
+ * @param {boolean} ready
+ */
+export async function setPlayerReady(gameId, playerId, ready) {
+  const raw = String(playerId ?? '').trim()
+  if (!raw) return
+  const pid = normalizePlayerSlotId(playerId)
+  const ref = gameDocRef(gameId)
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref)
+    if (!snap.exists()) {
+      if (!ready) return
+      tx.set(ref, { playersReady: { [pid]: true } })
+      return
+    }
+    const next = { ...collectPlayersReadyMapFromGameData(snap.data()) }
+    if (ready) next[pid] = true
+    else delete next[pid]
+    tx.update(ref, { playersReady: next })
+  })
 }
 
 /**
@@ -165,6 +202,7 @@ export async function resetGameRoomControls(gameId) {
       nominatedBy: deleteField(),
       nominations: deleteField(),
       hands: {},
+      playersReady: {},
       voting: deleteField(),
       key: ADMIN_KEY,
     },
@@ -295,6 +333,30 @@ export async function clearAllHands(gameId) {
   await saveGameRoom(gameId, { hands: {} })
 }
 
+/**
+ * Усі гравці в кімнаті з eliminated: true → false (повернути в гру).
+ * @returns {Promise<number>} скільки документів оновлено
+ */
+export async function reviveAllEliminatedPlayers(gameId) {
+  const colRef = collection(db, 'games', gameId, 'players')
+  const snapshot = await getDocs(colRef)
+  let n = 0
+  for (const d of snapshot.docs) {
+    const data = d.data()
+    if (data?.eliminated !== true) continue
+    n += 1
+    await setDoc(
+      d.ref,
+      {
+        eliminated: false,
+        key: ADMIN_KEY,
+      },
+      { merge: true },
+    )
+  }
+  return n
+}
+
 /** Голосування на кімнаті: { active, targetPlayer }. */
 export async function setRoomVoting(gameId, active, targetPlayer) {
   const tp = String(targetPlayer ?? '').trim()
@@ -363,11 +425,14 @@ export async function saveVote(gameId, voterPlayerId, targetPlayer, choice, roun
 
 const STANDARD_PLAYER_SLOTS = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10']
 
-/** Мінімальний документ кімнати (для транзакцій рук тощо), якщо гри ще немає. */
+/**
+ * Мінімальний документ кімнати (для транзакцій рук тощо), якщо гри ще немає.
+ * @returns {Promise<boolean>} true — документ щойно створено; false — кімната вже була.
+ */
 export async function ensureGameRoomExists(gameId) {
   const ref = gameDocRef(gameId)
   const snap = await getDoc(ref)
-  if (snap.exists()) return
+  if (snap.exists()) return false
   await setDoc(
     ref,
     {
@@ -375,6 +440,7 @@ export async function ensureGameRoomExists(gameId) {
       round: 1,
       gamePhase: 'intro',
       hands: {},
+      playersReady: {},
       activePlayer: '',
       currentSpeaker: '',
       speakingTimer: 0,
@@ -382,6 +448,7 @@ export async function ensureGameRoomExists(gameId) {
     },
     { merge: true },
   )
+  return true
 }
 
 /**
@@ -417,8 +484,15 @@ export async function ensurePlayerCharacterExists(gameId, playerId, scenarioId) 
 /** Прибрати гравця зі стану кімнати (руки, номінації, спікер, голосування, spotlight). */
 export async function removePlayerFromGameRoomState(gameId, playerId) {
   const pid = normalizePlayerSlotId(playerId)
+  debugDelete('removePlayerFromGameRoomState:start', { gameId, pid })
   const snap = await getDoc(gameDocRef(gameId))
-  if (!snap.exists()) return
+  if (!snap.exists()) {
+    debugDelete('removePlayerFromGameRoomState:SKIP — документа games/{gameId} немає', {
+      gameId,
+      path: `games/${gameId}`,
+    })
+    return
+  }
   const d = snap.data()
   const hands = { ...collectRaisedHandsMapFromGameData(d) }
   delete hands[pid]
@@ -460,13 +534,45 @@ export async function removePlayerFromGameRoomState(gameId, playerId) {
   }
 
   await setDoc(gameDocRef(gameId), patch, { merge: true })
+  debugDelete('removePlayerFromGameRoomState:setDoc OK')
   await deleteVoteDoc(gameId, pid)
+  debugDelete('removePlayerFromGameRoomState:done (vote doc прибрано якщо був)')
 }
 
-/** Видалити документ гравця (після removePlayerFromGameRoomState). */
+/**
+ * Видалити документ гравця (після removePlayerFromGameRoomState).
+ * Шукаємо реальний id документа в колекції (регістр / p04 vs p4), бо deleteDoc на неіснуючий шлях
+ * у клієнті часто «успішний» no-op — UI показував тост, а гравець лишався після snapshot.
+ */
 export async function deletePlayerDocument(gameId, playerId) {
   const pid = normalizePlayerSlotId(playerId)
-  await deleteDoc(playerDocRef(gameId, pid))
+  debugDelete('deletePlayerDocument:start', { gameId, pid })
+  const directRef = playerDocRef(gameId, pid)
+  const directSnap = await getDoc(directRef)
+  if (directSnap.exists()) {
+    debugDelete('deletePlayerDocument:прямий шлях існує, deleteDoc', {
+      path: `games/${gameId}/players/${pid}`,
+    })
+    await deleteDoc(directRef)
+    debugDelete('deletePlayerDocument:deleteDoc OK (прямий)')
+    return
+  }
+  debugDelete('deletePlayerDocument:прямого документа немає — getDocs по колекції')
+  const colRef = collection(db, 'games', gameId, 'players')
+  const snapshot = await getDocs(colRef)
+  const docIds = snapshot.docs.map((d) => d.id)
+  debugDelete('deletePlayerDocument:документи в колекції', {
+    count: docIds.length,
+    docIds,
+  })
+  const match = snapshot.docs.find((d) => normalizePlayerSlotId(d.id) === pid)
+  if (!match) {
+    debugDelete('deletePlayerDocument:ПОМИЛКА — немає збігу за нормалізованим pid', { pid })
+    throw new Error(`PLAYER_DOC_NOT_FOUND:${pid}`)
+  }
+  debugDelete('deletePlayerDocument:знайдено за id', { firestoreDocId: match.id })
+  await deleteDoc(match.ref)
+  debugDelete('deletePlayerDocument:deleteDoc OK (за match.id)')
 }
 
 export async function regenerateAllPlayersRandom(gameId, scenarioId) {
@@ -599,7 +705,10 @@ export function subscribeToPlayers(gameId, callback) {
   return onSnapshot(
     colRef,
     (snapshot) => {
-      const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
+      const list = snapshot.docs.map((d) => ({
+        id: normalizePlayerSlotId(d.id),
+        ...d.data(),
+      }))
       list.sort((a, b) =>
         a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }),
       )

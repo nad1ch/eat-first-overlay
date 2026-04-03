@@ -46,8 +46,6 @@ const props = defineProps({
   idleWaiting: { type: Boolean, default: false },
   /** Глобальна сітка: >3 рук у грі — не показувати ✋ на картці */
   suppressHandBadge: { type: Boolean, default: false },
-  /** Глобальний оверлей: показувати заповнені поля глядачу навіть без прапорця revealed (елімінує «зниклі» блоки на стрімі) */
-  audienceMode: { type: Boolean, default: false },
 })
 
 const { t, locale } = useI18n()
@@ -70,7 +68,7 @@ function chunkFor(player, key) {
 }
 
 function statDisplay(player, fieldKey) {
-  const c = chunkForDisplay(player, fieldKey)
+  const c = chunkFor(player, fieldKey)
   if (!c.revealed) return { mode: 'label', text: labelByKey.value[fieldKey] }
   const v = String(c.value ?? '').trim()
   return { mode: 'value', text: v.length ? v : '—' }
@@ -97,34 +95,8 @@ function displayAgeGenderLine(player) {
   return { hidden: false, text: `${left} · ${right}` }
 }
 
-function demographicsRevealedForOverlay(player) {
-  if (props.audienceMode) {
-    const a = String(player.age ?? '').trim()
-    const g = String(player.gender ?? '').trim()
-    if (a || g) return true
-  }
-  return demographicsRevealed(player)
-}
-
-function displayAgeGenderLineOverlay(player) {
-  if (props.audienceMode) {
-    const a = String(player.age ?? '').trim()
-    const g = String(player.gender ?? '').trim()
-    if (a || g) {
-      const left = a.length ? a : '—'
-      const right = g.length ? formatGenderDisplay(g) : '—'
-      return { hidden: false, text: `${left} · ${right}` }
-    }
-  }
-  return displayAgeGenderLine(player)
-}
-
 function chunkForDisplay(player, key) {
-  const c = chunkFor(player, key)
-  if (!props.audienceMode) return c
-  const v = String(c.value ?? '').trim()
-  if (v) return { ...c, revealed: true }
-  return c
+  return chunkFor(player, key)
 }
 
 function isEliminated(player) {
@@ -158,7 +130,7 @@ const deathSvgSrc = computed(() => {
 })
 
 function valueRevealKey(player, rowKey) {
-  const r = chunkForDisplay(player, rowKey).revealed
+  const r = chunkFor(player, rowKey).revealed
   return `${player.id}-${rowKey}-${r ? 'open' : 'closed'}`
 }
 
@@ -467,8 +439,8 @@ async function submitVote(choice) {
           {{ displayNameLine(player).text }}
         </h2>
         <p class="card-grid-meta">
-          <span v-if="!demographicsRevealedForOverlay(player)" class="placeholder">••• · •••</span>
-          <span v-else>{{ displayAgeGenderLineOverlay(player).text }}</span>
+          <span v-if="!demographicsRevealed(player)" class="placeholder">••• · •••</span>
+          <span v-else>{{ displayAgeGenderLine(player).text }}</span>
         </p>
         <ul class="stats">
           <li v-for="row in fieldConfig" :key="row.key">
@@ -553,7 +525,6 @@ async function submitVote(choice) {
       'hud-root--cinema': cinema,
       'hud-root--drama': drama,
       'hud-root--nominated': isNominated && !isEliminated(player),
-      'hud-root--nominee-breathe': solo && isNominated && !isEliminated(player),
       'hud-root--vote-target-ambient': solo && isVoteTargetSelf && !isEliminated(player),
     }"
   >
@@ -579,14 +550,24 @@ async function submitVote(choice) {
         <span class="ac-chip-t">{{ t('overlayCard.hasCard') }}</span>
       </div>
 
+      <div
+        v-if="solo && isNominated && !isEliminated(player)"
+        class="nominee-solo-float"
+        role="status"
+      >
+        <p class="nominee-solo-float__k">{{ t('overlayCard.youOnVote') }}</p>
+        <p class="nominee-solo-float__nom">{{ t('overlayCard.nomShort') }}</p>
+        <p v-if="nominatorsUi" class="nominee-solo-float__who">{{ nominatorsUi }}</p>
+      </div>
+
       <div class="hud-zones">
       <div class="hud-block hud-tl">
         <p class="hud-line hud-line--name">
           {{ displayNameLine(player).text }}
         </p>
         <p class="hud-line hud-line--sub">
-          <span v-if="!demographicsRevealedForOverlay(player)" class="hud-ph">••• · •••</span>
-          <span v-else>{{ displayAgeGenderLineOverlay(player).text }}</span>
+          <span v-if="!demographicsRevealed(player)" class="hud-ph">••• · •••</span>
+          <span v-else>{{ displayAgeGenderLine(player).text }}</span>
         </p>
       </div>
 
@@ -612,11 +593,6 @@ async function submitVote(choice) {
           </span>
           <span v-if="isTimerTarget" class="hud-speak-badge">{{ t('overlayCard.speaking') }}</span>
         </div>
-        <template v-if="solo && isNominated">
-          <p class="nominee-solo-kicker">{{ t('overlayCard.youOnVote') }}</p>
-          <p class="nominee-nom-label nominee-nom-label--hud">{{ t('overlayCard.nomShort') }}</p>
-          <p v-if="nominatorsUi" class="nominee-nom-who nominee-nom-who--hud">{{ nominatorsUi }}</p>
-        </template>
         <div v-if="showSpeakerTimer" class="hud-timer-stack">
           <div
             class="hud-ring-wrap"
@@ -1522,6 +1498,44 @@ async function submitVote(choice) {
   background: transparent;
 }
 
+.nominee-solo-float {
+  position: fixed;
+  top: max(0.55rem, env(safe-area-inset-top, 0px));
+  right: max(0.55rem, env(safe-area-inset-right, 0px));
+  z-index: 9;
+  max-width: min(58vw, 15.5rem);
+  margin: 0;
+  padding: 0.38rem 0.55rem 0.42rem;
+  text-align: right;
+  pointer-events: none;
+  border-radius: var(--hud-br, 12px);
+  background: rgba(8, 5, 20, 0.94);
+  border: 1px solid rgba(220, 38, 38, 0.42);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+}
+
+.nominee-solo-float__k {
+  margin: 0;
+  font-size: clamp(0.5rem, min(1.35vw, 1.45vh), 0.62rem);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: rgba(254, 202, 202, 0.95);
+  text-transform: uppercase;
+}
+
+.nominee-solo-float__nom {
+  margin: 0.12rem 0 0;
+  font-size: clamp(0.48rem, min(1.25vw, 1.35vh), 0.58rem);
+  color: rgba(226, 232, 240, 0.88);
+}
+
+.nominee-solo-float__who {
+  margin: 0.08rem 0 0;
+  font-size: clamp(0.52rem, min(1.4vw, 1.5vh), 0.65rem);
+  font-weight: 700;
+  color: #fecaca;
+}
+
 .idle-wait-cue {
   position: fixed;
   left: 50%;
@@ -1647,37 +1661,6 @@ async function submitVote(choice) {
   }
   50% {
     outline-color: rgba(220, 38, 38, 0.62);
-  }
-}
-
-.hud-root--solo.hud-root--nominee-breathe:not(.hud-root--eliminated) {
-  position: relative;
-  isolation: isolate;
-}
-
-.hud-root--solo.hud-root--nominee-breathe:not(.hud-root--eliminated)::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background: radial-gradient(
-    ellipse 85% 70% at 50% 45%,
-    rgba(220, 38, 38, 0.22) 0%,
-    transparent 62%
-  );
-  animation: nomineeBreatheBg 3.5s ease-in-out infinite;
-}
-
-@keyframes nomineeBreatheBg {
-  0%,
-  100% {
-    opacity: 0.4;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.65;
-    transform: scale(1.04);
   }
 }
 

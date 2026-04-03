@@ -104,6 +104,7 @@ export function rollRandomIntoCharacter(target, options = {}) {
   target.age = pick(ages)
   target.identityRevealed = false
   target.demographicsRevealed = false
+  target.revealLedger = { round: 0, count: 0, maxForRound: 0 }
   for (const key of keys) {
     const slot = target[key]
     if (!slot || typeof slot !== 'object') continue

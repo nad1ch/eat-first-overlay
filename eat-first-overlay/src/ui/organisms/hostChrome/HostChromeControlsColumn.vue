@@ -41,43 +41,63 @@ const raisedHandSlots = computed(() => {
 <template>
   <section class="hcc-panel hcc-panel--controls" :aria-label="t('hostChrome.show')">
     <div
-      v-if="raisedHandSlots.length"
       class="hcc-hands-bar"
+      :class="{ 'hcc-hands-bar--empty': raisedHandSlots.length === 0 }"
       role="group"
       :aria-label="t('hostChrome.handsUp')"
     >
       <p class="hcc-hands-row" role="status">
-        ✋ {{ t('hostChrome.handsUp') }}
-        <strong>{{ raisedHandSlots.map(slotNum).join(', ') }}</strong>
+        <template v-if="raisedHandSlots.length">
+          ✋ {{ t('hostChrome.handsUp') }}
+          <strong>{{ raisedHandSlots.map(slotNum).join(', ') }}</strong>
+        </template>
+        <template v-else>
+          <span class="hcc-hands-empty">✋ {{ t('hostChrome.handsNone') }}</span>
+        </template>
       </p>
-      <button type="button" class="hcc-clear-hands hcc-clear-hands--compact" @click="act('clearHands')">
+      <button
+        type="button"
+        class="hcc-clear-hands hcc-clear-hands--compact"
+        :disabled="raisedHandSlots.length === 0"
+        @click="act('clearHands')"
+      >
         {{ t('hostChrome.clearHands') }}
       </button>
     </div>
 
-    <div class="hcc-left-round">
-      <span class="hcc-left-lab">{{ t('hostChrome.round') }}</span>
-      <div class="hcc-round">
-        <button
-          type="button"
-          class="hcc-step"
-          :disabled="!canDec"
-          :aria-label="t('hostChrome.roundMinus')"
-          @click="act('roundDelta', -1)"
-        >
-          −
-        </button>
-        <span class="hcc-round__mid">R{{ roundNow }}</span>
-        <button
-          type="button"
-          class="hcc-step"
-          :disabled="!canInc"
-          :aria-label="t('hostChrome.roundPlus')"
-          @click="act('roundDelta', 1)"
-        >
-          +
-        </button>
+    <div class="hcc-round-row">
+      <div class="hcc-left-round">
+        <span class="hcc-left-lab">{{ t('hostChrome.round') }}</span>
+        <div class="hcc-round">
+          <button
+            type="button"
+            class="hcc-step"
+            :disabled="!canDec"
+            :aria-label="t('hostChrome.roundMinus')"
+            @click="act('roundDelta', -1)"
+          >
+            −
+          </button>
+          <span class="hcc-round__mid">R{{ roundNow }}</span>
+          <button
+            type="button"
+            class="hcc-step"
+            :disabled="!canInc"
+            :aria-label="t('hostChrome.roundPlus')"
+            @click="act('roundDelta', 1)"
+          >
+            +
+          </button>
+        </div>
       </div>
+      <button
+        type="button"
+        class="hcc-revive-all"
+        :title="t('hostChrome.reviveAllTitle')"
+        @click="act('reviveAllPlayers')"
+      >
+        {{ t('hostChrome.reviveAll') }}
+      </button>
     </div>
 
     <div class="hcc-show-phase-row" role="group">

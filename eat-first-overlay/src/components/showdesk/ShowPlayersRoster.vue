@@ -15,6 +15,8 @@ const props = defineProps({
   votingActive: { type: Boolean, default: false },
   /** Нормалізовані номінації [{ target, by }] */
   nominations: { type: Array, default: () => [] },
+  /** games/{gameId}.playersReady — слот → true */
+  playersReadyMap: { type: Object, default: () => ({}) },
   /** Вибраний слот для панелі дій */
   selectedPlayerId: { type: String, default: '' },
   /** Режим ведучого: сітка + панель без модалки */
@@ -77,6 +79,13 @@ function isVoteTargetCard(p) {
 
 function isNominatedCard(p) {
   return p.eliminated !== true && nominatorsFor(p.id).length > 0
+}
+
+function isPlayerReady(p) {
+  if (p.eliminated === true) return false
+  const m = props.playersReadyMap
+  if (!m || typeof m !== 'object') return false
+  return m[String(p.id)] === true || m[normalizePlayerSlotId(String(p.id))] === true
 }
 
 function showBadgesRow(p) {
@@ -198,6 +207,14 @@ const aliveSlotsForNom = computed(() => {
             title="Піднята рука"
           >
             ✋
+          </span>
+          <span
+            v-if="isPlayerReady(p)"
+            class="pcard-ready-corner"
+            :aria-label="t('roster.readyCorner')"
+            :title="t('roster.readyCorner')"
+          >
+            ✓
           </span>
           <span v-if="p.eliminated === true" class="elim-badge" aria-hidden="true">{{ t('roster.eliminated') }}</span>
           <div v-else-if="showBadgesRow(p)" class="pcard-badges">
@@ -380,6 +397,19 @@ const aliveSlotsForNom = computed(() => {
   font-size: 1rem;
   line-height: 1;
   filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.55));
+  pointer-events: none;
+}
+
+.pcard-ready-corner {
+  position: absolute;
+  right: 0.22rem;
+  top: 0.22rem;
+  z-index: 3;
+  font-size: 0.78rem;
+  font-weight: 900;
+  line-height: 1;
+  color: rgba(187, 247, 208, 0.95);
+  filter: drop-shadow(0 0 6px rgba(74, 222, 128, 0.45));
   pointer-events: none;
 }
 

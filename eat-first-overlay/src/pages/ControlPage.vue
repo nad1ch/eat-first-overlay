@@ -40,19 +40,23 @@ import {
   deleteVoteDoc,
   setRoomRound,
   clearAllHands,
+  setPlayerReady,
   saveVote,
   ensureGameRoomExists,
   seedMissingStandardPlayers,
   ensurePlayerCharacterExists,
   removePlayerFromGameRoomState,
   deletePlayerDocument,
+  reviveAllEliminatedPlayers,
 } from '../services/gameService'
 import { millisFromFirestore } from '../utils/firestoreTime.js'
 import ShowDeskHeader from '../components/showdesk/ShowDeskHeader.vue'
 import ShowPlayersRoster from '../components/showdesk/ShowPlayersRoster.vue'
+import { formatGenderDisplay } from '../utils/genderDisplay.js'
 import { playRevealFlipSound, playVoteSubmitSound } from '../utils/voteUiSound.js'
 import { syncHostControlChrome, clearHostControlChrome } from '../composables/hostControlChrome.js'
 import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
+import { debugDelete } from '../utils/debugDelete.js'
 import { normalizePlayerSlotId } from '../utils/playerSlot.js'
 import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId.js'
 import {
@@ -65,7 +69,6 @@ import {
   getValidatedLastPlayerSlot,
   routeHasExplicitPlayerSlot,
 } from '../utils/persistedPlayerSlot.js'
-import { formatGenderDisplay } from '../utils/genderDisplay.js'
 import AppPageLoader from '../ui/molecules/AppPageLoader.vue'
 import ConfirmDialog from '../ui/molecules/ConfirmDialog.vue'
 import UiMenuSelect from '../ui/molecules/UiMenuSelect.vue'
@@ -100,6 +103,11 @@ const gameId = computed(() => {
   if (p) return p
   return 'test1'
 })
+
+/** `= # ? &` у значенні `?game=` ламають або плутають посилання (наприклад `test=4`). */
+const GAME_ID_UNSAFE = /[=#?&]/
+const gameIdHasUnsafeChars = computed(() => GAME_ID_UNSAFE.test(gameId.value))
+
 const playerId = computed(() => normalizePlayerSlotId(route.query.player))
 
 const modeLabel = computed(() => {
@@ -119,6 +127,8 @@ const overlayHrefPersonal = computed(() => ({
 }))
 
 const syncing = ref(false)
+/** Не ставити в чергу autosave одразу після підстановки даних з Firestore (інакше зайві Write / WebChannel). */
+const skipRemoteAutosave = ref(false)
 /** Перший snap персонажа з Firestore (лоадер на панелі). */
 const panelHydrating = ref(false)
 const loadError = ref(null)
@@ -164,6 +174,13 @@ const fieldMenuOptions = computed(() =>
 
 const gameRoom = ref({})
 const allPlayers = ref([])
+/** Останній сирий список з onSnapshot(players) — до маски pending delete. */
+const lastPlayersFirestoreList = ref([])
+/** Слоти, які ведучий видаляє: лишаємо прихованими в UI, поки кеш не віддасть знімок без них (інакше «миготіння»). */
+const pendingPlayerDeletes = ref([])
+/** Після успішного delete: відсікаємо «привидів» із локального кешу Firestore (запізнілий snapshot ще з pN після того як pending уже скинувся). */
+const antiGhostPlayerUntil = ref({})
+const ANTI_GHOST_PLAYER_MS = 18_000
 const votes = ref([])
 let unsubGameRoom = null
 let unsubPlayers = null
@@ -262,12 +279,76 @@ function cleanupSubs() {
   votes.value = []
 }
 
+function pruneAntiGhostPlayerUntil() {
+  const now = Date.now()
+  const ag = antiGhostPlayerUntil.value
+  let changed = false
+  const next = { ...ag }
+  for (const k of Object.keys(next)) {
+    if (next[k] < now) {
+      delete next[k]
+      changed = true
+    }
+  }
+  if (changed) antiGhostPlayerUntil.value = next
+}
+
+function activeAntiGhostPlayerSlots() {
+  pruneAntiGhostPlayerUntil()
+  const now = Date.now()
+  const s = new Set()
+  for (const [slot, until] of Object.entries(antiGhostPlayerUntil.value)) {
+    if (until >= now) s.add(normalizePlayerSlotId(slot))
+  }
+  return s
+}
+
+function reconcilePendingDeletesWithSnapshot(rawList) {
+  const prevPending = [...pendingPlayerDeletes.value]
+  const inSnap = new Set(rawList.map((p) => normalizePlayerSlotId(p.id)))
+  const nextPending = prevPending.filter((pid) => inSnap.has(pid))
+  if (JSON.stringify(prevPending) !== JSON.stringify(nextPending)) {
+    debugDelete('reconcile pending', {
+      gameId: gameId.value,
+      prevPending,
+      nextPending,
+      rawIdsInSnap: [...inSnap],
+    })
+  }
+  pendingPlayerDeletes.value = nextPending
+}
+
+function applyPlayerListFromFirestore(rawList) {
+  lastPlayersFirestoreList.value = rawList
+  reconcilePendingDeletesWithSnapshot(rawList)
+  const hide = new Set(pendingPlayerDeletes.value)
+  const ghostHide = activeAntiGhostPlayerSlots()
+  allPlayers.value = rawList.filter((x) => {
+    const id = normalizePlayerSlotId(x.id)
+    return !hide.has(id) && !ghostHide.has(id)
+  })
+  gotPlayersSnap.value = true
+  if (hide.size > 0 || ghostHide.size > 0) {
+    debugDelete('applyPlayerList (маска pending/antiGhost)', {
+      gameId: gameId.value,
+      rawCount: rawList.length,
+      rawIds: rawList.map((x) => normalizePlayerSlotId(x.id)),
+      pending: [...hide],
+      antiGhost: [...ghostHide],
+      visibleIds: allPlayers.value.map((x) => normalizePlayerSlotId(x.id)),
+    })
+  }
+}
+
 watch(
   [gameId, adminAccessDenied, isAdmin],
   () => {
     cleanupSubs()
     gotGameRoomSnap.value = false
     gotPlayersSnap.value = false
+    lastPlayersFirestoreList.value = []
+    pendingPlayerDeletes.value = []
+    antiGhostPlayerUntil.value = {}
     if (adminAccessDenied.value) {
       gameRoom.value = {}
       allPlayers.value = []
@@ -284,8 +365,7 @@ watch(
     })
     if (isAdmin.value) {
       unsubPlayers = subscribeToPlayers(gameId.value, (list) => {
-        allPlayers.value = list
-        gotPlayersSnap.value = true
+        applyPlayerListFromFirestore(list)
       })
     } else {
       allPlayers.value = []
@@ -359,6 +439,28 @@ const raisedHandsCount = computed(() => {
   return Object.keys(h).filter((k) => h[k] === true).length
 })
 
+const playersReadyMap = computed(() => {
+  const r = gameRoom.value?.playersReady
+  if (!r || typeof r !== 'object') return {}
+  const out = {}
+  for (const [k, v] of Object.entries(r)) {
+    if (v === true) out[String(k)] = true
+  }
+  return out
+})
+
+const alivePlayersCount = computed(() => allPlayers.value.filter((p) => p.eliminated !== true).length)
+
+const readyPlayersCount = computed(
+  () =>
+    allPlayers.value.filter((p) => p.eliminated !== true && playersReadyMap.value[String(p.id)] === true)
+      .length,
+)
+
+const allAlivePlayersReady = computed(
+  () => alivePlayersCount.value > 0 && readyPlayersCount.value === alivePlayersCount.value,
+)
+
 const playerPhaseDisplay = computed(() => {
   const p = String(gameRoom.value?.gamePhase || 'intro')
   const pk = `gamePhase.${p}`
@@ -376,7 +478,15 @@ const hostSummaryLine = computed(() => {
   const tgTxt = tg ? t('hostChrome.summaryTargetLine', { slot: tg }) : t('hostChrome.summaryTargetNone')
   const v = gameRoom.value?.voting?.active ? t('hostChrome.votingOn') : t('hostChrome.votingOff')
   const hc = raisedHandsCount.value
-  return `${ph} · R${r} · ${sp} · ${tgTxt} · ${v} · ✋ ${hc}`
+  const alive = alivePlayersCount.value
+  const rd = readyPlayersCount.value
+  const readySeg =
+    alive > 0
+      ? allAlivePlayersReady.value
+        ? t('hostChrome.summaryAllReady', { n: rd, m: alive })
+        : t('hostChrome.summaryReady', { n: rd, m: alive })
+      : ''
+  return `${ph} · R${r} · ${sp} · ${tgTxt} · ${v} · ✋ ${hc}${readySeg ? ` · ${readySeg}` : ''}`
 })
 
 watch(
@@ -569,6 +679,32 @@ function eliminatedBySlot() {
 /** Лише стан з Firestore — без оптимістичного UI (ведучий може скинути руки, гравець має одразу бачити). */
 const myHandRaised = computed(() => gameRoom.value?.hands?.[playerId.value] === true)
 
+const myPlayerReady = computed(() => playersReadyMap.value[String(playerId.value)] === true)
+
+function characterReadsFemale() {
+  const d = formatGenderDisplay(characterState.gender)
+  if (d === 'Жінка') return true
+  const s = String(characterState.gender ?? '')
+    .trim()
+    .toLowerCase()
+  return (
+    s.includes('жін') ||
+    s.includes('woman') ||
+    s.includes('female') ||
+    s.includes('kobieta') ||
+    s === 'f'
+  )
+}
+
+/** Текст кнопки готовності (зелений / червоний) з урахуванням статі персонажа. */
+const playerReadyPillLabel = computed(() => {
+  const fem = characterReadsFemale()
+  if (myPlayerReady.value) {
+    return fem ? t('control.readyOnF') : t('control.readyOnM')
+  }
+  return fem ? t('control.readyOffF') : t('control.readyOffM')
+})
+
 async function setMyHandRaised(raised) {
   const up = gameRoom.value?.hands?.[playerId.value] === true
   if (up === raised) return
@@ -576,6 +712,20 @@ async function setMyHandRaised(raised) {
     loadError.value = null
     await setGameHandRaised(gameId.value, playerId.value, raised)
     showToast(raised ? t('toast.handRaised') : t('toast.handLowered'))
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function setMyPlayerReady(ready) {
+  if (isAdmin.value) return
+  if (characterState.eliminated) return
+  const up = playersReadyMap.value[String(playerId.value)] === true
+  if (up === ready) return
+  try {
+    loadError.value = null
+    await setPlayerReady(gameId.value, playerId.value, ready)
+    showToast(ready ? t('toast.playerReadyOn') : t('toast.playerReadyOff'))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -644,9 +794,69 @@ function revealDemographics(open) {
   characterState.identityRevealed = open
 }
 
+function computeRevealMaxForRound(rr, professionAlreadyRevealed) {
+  if (rr === 1) return professionAlreadyRevealed ? 1 : 2
+  return 1
+}
+
+/** Синхронізує лічильник відкриттів з поточним раундом кімнати (гравець). */
+function syncRevealLedgerForOpenAttempt() {
+  const rr = roomRoundLive.value
+  const prof = Boolean(characterState.profession?.revealed)
+  const maxForRound = computeRevealMaxForRound(rr, prof)
+  const cur = characterState.revealLedger
+  if (!cur || typeof cur !== 'object') {
+    characterState.revealLedger = { round: rr, count: 0, maxForRound }
+    return characterState.revealLedger
+  }
+  if (cur.round !== rr || !(cur.maxForRound >= 1)) {
+    characterState.revealLedger = { round: rr, count: 0, maxForRound }
+    return characterState.revealLedger
+  }
+  return cur
+}
+
 function revealTrait(key, open) {
-  if (open) playRevealFlipSound(0.09)
-  if (characterState[key]) characterState[key].revealed = open
+  const slot = characterState[key]
+  if (!slot || typeof slot !== 'object') return
+
+  if (!CORE_FIELD_KEYS.includes(key)) {
+    if (open) playRevealFlipSound(0.09)
+    slot.revealed = open
+    return
+  }
+
+  if (!open) {
+    playRevealFlipSound(0.09)
+    slot.revealed = false
+    return
+  }
+
+  if (slot.revealed) return
+
+  if (isAdmin.value) {
+    playRevealFlipSound(0.09)
+    slot.revealed = true
+    return
+  }
+
+  const ledger = syncRevealLedgerForOpenAttempt()
+  const rr = roomRoundLive.value
+  const profOpen = Boolean(characterState.profession?.revealed)
+
+  if (rr === 1 && key !== 'profession' && !profOpen) {
+    showToast(t('toast.revealProfessionFirst'))
+    return
+  }
+
+  if (ledger.count >= ledger.maxForRound) {
+    showToast(t('toast.revealRoundLimit', { round: rr }))
+    return
+  }
+
+  ledger.count += 1
+  playRevealFlipSound(0.09)
+  slot.revealed = true
 }
 
 async function hostToggleNomination({ target, by }) {
@@ -718,10 +928,25 @@ async function hostExecuteDeletePlayer(pid) {
   if (!isAdmin.value) return
   const p = normalizePlayerSlotId(pid)
   if (!p) return
+  debugDelete('hostExecuteDeletePlayer:start', {
+    gameId: gameId.value,
+    slot: p,
+    url: typeof window !== 'undefined' ? window.location.href : '',
+  })
+  pendingPlayerDeletes.value = [...new Set([...pendingPlayerDeletes.value, p])]
+  applyPlayerListFromFirestore(lastPlayersFirestoreList.value)
   try {
     loadError.value = null
+    debugDelete('hostExecuteDeletePlayer:await removePlayerFromGameRoomState')
     await removePlayerFromGameRoomState(gameId.value, p)
+    debugDelete('hostExecuteDeletePlayer:await deletePlayerDocument')
     await deletePlayerDocument(gameId.value, p)
+    antiGhostPlayerUntil.value = {
+      ...antiGhostPlayerUntil.value,
+      [p]: Date.now() + ANTI_GHOST_PLAYER_MS,
+    }
+    debugDelete('hostExecuteDeletePlayer:обидва await OK, оновлюємо ростер з lastSnap')
+    applyPlayerListFromFirestore(lastPlayersFirestoreList.value)
     if (String(selectedDeskPlayerId.value) === p) {
       selectedDeskPlayerId.value = ''
     }
@@ -730,8 +955,21 @@ async function hostExecuteDeletePlayer(pid) {
       navigateQuery({ player: fallback })
     }
     showToast(t('toast.playerDeleted', { slot: p }))
+    debugDelete('hostExecuteDeletePlayer:успіх (тост показано)')
   } catch (e) {
-    loadError.value = e instanceof Error ? e.message : String(e)
+    debugDelete('hostExecuteDeletePlayer:ПОМИЛКА', {
+      name: e instanceof Error ? e.name : '',
+      message: e instanceof Error ? e.message : String(e),
+      code: typeof e === 'object' && e !== null && 'code' in e ? e.code : undefined,
+    })
+    pendingPlayerDeletes.value = pendingPlayerDeletes.value.filter((x) => x !== p)
+    applyPlayerListFromFirestore(lastPlayersFirestoreList.value)
+    const raw = e instanceof Error ? e.message : String(e)
+    const msg = raw.startsWith('PLAYER_DOC_NOT_FOUND:')
+      ? t('control.deletePlayerDocMissing', { slot: raw.slice('PLAYER_DOC_NOT_FOUND:'.length) })
+      : raw
+    loadError.value = `${t('control.deletePlayerFailed')}: ${msg}`
+    showToast(`${t('control.deletePlayerFailed')}: ${msg}`)
   }
 }
 
@@ -848,6 +1086,18 @@ async function hostClearHands() {
   }
 }
 
+async function hostReviveAllPlayers() {
+  if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    const n = await reviveAllEliminatedPlayers(gameId.value)
+    if (n <= 0) showToast(t('toast.reviveAllNobody'))
+    else showToast(t('toast.reviveAllDone', { n }))
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
 async function adminNextSpeaker() {
   if (!isAdmin.value) return
   const elim = eliminatedBySlot()
@@ -880,6 +1130,7 @@ const hostChromeActions = {
   votingFinish: hostFinishVoting,
   removeVote: hostRemoveVote,
   clearHands: hostClearHands,
+  reviveAllPlayers: hostReviveAllPlayers,
   setSpeakingDuration(n) {
     speakingDuration.value = n
   },
@@ -1176,13 +1427,21 @@ watch(
 async function applyNewGame() {
   if (!isAdmin.value) return
   const g = String(draftGameId.value).trim() || 'test1'
+  if (GAME_ID_UNSAFE.test(g)) {
+    showToast(t('control.gameIdUnsafeToast'))
+  }
   navigateQuery({ game: g })
   try {
     loadError.value = null
-    await ensureGameRoomExists(g)
+    const created = await ensureGameRoomExists(g)
     await saveGameRoom(g, { activeScenario: selectedScenario.value })
-    await seedMissingStandardPlayers(g, selectedScenario.value)
-    showToast(t('toast.rosterSeeded'))
+    // Не викликати seed при кожному OK — інакше знову з’являються видалені слоти p1–p10.
+    if (created) {
+      await seedMissingStandardPlayers(g, selectedScenario.value)
+      showToast(t('toast.rosterSeeded'))
+    } else {
+      showToast(t('toast.gameRoomUpdated'))
+    }
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -1194,6 +1453,9 @@ async function createAndGoToPlayer() {
   if (!raw) return
   const id = normalizePlayerSlotId(raw)
   newPlayerId.value = ''
+  const ag = { ...antiGhostPlayerUntil.value }
+  delete ag[id]
+  antiGhostPlayerUntil.value = ag
   try {
     loadError.value = null
     await ensureGameRoomExists(gameId.value)
@@ -1218,8 +1480,23 @@ function scheduleSave() {
   }, 400)
 }
 
+function applyFromFirestoreSnapshot(data) {
+  skipRemoteAutosave.value = true
+  syncing.value = true
+  try {
+    if (data != null) applyRemoteCharacterData(characterState, data)
+    else applyRemoteCharacterData(characterState, null)
+  } finally {
+    syncing.value = false
+    nextTick(() => {
+      skipRemoteAutosave.value = false
+    })
+  }
+}
+
+/** Поля службові Firestore — не передаємо в редактор персонажа. */
 watch(characterState, () => {
-  if (syncing.value || adminAccessDenied.value) return
+  if (syncing.value || skipRemoteAutosave.value || adminAccessDenied.value) return
   scheduleSave()
 }, { deep: true })
 
@@ -1252,13 +1529,8 @@ watch(
     loadError.value = null
     panelHydrating.value = true
     unsubCharacter = subscribeToCharacter(gid, pid, (data) => {
-      syncing.value = true
-      try {
-        if (data != null) applyRemoteCharacterData(characterState, data)
-      } finally {
-        syncing.value = false
-        panelHydrating.value = false
-      }
+      applyFromFirestoreSnapshot(data)
+      panelHydrating.value = false
     })
   },
   { immediate: true },
@@ -1332,6 +1604,8 @@ function rerollActiveCardOnly() {
       :visible="showControlPageLoader"
       :label="t('loader.control')"
     />
+    <p v-if="loadError" class="error error--alert" role="alert">{{ loadError }}</p>
+
     <div class="mode-strip" :class="{ admin: isAdmin, player: !isAdmin }">
       <span class="mode-label">{{ modeLabel }}</span>
       <span v-if="!isAdmin" class="status-pill" :data-s="myStatusLabel">{{ myStatusLabel }}</span>
@@ -1368,6 +1642,66 @@ function rerollActiveCardOnly() {
       </section>
 
       <section
+        v-if="isAdmin"
+        class="admin-zone admin-zone--players admin-zone--host-active-card"
+        :aria-label="t('control.ariaActiveCard')"
+      >
+        <h2 class="zone-kicker">{{ t('control.activeCard') }} · {{ editorPlayerId }}</h2>
+        <div class="active-card-box active-card-box--host-standalone">
+          <div v-if="characterState.activeCardRequest" class="card-request-host">
+            <p class="card-request-host__text">{{ t('control.cardRequestHost') }}</p>
+            <button
+              type="button"
+              class="btn-confirm-card"
+              :disabled="characterState.activeCard.used"
+              @click="confirmActiveCardEffect"
+            >
+              {{ t('control.confirmCard') }}
+            </button>
+          </div>
+          <label class="field-label" for="host-standalone-ac-title">{{ t('control.acFieldTitle') }}</label>
+          <input
+            id="host-standalone-ac-title"
+            v-model="characterState.activeCard.title"
+            type="text"
+            class="input"
+            :placeholder="t('control.titlePh')"
+            autocomplete="off"
+          />
+          <label class="field-label" for="host-standalone-ac-desc">{{ t('control.acFieldDesc') }}</label>
+          <textarea
+            id="host-standalone-ac-desc"
+            v-model="characterState.activeCard.description"
+            class="textarea"
+            rows="3"
+            :placeholder="t('control.descPh')"
+            autocomplete="off"
+          />
+          <p class="ac-meta">effectId: <code>{{ characterState.activeCard.effectId || '—' }}</code></p>
+          <div class="ac-actions">
+            <button type="button" class="btn-soft" @click="rerollActiveCardOnly">{{ t('control.newCardRandom') }}</button>
+            <button
+              v-if="characterState.activeCardRequest"
+              type="button"
+              class="btn-soft"
+              @click="clearCardRequest"
+            >
+              {{ t('control.clearPlayerRequest') }}
+            </button>
+            <button
+              v-if="!characterState.activeCardRequest"
+              type="button"
+              class="btn-primary btn-primary--solid"
+              :disabled="characterState.activeCard.used"
+              @click="confirmActiveCardEffect"
+            >
+              {{ t('control.applyEffect') }}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section
         class="admin-zone admin-zone--players"
         :class="{ 'admin-zone--nominated-active': nominatedPlayerActive }"
         :aria-label="t('control.ariaPlayers')"
@@ -1377,6 +1711,7 @@ function rerollActiveCardOnly() {
           v-model:selected-player-id="selectedDeskPlayerId"
           :players="allPlayers"
           :hands-map="gameRoom.hands || {}"
+          :players-ready-map="gameRoom.playersReady || {}"
           :current-player-id="editorPlayerId"
           :spotlight-player-id="String(gameRoom.activePlayer || '')"
           :speaker-id="String(gameRoom.currentSpeaker || '')"
@@ -1395,6 +1730,9 @@ function rerollActiveCardOnly() {
             <input id="host-side-game-id" v-model="draftGameId" type="text" class="input" autocomplete="off" />
             <button type="button" class="btn-soft btn-lift" @click="applyNewGame">OK</button>
           </div>
+          <p v-if="gameIdHasUnsafeChars" class="hint-sc hint-sc--tight hint-sc--warn">
+            {{ t('control.gameIdUnsafeHint') }}
+          </p>
           <label class="field-label mt" for="host-side-new-player-id">{{ t('control.newPlayerId') }}</label>
           <div class="inline">
             <input
@@ -1480,19 +1818,39 @@ function rerollActiveCardOnly() {
     <div v-else class="player-hero">
       <h1 class="player-title">{{ t('game.title') }}</h1>
       <p class="player-phase">{{ t('control.playerPhase', { phase: playerPhaseDisplay }) }}</p>
-      <div class="hand-toggle" role="group" :aria-label="t('control.handGroup')">
-        <button
-          type="button"
-          class="hand-icon-btn"
-          :class="{ 'hand-icon-btn--up': myHandRaised }"
-          :aria-pressed="myHandRaised"
-          :aria-label="myHandRaised ? t('control.handLower') : t('control.handRaise')"
-          :title="myHandRaised ? t('control.handLowerTitle') : t('control.handRaiseTitle')"
-          @click="setMyHandRaised(!myHandRaised)"
-        >
-          <span class="hand-icon-btn__ico" aria-hidden="true">✋</span>
-        </button>
-        <span class="hand-toggle__caption">{{ myHandRaised ? t('control.handUp') : t('control.handDown') }}</span>
+      <div
+        v-if="characterState.eliminated !== true"
+        class="player-hero-actions"
+        role="group"
+        :aria-label="t('control.playerQuickActionsAria')"
+      >
+        <div class="hand-toggle" role="group" :aria-label="t('control.handGroup')">
+          <button
+            type="button"
+            class="hand-icon-btn"
+            :class="{ 'hand-icon-btn--up': myHandRaised }"
+            :aria-pressed="myHandRaised"
+            :aria-label="myHandRaised ? t('control.handLower') : t('control.handRaise')"
+            :title="myHandRaised ? t('control.handLowerTitle') : t('control.handRaiseTitle')"
+            @click="setMyHandRaised(!myHandRaised)"
+          >
+            <span class="hand-icon-btn__ico" aria-hidden="true">✋</span>
+          </button>
+          <span class="hand-toggle__caption">{{ myHandRaised ? t('control.handUp') : t('control.handDown') }}</span>
+        </div>
+        <div class="ready-toggle" role="group" :aria-label="t('control.readyGroup')">
+          <button
+            type="button"
+            class="ready-pill"
+            :class="{ 'ready-pill--on': myPlayerReady, 'ready-pill--off': !myPlayerReady }"
+            :aria-pressed="myPlayerReady"
+            :aria-label="playerReadyPillLabel"
+            :title="playerReadyPillLabel"
+            @click="setMyPlayerReady(!myPlayerReady)"
+          >
+            {{ playerReadyPillLabel }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -1520,8 +1878,6 @@ function rerollActiveCardOnly() {
         </button>
       </div>
     </div>
-
-    <p v-if="loadError" class="error">{{ loadError }}</p>
 
     <section
       class="panel editor-panel editor-panel--calm"
@@ -1691,61 +2047,9 @@ function rerollActiveCardOnly() {
         </div>
       </div>
 
-      <div class="active-card-box">
+      <div v-if="!isAdmin" class="active-card-box">
         <h3 class="ac-title">{{ t('control.activeCard') }}</h3>
-        <template v-if="isAdmin">
-          <div v-if="characterState.activeCardRequest" class="card-request-host">
-            <p class="card-request-host__text">{{ t('control.cardRequestHost') }}</p>
-            <button
-              type="button"
-              class="btn-confirm-card"
-              :disabled="characterState.activeCard.used"
-              @click="confirmActiveCardEffect"
-            >
-              {{ t('control.confirmCard') }}
-            </button>
-          </div>
-          <label class="field-label" for="host-editor-ac-title">{{ t('control.acFieldTitle') }}</label>
-          <input
-            id="host-editor-ac-title"
-            v-model="characterState.activeCard.title"
-            type="text"
-            class="input"
-            :placeholder="t('control.titlePh')"
-            autocomplete="off"
-          />
-          <label class="field-label" for="host-editor-ac-desc">{{ t('control.acFieldDesc') }}</label>
-          <textarea
-            id="host-editor-ac-desc"
-            v-model="characterState.activeCard.description"
-            class="textarea"
-            rows="3"
-            :placeholder="t('control.descPh')"
-            autocomplete="off"
-          />
-          <p class="ac-meta">effectId: <code>{{ characterState.activeCard.effectId || '—' }}</code></p>
-          <div class="ac-actions">
-            <button type="button" class="btn-soft" @click="rerollActiveCardOnly">{{ t('control.newCardRandom') }}</button>
-            <button
-              v-if="characterState.activeCardRequest"
-              type="button"
-              class="btn-soft"
-              @click="clearCardRequest"
-            >
-              {{ t('control.clearPlayerRequest') }}
-            </button>
-            <button
-              v-if="!characterState.activeCardRequest"
-              type="button"
-              class="btn-primary btn-primary--solid"
-              :disabled="characterState.activeCard.used"
-              @click="confirmActiveCardEffect"
-            >
-              {{ t('control.applyEffect') }}
-            </button>
-          </div>
-        </template>
-        <Transition v-else name="ac-swap" mode="out-in">
+        <Transition name="ac-swap" mode="out-in">
           <div :key="activeCardPanelKey" class="active-card-player-block">
             <p class="ac-t">{{ characterState.activeCard.title || '—' }}</p>
             <p class="ac-d">{{ characterState.activeCard.description || '—' }}</p>
@@ -1829,6 +2133,10 @@ function rerollActiveCardOnly() {
   border: none;
   margin-bottom: 0;
   padding: 0.35rem 0 0;
+}
+
+.admin-zone--host-active-card .active-card-box--host-standalone {
+  margin-top: 0.25rem;
 }
 
 .admin-zone--voting.admin-card :deep(.vp) {
@@ -1962,6 +2270,13 @@ function rerollActiveCardOnly() {
   color: var(--text-muted);
   font-size: 0.66rem;
   line-height: 1.45;
+}
+
+.hint-sc--warn {
+  color: var(--error-text, #fecaca);
+  border-left: 3px solid var(--error-border, rgba(248, 113, 113, 0.55));
+  padding-left: 0.5rem;
+  margin-top: 0.35rem;
 }
 
 .scenario-row {
@@ -2288,12 +2603,75 @@ function rerollActiveCardOnly() {
   color: var(--text-muted);
 }
 
+.player-hero-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(1rem, 4vw, 2.25rem);
+  margin-top: 1.1rem;
+  flex-wrap: wrap;
+}
+
+.player-hero-actions .hand-toggle {
+  margin-top: 0;
+}
+
 .hand-toggle {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   margin-top: 1.1rem;
   flex-wrap: wrap;
+}
+
+.ready-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.ready-pill {
+  margin: 0;
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  border: 2px solid rgba(248, 113, 113, 0.55);
+  background: rgba(80, 20, 30, 0.42);
+  color: rgba(254, 226, 226, 0.96);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.22s ease,
+    color 0.2s ease;
+  box-shadow:
+    0 0 14px rgba(239, 68, 68, 0.28),
+    0 0 28px rgba(239, 68, 68, 0.12);
+}
+
+.ready-pill--off:hover {
+  border-color: rgba(252, 165, 165, 0.75);
+  box-shadow:
+    0 0 18px rgba(239, 68, 68, 0.38),
+    0 0 36px rgba(239, 68, 68, 0.16);
+}
+
+.ready-pill--on {
+  border-color: rgba(74, 222, 128, 0.72);
+  background: rgba(20, 83, 45, 0.42);
+  color: rgba(220, 252, 231, 0.98);
+  box-shadow:
+    0 0 16px rgba(74, 222, 128, 0.38),
+    0 0 32px rgba(74, 222, 128, 0.14);
+}
+
+.ready-pill--on:hover {
+  border-color: rgba(134, 239, 172, 0.88);
+  box-shadow:
+    0 0 20px rgba(74, 222, 128, 0.48),
+    0 0 40px rgba(74, 222, 128, 0.2);
 }
 
 .hand-toggle__caption {
@@ -3160,6 +3538,14 @@ function rerollActiveCardOnly() {
   color: var(--error-text);
   font-size: 0.85rem;
   margin-bottom: 1rem;
+}
+
+.error--alert {
+  position: sticky;
+  top: 0;
+  z-index: 10001;
+  margin-bottom: 0.65rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
 }
 
 .access-denied {

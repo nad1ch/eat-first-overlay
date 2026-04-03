@@ -412,12 +412,13 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <AppPageLoader
-    :visible="!overlayPageReady"
-    :label="t('overlayPage.sync')"
-  />
-  <div
-    class="overlay-root"
+  <div class="overlay-page">
+    <AppPageLoader
+      :visible="!overlayPageReady"
+      :label="t('overlayPage.sync')"
+    />
+    <div
+      class="overlay-root"
     :class="{
       'overlay-root--personal': isPersonal,
       'overlay-root--global': !isPersonal,
@@ -502,7 +503,6 @@ onUnmounted(() => {
         :hand-raised="isHandRaised(singlePlayer)"
         :idle-waiting="showIdleWaitingCue"
         v-bind="cardTimerProps(singlePlayer)"
-        audience-mode
         solo
       />
     </div>
@@ -513,7 +513,6 @@ onUnmounted(() => {
           v-for="p in players"
           :key="p.id"
           :player="p"
-          audience-mode
           :is-spotlight="isSpotlightPlayer(p)"
           :is-timer-target="isTimerPlayer(p)"
           :dimmed="gridDimNonSpeakers && !isTimerPlayer(p)"
@@ -549,10 +548,17 @@ onUnmounted(() => {
         <p class="round-banner__t">{{ t('overlayPage.revealCard') }}</p>
       </div>
     </Teleport>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.overlay-page {
+  min-height: 100vh;
+  width: 100%;
+  position: relative;
+}
+
 .overlay-root {
   min-height: 100vh;
   width: 100%;

@@ -20,6 +20,11 @@ export function defaultActiveCard() {
 
 export const characterState = reactive({
   eliminated: false,
+  /**
+   * Ліміт відкриттів характеристик за раунд (гравець, не ведучий).
+   * round: останній ігровий раунд, для якого застосовано count/maxForRound; 0 = ще не синхронізовано.
+   */
+  revealLedger: { round: 0, count: 0, maxForRound: 0 },
   /** Legacy: синхронізується з demographicsRevealed при збереженні */
   identityRevealed: false,
   /** Вік і стать на оверлеї; ім’я завжди видно окремо */
@@ -48,6 +53,7 @@ export const fieldConfig = [
 
 export function resetCharacterState(target = characterState) {
   target.eliminated = false
+  target.revealLedger = { round: 0, count: 0, maxForRound: 0 }
   target.identityRevealed = false
   target.demographicsRevealed = false
   target.name = ''
@@ -105,12 +111,27 @@ export function applyRemoteCharacterData(target, data) {
   }
   target.activeCard = readActiveCard(data)
   target.activeCardRequest = Boolean(data.activeCardRequest)
+  const rl = data.revealLedger
+  if (rl && typeof rl === 'object') {
+    const r = Math.floor(Number(rl.round) || 0)
+    const c = Math.max(0, Math.floor(Number(rl.count) || 0))
+    const m = Math.floor(Number(rl.maxForRound) || 0)
+    target.revealLedger = { round: r, count: c, maxForRound: m }
+  } else {
+    target.revealLedger = { round: 0, count: 0, maxForRound: 0 }
+  }
 }
 
 export function snapshotCharacter(target = characterState) {
   const dem = Boolean(target.demographicsRevealed)
+  const rl = target.revealLedger
   const out = {
     eliminated: Boolean(target.eliminated),
+    revealLedger: {
+      round: Math.min(8, Math.max(0, Math.floor(Number(rl?.round) || 0))),
+      count: Math.max(0, Math.floor(Number(rl?.count) || 0)),
+      maxForRound: Math.min(8, Math.max(0, Math.floor(Number(rl?.maxForRound) || 0))),
+    },
     demographicsRevealed: dem,
     identityRevealed: dem,
     name: target.name,

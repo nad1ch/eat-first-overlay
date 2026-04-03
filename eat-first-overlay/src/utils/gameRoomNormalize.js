@@ -22,6 +22,13 @@ export function normalizeGameRoomPayload(raw) {
     delete out[key]
   }
   out.hands = mergedHands
+  const mergedReady = {}
+  if (raw.playersReady && typeof raw.playersReady === 'object') {
+    for (const [k, v] of Object.entries(raw.playersReady)) {
+      if (v === true) mergedReady[normalizePlayerSlotId(k)] = true
+    }
+  }
+  out.playersReady = mergedReady
   if (raw.voting && typeof raw.voting === 'object') {
     out.voting = { ...raw.voting }
   }
