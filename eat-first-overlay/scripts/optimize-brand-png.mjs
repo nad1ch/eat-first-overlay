@@ -27,6 +27,14 @@ async function main() {
   atomicWrite(transparentPath, tBuf)
   console.log('OK', 'brand-nad1ch-transparent.png', kb(tBuf))
 
+  /** WebP для футера/шапки: ~2× від 44px display, менший розмір для Lighthouse. */
+  const webpBuf = await sharp(tBuf)
+    .resize(88, 88, { fit: 'inside', withoutEnlargement: true })
+    .webp({ quality: 85, effort: 6 })
+    .toBuffer()
+  atomicWrite(pub('brand-nad1ch-transparent.webp'), webpBuf)
+  console.log('OK', 'brand-nad1ch-transparent.webp', kb(webpBuf))
+
   const fav192 = await sharp(tBuf)
     .resize(192, 192, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .png(PNG)

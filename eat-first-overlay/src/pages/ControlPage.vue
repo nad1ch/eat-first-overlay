@@ -30,6 +30,7 @@ import {
   setGamePhase,
   regenerateAllPlayersRandom,
   regenerateAllPlayersActiveCards,
+  regeneratePlayerActiveCard,
   setGameNominations,
   nominationsFromRoom,
   setRoomVoting,
@@ -50,6 +51,7 @@ import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
 import { normalizePlayerSlotId } from '../utils/playerSlot.js'
 import { formatGenderDisplay } from '../utils/genderDisplay.js'
 import AppPageLoader from '../ui/molecules/AppPageLoader.vue'
+import ConfirmDialog from '../ui/molecules/ConfirmDialog.vue'
 import UiMenuSelect from '../ui/molecules/UiMenuSelect.vue'
 
 const route = useRoute()
@@ -853,6 +855,84 @@ async function regenerateActiveCardsForAllPlayers() {
   }
 }
 
+async function regenerateActiveCardForCurrentSlot() {
+  if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    await regeneratePlayerActiveCard(gameId.value, editorPlayerId.value)
+    showToast(t('toast.activeCardSlotUpdated', { slot: editorPlayerId.value }))
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+const genDialogOpen = ref(false)
+const genDialogTitle = ref('')
+const genDialogMessage = ref('')
+let genDialogRunner = null
+
+function openHostGenConfirm(title, message, runner) {
+  genDialogTitle.value = title
+  genDialogMessage.value = message
+  genDialogRunner = runner
+  genDialogOpen.value = true
+}
+
+function onHostGenDialogClose() {
+  genDialogRunner = null
+}
+
+async function onHostGenDialogConfirm() {
+  const fn = genDialogRunner
+  genDialogRunner = null
+  if (fn) await fn()
+}
+
+function askGenerateRandomCharacter() {
+  openHostGenConfirm(
+    t('control.genConfirmTitle'),
+    t('control.genConfirmPlayer', { slot: editorPlayerId.value }),
+    () => generateRandomCharacter(),
+  )
+}
+
+function askRegenerateAllPlayers() {
+  openHostGenConfirm(t('control.genConfirmTitle'), t('control.genConfirmAll'), regenerateAllPlayers)
+}
+
+function askRegenerateActiveCardsAll() {
+  openHostGenConfirm(t('control.genConfirmTitle'), t('control.genConfirmActiveAll'), regenerateActiveCardsForAllPlayers)
+}
+
+function askRegenerateActiveCardOne() {
+  openHostGenConfirm(
+    t('control.genConfirmTitle'),
+    t('control.genConfirmActiveOne', { slot: editorPlayerId.value }),
+    regenerateActiveCardForCurrentSlot,
+  )
+}
+
+function askGlobalRollField(fieldKey) {
+  openHostGenConfirm(
+    t('control.genConfirmTitle'),
+    t('control.genConfirmGlobalField', { field: t(`traits.${fieldKey}`) }),
+    () => globalRollField(fieldKey),
+  )
+}
+
+function askGlobalChaos() {
+  openHostGenConfirm(t('control.genConfirmTitle'), t('control.genConfirmChaos'), globalChaos)
+}
+
+function askGlobalRollSelected() {
+  const fk = globalFieldPick.value
+  openHostGenConfirm(
+    t('control.genConfirmTitle'),
+    t('control.genConfirmGlobalField', { field: t(`traits.${fk}`) }),
+    globalRollSelected,
+  )
+}
+
 async function confirmActiveCardEffect() {
   if (!isAdmin.value) return
   const eid = String(characterState.activeCard?.effectId || '')
@@ -1130,14 +1210,21 @@ function rerollActiveCardOnly() {
           @toggle-nomination="hostToggleNomination"
         />
         <aside class="side-tools side-tools--inline">
-          <label class="field-label">{{ t('control.gameId') }}</label>
+          <label class="field-label" for="host-side-game-id">{{ t('control.gameId') }}</label>
           <div class="inline">
-            <input v-model="draftGameId" type="text" class="input" />
+            <input id="host-side-game-id" v-model="draftGameId" type="text" class="input" autocomplete="off" />
             <button type="button" class="btn-soft btn-lift" @click="applyNewGame">OK</button>
           </div>
-          <label class="field-label mt">{{ t('control.newPlayerId') }}</label>
+          <label class="field-label mt" for="host-side-new-player-id">{{ t('control.newPlayerId') }}</label>
           <div class="inline">
-            <input v-model="newPlayerId" type="text" class="input" placeholder="p11" />
+            <input
+              id="host-side-new-player-id"
+              v-model="newPlayerId"
+              type="text"
+              class="input"
+              placeholder="p11"
+              autocomplete="off"
+            />
             <button type="button" class="btn-soft btn-lift" @click="createAndGoToPlayer">+</button>
           </div>
         </aside>
@@ -1146,16 +1233,23 @@ function rerollActiveCardOnly() {
       <section class="admin-zone admin-zone--generate admin-zone--tier-lower" :aria-label="t('control.ariaGen')">
         <h2 class="zone-kicker zone-kicker--soft zone-kicker--gen-title">{{ t('control.zoneGen') }}</h2>
         <div class="gen-bar gen-bar--actions gen-bar--compact">
-          <button type="button" class="btn-neon btn-neon--compact" @click="generateRandomCharacter">
+          <button type="button" class="btn-neon btn-neon--compact" @click="askGenerateRandomCharacter">
             {{ t('control.genPlayer') }}
           </button>
-          <button type="button" class="btn-neon btn-neon--wide btn-neon--compact" @click="regenerateAllPlayers">
+          <button type="button" class="btn-neon btn-neon--wide btn-neon--compact" @click="askRegenerateAllPlayers">
             {{ t('control.genAll') }}
           </button>
           <button
             type="button"
             class="btn-neon btn-neon--soft btn-neon--compact"
-            @click="regenerateActiveCardsForAllPlayers"
+            @click="askRegenerateActiveCardOne"
+          >
+            {{ t('control.genActiveOne') }}
+          </button>
+          <button
+            type="button"
+            class="btn-neon btn-neon--soft btn-neon--compact"
+            @click="askRegenerateActiveCardsAll"
           >
             {{ t('control.genActiveAll') }}
           </button>
@@ -1174,10 +1268,10 @@ function rerollActiveCardOnly() {
         </div>
         <h3 class="sub-kicker sub-kicker--soft">{{ t('control.globalAll') }}</h3>
         <div class="global-btns global-btns--compact">
-          <button type="button" class="gbtn" @click="globalRollField('profession')">{{ t('traits.profession') }}</button>
-          <button type="button" class="gbtn" @click="globalRollField('health')">{{ t('traits.health') }}</button>
-          <button type="button" class="gbtn" @click="globalRollField('phobia')">{{ t('traits.phobia') }}</button>
-          <button type="button" class="gbtn" @click="globalChaos">{{ t('control.chaos') }}</button>
+          <button type="button" class="gbtn" @click="askGlobalRollField('profession')">{{ t('traits.profession') }}</button>
+          <button type="button" class="gbtn" @click="askGlobalRollField('health')">{{ t('traits.health') }}</button>
+          <button type="button" class="gbtn" @click="askGlobalRollField('phobia')">{{ t('traits.phobia') }}</button>
+          <button type="button" class="gbtn" @click="askGlobalChaos">{{ t('control.chaos') }}</button>
         </div>
         <div class="pick-row pick-row--compact">
           <label class="field-label">{{ t('control.fieldForAll') }}</label>
@@ -1188,10 +1282,19 @@ function rerollActiveCardOnly() {
             :aria-label="t('control.fieldForAll')"
             variant="block"
           />
-          <button type="button" class="btn-primary btn-primary--compact" @click="globalRollSelected">OK</button>
+          <button type="button" class="btn-primary btn-primary--compact" @click="askGlobalRollSelected">OK</button>
         </div>
       </section>
 
+      <ConfirmDialog
+        v-model:open="genDialogOpen"
+        :title="genDialogTitle"
+        :message="genDialogMessage"
+        :confirm-label="t('control.genConfirmProceed')"
+        :cancel-label="t('control.genConfirmCancel')"
+        @close="onHostGenDialogClose"
+        @confirm="onHostGenDialogConfirm"
+      />
     </template>
 
     <div v-else class="player-hero">
@@ -1269,16 +1372,23 @@ function rerollActiveCardOnly() {
         </div>
         <div class="meta-grid">
           <div>
-            <label class="field-label">{{ t('control.name') }}</label>
-            <input v-model="characterState.name" type="text" class="input" />
+            <label class="field-label" for="host-editor-char-name">{{ t('control.name') }}</label>
+            <input id="host-editor-char-name" v-model="characterState.name" type="text" class="input" autocomplete="name" />
           </div>
           <div>
-            <label class="field-label">{{ t('control.age') }}</label>
-            <input v-model="characterState.age" type="text" class="input" />
+            <label class="field-label" for="host-editor-char-age">{{ t('control.age') }}</label>
+            <input id="host-editor-char-age" v-model="characterState.age" type="text" class="input" inputmode="numeric" />
           </div>
           <div>
-            <label class="field-label">{{ t('control.gender') }}</label>
-            <input v-model="characterState.gender" type="text" class="input" :placeholder="t('control.genderPh')" />
+            <label class="field-label" for="host-editor-char-gender">{{ t('control.gender') }}</label>
+            <input
+              id="host-editor-char-gender"
+              v-model="characterState.gender"
+              type="text"
+              class="input"
+              :placeholder="t('control.genderPh')"
+              autocomplete="sex"
+            />
           </div>
         </div>
       </div>
@@ -1368,7 +1478,7 @@ function rerollActiveCardOnly() {
       <div v-if="isAdmin" class="traits-stack">
         <div v-for="row in fieldConfig" :key="row.key" class="trait-block">
           <div class="trait-toolbar">
-            <span class="trait-label">{{ t(`traits.${row.key}`) }}</span>
+            <label class="trait-label" :for="'host-editor-trait-' + row.key">{{ t(`traits.${row.key}`) }}</label>
             <div class="trait-actions">
               <button
                 type="button"
@@ -1388,7 +1498,12 @@ function rerollActiveCardOnly() {
               </button>
             </div>
           </div>
-          <input v-model="characterState[row.key].value" type="text" class="input trait-value-input" />
+          <input
+            :id="'host-editor-trait-' + row.key"
+            v-model="characterState[row.key].value"
+            type="text"
+            class="input trait-value-input"
+          />
         </div>
       </div>
 
@@ -1406,12 +1521,23 @@ function rerollActiveCardOnly() {
               {{ t('control.confirmCard') }}
             </button>
           </div>
-          <input v-model="characterState.activeCard.title" type="text" class="input" :placeholder="t('control.titlePh')" />
+          <label class="field-label" for="host-editor-ac-title">{{ t('control.acFieldTitle') }}</label>
+          <input
+            id="host-editor-ac-title"
+            v-model="characterState.activeCard.title"
+            type="text"
+            class="input"
+            :placeholder="t('control.titlePh')"
+            autocomplete="off"
+          />
+          <label class="field-label" for="host-editor-ac-desc">{{ t('control.acFieldDesc') }}</label>
           <textarea
+            id="host-editor-ac-desc"
             v-model="characterState.activeCard.description"
             class="textarea"
             rows="3"
             :placeholder="t('control.descPh')"
+            autocomplete="off"
           />
           <p class="ac-meta">effectId: <code>{{ characterState.activeCard.effectId || '—' }}</code></p>
           <div class="ac-actions">
@@ -2233,11 +2359,13 @@ function rerollActiveCardOnly() {
 }
 
 .trait-label {
+  margin: 0;
   font-size: 0.7rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-muted);
+  cursor: default;
 }
 
 .traits-stack--player .trait-label,

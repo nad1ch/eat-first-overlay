@@ -605,6 +605,10 @@ body::-webkit-scrollbar-thumb:hover {
   transform: scale(0.98);
 }
 
+.app-shell-mini-brand picture {
+  display: contents;
+}
+
 .app-shell-mini-brand__logo {
   display: block;
   width: 2rem;
@@ -819,17 +823,30 @@ body::-webkit-scrollbar-thumb:hover {
 
 .app-site-footer__logo-wrap {
   flex-shrink: 0;
+  /* Фіксований бокс до завантаження картинки — зменшує CLS (Lighthouse). */
+  width: 52px;
+  height: 52px;
   padding: 4px;
+  box-sizing: border-box;
   border-radius: 12px;
   background: var(--logo-pad-bg);
   border: 1px solid var(--border-subtle);
   line-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-site-footer__logo-wrap picture {
+  display: contents;
 }
 
 .app-site-footer__logo {
   display: block;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 44px;
+  height: 44px;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
 }
 
@@ -849,6 +866,8 @@ body::-webkit-scrollbar-thumb:hover {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-heading);
+  line-height: 1.2;
+  min-height: 1.2em;
 }
 
 .app-site-footer__copy {

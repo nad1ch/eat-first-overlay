@@ -9,8 +9,11 @@ import AppHeaderNav from './ui/molecules/AppHeaderNav.vue'
 import AppHeaderToolbar from './ui/organisms/AppHeaderToolbar.vue'
 import AppSiteFooter from './ui/organisms/AppSiteFooter.vue'
 import { persistLocale, LOCALE_OPTIONS } from './i18n'
+import { useSeoCanonical } from './composables/useSeoCanonical.js'
 
 const localeMenuOptions = LOCALE_OPTIONS.map((o) => ({ value: o.code, label: o.label }))
+
+useSeoCanonical()
 
 const route = useRoute()
 const { t, locale } = useI18n()

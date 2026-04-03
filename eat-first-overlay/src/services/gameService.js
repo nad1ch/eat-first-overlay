@@ -393,6 +393,27 @@ export async function regenerateAllPlayersActiveCards(gameId) {
   }
 }
 
+/** Нова випадкова активна карта лише для одного гравця (слот у games/{gameId}/players/{playerId}). */
+export async function regeneratePlayerActiveCard(gameId, playerId) {
+  const pid = normalizePlayerSlotId(playerId)
+  const tpl = pickRandomActiveCardTemplate()
+  await setDoc(
+    playerDocRef(gameId, pid),
+    {
+      activeCard: {
+        title: tpl.title,
+        description: tpl.description,
+        used: false,
+        effectId: tpl.effectId,
+        templateId: tpl.templateId,
+      },
+      activeCardRequest: false,
+      key: ADMIN_KEY,
+    },
+    { merge: true },
+  )
+}
+
 /**
  * Оновити всіх гравців у кімнаті: одне поле { value, revealed }.
  * @param {string} gameId
