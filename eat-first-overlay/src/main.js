@@ -16,12 +16,7 @@ if (typeof window !== 'undefined') {
     '/overlay': () => import('./pages/OverlayPage.vue'),
   }
   const run = prefetchers[path]
-  if (run) {
-    const schedule = window.requestIdleCallback ?? ((cb) => setTimeout(cb, 1))
-    schedule(() => {
-      void run()
-    })
-  }
+  if (run) void run()
 }
 import { initAnalytics, trackTechnicalEvent } from './analytics/bootstrap.js'
 import { ensureMetaDescription } from './constants/seo.js'

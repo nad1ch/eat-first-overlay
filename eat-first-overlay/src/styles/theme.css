@@ -640,8 +640,11 @@ body::-webkit-scrollbar-thumb:hover {
   box-shadow: 0 6px 24px var(--shadow-elevated);
 }
 
+/* Акцент голосування без зміни border-bottom-color (Lighthouse: некомпозитні анімації межі). */
 .app-shell-header--host.app-shell-header--vote-on {
-  border-bottom-color: rgba(56, 189, 248, 0.28);
+  box-shadow:
+    0 6px 24px var(--shadow-elevated),
+    inset 0 -1px 0 0 rgba(56, 189, 248, 0.38);
 }
 
 /**
@@ -786,7 +789,7 @@ body::-webkit-scrollbar-thumb:hover {
 
 /* Мінімальна висота зони сторінки до підвантаження lazy-route — менший стрибок футера (CLS). */
 .app-shell-main__viewport--chrome {
-  min-height: min(62vh, 640px);
+  min-height: min(64vh, 680px);
 }
 
 /* Маршрутні сторінки тягнуться на всю ширину під шапкою (інакше flex може стискати до контенту). */
@@ -803,20 +806,27 @@ body::-webkit-scrollbar-thumb:hover {
   padding: 0.85rem 1.25rem 1.1rem;
   border-top: 1px solid var(--border-subtle);
   background: var(--bg-card-soft);
-  /* Стабільна висота блоку: менший CLS при підвантаженні шрифтів / переносі рядків. */
-  min-height: 5.75rem;
+  /* Стабільна мінімальна висота; один рядок нижче за двоколонковий варіант. */
+  min-height: 4.35rem;
   box-sizing: border-box;
   contain: layout style;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
 }
 
 .app-site-footer__inner {
+  width: 100%;
   max-width: min(1200px, 100%);
   margin: 0 auto;
   display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
-  gap: 0.85rem;
+  column-gap: 1rem;
+  row-gap: 0.45rem;
   text-align: center;
 }
 
@@ -871,9 +881,9 @@ body::-webkit-scrollbar-thumb:hover {
 .app-site-footer__meta {
   min-width: 0;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 0.2rem;
+  justify-content: center;
   text-align: center;
 }
 
@@ -894,9 +904,9 @@ body::-webkit-scrollbar-thumb:hover {
   font-size: 0.68rem;
   line-height: 1.45;
   color: var(--text-muted);
-  max-width: 36rem;
+  max-width: min(42rem, 100%);
   text-align: center;
-  min-height: calc(0.68rem * 1.45 * 2);
+  min-height: calc(0.68rem * 1.45);
 }
 
 [data-theme='light'] .app-site-footer__logo-wrap {

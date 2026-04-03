@@ -83,7 +83,7 @@ const footerYear = new Date().getFullYear()
         :class="{ 'app-shell-main__viewport--chrome': showChrome }"
       >
         <RouterView v-slot="{ Component }">
-          <Transition :name="routeTransition">
+          <Transition :name="routeTransition" mode="out-in">
             <component :is="Component" :key="routeViewKey" />
           </Transition>
         </RouterView>
