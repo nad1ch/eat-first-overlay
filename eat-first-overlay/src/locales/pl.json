@@ -113,7 +113,10 @@
     "votingOn": "GŁOSOWANIE WŁ",
     "votingOff": "GŁOSOWANIE WYŁ",
     "summaryReady": "✓ {n}/{m} gotowych",
-    "summaryAllReady": "✓ WSZYSCY {m} GOTOWI"
+    "summaryAllReady": "✓ WSZYSCY {m} GOTOWI",
+    "sessionHands": "Ręce (sesja)",
+    "sessionHistory": "Archiwum głosowań",
+    "sessionHistoryHint": "W tej przeglądarce do resetu pokoju lub „Wyczyść historię” na stronie pokoju."
   },
   "roster": {
     "hintPanel": "Lewo — sloty. Klik zaznacza; akcje po prawej.",
@@ -177,6 +180,7 @@
     "alreadyPaused": "Already paused",
     "timerInactive": "Timer not active",
     "roomReset": "Pokój zresetowany",
+    "sessionStatsCleared": "Wyczyszczono historię sesji",
     "slotTimer": "{slot} · {sec}s",
     "noActiveTimer": "Brak aktywnego timera",
     "pause": "Pauza",
@@ -214,8 +218,10 @@
     "playerDeleted": "Usunięto gracza {slot}",
     "playerReadyOn": "Oznaczono jako gotowy(-a)",
     "playerReadyOff": "Gotowość cofnięta",
-    "revealProfessionFirst": "W 1. rundzie najpierw otwórz zawód, potem jeszcze jedną cechę do wyboru",
-    "revealRoundLimit": "W tej rundzie wykorzystano limit odsłonięć (runda {round})"
+    "revealProfessionFirst": "W 1. rundzie najpierw otwórz zawód, potem jeszcze jedno odsłonięcie do wyboru (cecha lub profil)",
+    "revealRoundLimit": "W tej rundzie wykorzystano limit odsłonięć (runda {round})",
+    "revealCannotCloseTrait": "Nie możesz ukryć cechy, którą już odsłoniłeś",
+    "revealCannotCloseProfile": "Nie możesz ukryć wieku/płci po ich pokazaniu"
   },
   "status": {
     "eliminated": "ODPADŁ",
@@ -289,6 +295,19 @@
     "deletePlayerFailed": "Nie udało się usunąć gracza",
     "deletePlayerDocMissing": "Brak dokumentu Firestore dla slotu {slot} (sprawdź ID pokoju w URL)",
     "panelLoadingAria": "Ładowanie",
+    "hostCollapseAll": "Zwiń wszystko",
+    "hostExpandAll": "Rozwiń wszystko",
+    "hostBlockLive": "Pokój i transmisja",
+    "hostSectionCollapse": "Zwiń sekcję",
+    "hostSectionExpand": "Rozwiń sekcję",
+    "hostSessionTitle": "Statystyki sesji: ręce i głosowania",
+    "hostSessionHands": "Podniesienia ręki na gracza",
+    "hostSessionHandsHint": "Liczone na tym urządzeniu przy otwartym panelu hosta: każde przejście z ręki w dół do góry = +1 dla slotu.",
+    "hostSessionVotes": "Historia głosowań",
+    "hostSessionVotesEmpty": "Pusto — po głosowaniu naciśnij Stop, by zapisać rundę w dzienniku.",
+    "hostSessionTarget": "cel",
+    "hostSessionNoBallots": "Brak głosów w tej turze.",
+    "hostSessionClear": "Wyczyść historię i liczniki rąk",
     "editorTitle": "Edytor: {id}",
     "yourChar": "Twoja postać",
     "profileOverlay": "Profil (nakładka)",

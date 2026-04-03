@@ -12,8 +12,14 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { ADMIN_KEY } from '../config/access.js'
-import { pickRandomActiveCardTemplate } from '../data/activeCards.js'
-import { buildRandomPlayerDocument } from '../data/randomPools.js'
+import { pickRandomActiveCardTemplateAvoiding } from '../data/activeCards.js'
+import {
+  buildRandomPlayerDocument,
+  createEmptyUsedState,
+  mergePlayerDataIntoUsedState,
+  normalizeTraitText,
+  rollFieldValue,
+} from '../data/randomPools.js'
 import { normalizePlayerSlotId } from '../utils/playerSlot.js'
 import { db } from '../firebase.js'
 import { debugDelete } from '../utils/debugDelete.js'
@@ -460,9 +466,13 @@ export async function seedMissingStandardPlayers(gameId, scenarioId) {
   const snapshot = await getDocs(colRef)
   const have = new Set(snapshot.docs.map((d) => d.id))
   const sid = String(scenarioId || 'classic_crash')
+  const usedState = createEmptyUsedState()
+  for (const d of snapshot.docs) {
+    mergePlayerDataIntoUsedState(d.data(), usedState)
+  }
   for (const slot of STANDARD_PLAYER_SLOTS) {
     if (have.has(slot)) continue
-    const payload = buildRandomPlayerDocument(sid)
+    const payload = buildRandomPlayerDocument(sid, usedState)
     await setDoc(playerDocRef(gameId, slot), { ...payload, key: ADMIN_KEY }, { merge: true })
   }
 }
@@ -476,7 +486,13 @@ export async function ensurePlayerCharacterExists(gameId, playerId, scenarioId) 
   const existing = await fetchCharacter(gameId, pid)
   if (existing) return false
   const sid = String(scenarioId || 'classic_crash')
-  const payload = buildRandomPlayerDocument(sid)
+  const colRef = collection(db, 'games', gameId, 'players')
+  const snapshot = await getDocs(colRef)
+  const usedState = createEmptyUsedState()
+  for (const d of snapshot.docs) {
+    mergePlayerDataIntoUsedState(d.data(), usedState)
+  }
+  const payload = buildRandomPlayerDocument(sid, usedState)
   await saveCharacter(gameId, pid, payload)
   return true
 }
@@ -579,8 +595,9 @@ export async function regenerateAllPlayersRandom(gameId, scenarioId) {
   const colRef = collection(db, 'games', gameId, 'players')
   const snapshot = await getDocs(colRef)
   const sid = String(scenarioId || 'classic_crash')
+  const usedState = createEmptyUsedState()
   for (const d of snapshot.docs) {
-    const docPayload = buildRandomPlayerDocument(sid)
+    const docPayload = buildRandomPlayerDocument(sid, usedState)
     await setDoc(d.ref, { ...docPayload, key: ADMIN_KEY }, { merge: true })
   }
 }
@@ -589,8 +606,10 @@ export async function regenerateAllPlayersRandom(gameId, scenarioId) {
 export async function regenerateAllPlayersActiveCards(gameId) {
   const colRef = collection(db, 'games', gameId, 'players')
   const snapshot = await getDocs(colRef)
+  const usedTpl = new Set()
   for (const d of snapshot.docs) {
-    const t = pickRandomActiveCardTemplate()
+    const t = pickRandomActiveCardTemplateAvoiding(usedTpl)
+    usedTpl.add(t.templateId)
     await setDoc(
       d.ref,
       {
@@ -612,7 +631,15 @@ export async function regenerateAllPlayersActiveCards(gameId) {
 /** Нова випадкова активна карта лише для одного гравця (слот у games/{gameId}/players/{playerId}). */
 export async function regeneratePlayerActiveCard(gameId, playerId) {
   const pid = normalizePlayerSlotId(playerId)
-  const tpl = pickRandomActiveCardTemplate()
+  const colRef = collection(db, 'games', gameId, 'players')
+  const snapshot = await getDocs(colRef)
+  const exclude = new Set()
+  for (const d of snapshot.docs) {
+    if (normalizePlayerSlotId(d.id) === pid) continue
+    const tid = normalizeTraitText(d.data()?.activeCard?.templateId)
+    if (tid) exclude.add(tid)
+  }
+  const tpl = pickRandomActiveCardTemplateAvoiding(exclude)
   await setDoc(
     playerDocRef(gameId, pid),
     {
@@ -632,15 +659,19 @@ export async function regeneratePlayerActiveCard(gameId, playerId) {
 
 /**
  * Оновити всіх гравців у кімнаті: одне поле { value, revealed }.
+ * Значення не повторюються між гравцями в межах цього проходу.
  * @param {string} gameId
  * @param {string} fieldKey
- * @param {() => string} valueGenerator
+ * @param {string} scenarioId
  */
-export async function applyGlobalAction(gameId, fieldKey, valueGenerator) {
+export async function applyGlobalAction(gameId, fieldKey, scenarioId) {
   const colRef = collection(db, 'games', gameId, 'players')
   const snapshot = await getDocs(colRef)
+  const sid = String(scenarioId || 'classic_crash')
+  const used = new Set()
   for (const d of snapshot.docs) {
-    const val = valueGenerator()
+    const val = rollFieldValue(fieldKey, sid, used)
+    used.add(normalizeTraitText(val))
     await setDoc(
       d.ref,
       {

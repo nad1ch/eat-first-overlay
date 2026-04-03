@@ -1,6 +1,9 @@
+import { collection, getDocs } from 'firebase/firestore'
 import { CORE_FIELD_KEYS } from '../characterState.js'
-import { rollFieldValue } from '../data/randomPools.js'
+import { normalizeTraitText, rollFieldValue } from '../data/randomPools.js'
 import { ACTIVE_CARD_EFFECT_IDS } from '../data/activeCards.js'
+import { db } from '../firebase.js'
+import { normalizePlayerSlotId } from '../utils/playerSlot.js'
 import { applyGlobalAction, fetchCharacter, saveCharacter } from './gameService.js'
 
 function pick(arr) {
@@ -64,15 +67,15 @@ export async function applyActiveCardEffect(gameId, playerId, effectId, scenario
   }
 
   if (effectId === ACTIVE_CARD_EFFECT_IDS.REROLL_PROFESSION_ALL) {
-    await applyGlobalAction(gameId, 'profession', () => rollFieldValue('profession', sid))
+    await applyGlobalAction(gameId, 'profession', sid)
     return { ok: true, message: 'Усім нова професія' }
   }
   if (effectId === ACTIVE_CARD_EFFECT_IDS.REROLL_HEALTH_ALL) {
-    await applyGlobalAction(gameId, 'health', () => rollFieldValue('health', sid))
+    await applyGlobalAction(gameId, 'health', sid)
     return { ok: true, message: 'Усім нове здоров’я' }
   }
   if (effectId === ACTIVE_CARD_EFFECT_IDS.REROLL_PHOBIA_ALL) {
-    await applyGlobalAction(gameId, 'phobia', () => rollFieldValue('phobia', sid))
+    await applyGlobalAction(gameId, 'phobia', sid)
     return { ok: true, message: 'Усім нова фобія' }
   }
 
@@ -105,7 +108,17 @@ export async function applyActiveCardEffect(gameId, playerId, effectId, scenario
 async function rerollOne(gameId, playerId, key, scenarioId, reveal) {
   const data = await fetchCharacter(gameId, playerId)
   if (!data) return { ok: false, message: 'Немає даних гравця' }
-  const nv = rollFieldValue(key, scenarioId)
+  const pid = normalizePlayerSlotId(playerId)
+  const colRef = collection(db, 'games', gameId, 'players')
+  const snapshot = await getDocs(colRef)
+  const exclude = new Set()
+  for (const d of snapshot.docs) {
+    if (normalizePlayerSlotId(d.id) === pid) continue
+    const pl = d.data()
+    const v = normalizeTraitText(pl[key]?.value)
+    if (v) exclude.add(v)
+  }
+  const nv = rollFieldValue(key, scenarioId, exclude)
   await saveCharacter(gameId, playerId, {
     [key]: { value: nv, revealed: reveal },
   })

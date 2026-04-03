@@ -207,7 +207,15 @@ function pick(arr) {
 }
 
 export function pickRandomActiveCardTemplate() {
-  const t = pick(ACTIVE_CARD_TEMPLATES)
+  return pickRandomActiveCardTemplateAvoiding(new Set())
+}
+
+/** Уникає templateId з excludeIds; якщо пул вичерпано — повний список (рідко, коли гравців більше за шаблони). */
+export function pickRandomActiveCardTemplateAvoiding(excludeIds = new Set()) {
+  const ex = excludeIds instanceof Set ? excludeIds : new Set(excludeIds)
+  const candidates = ACTIVE_CARD_TEMPLATES.filter((t) => !ex.has(t.id))
+  const pool = candidates.length ? candidates : ACTIVE_CARD_TEMPLATES
+  const t = pick(pool)
   return {
     title: t.title,
     description: t.description,

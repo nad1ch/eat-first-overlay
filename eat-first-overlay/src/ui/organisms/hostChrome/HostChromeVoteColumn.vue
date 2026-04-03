@@ -31,6 +31,28 @@ const canStart = computed(() => Boolean(targetPlayerId.value) && !votingActive.v
 const countFor = computed(() => (store.votesLive || []).filter((v) => v.choice !== 'against').length)
 const countAgainst = computed(() => (store.votesLive || []).filter((v) => v.choice === 'against').length)
 const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
+
+const voteHistory = computed(() =>
+  Array.isArray(store.voteHistorySessions) ? store.voteHistorySessions.slice(0, 15) : [],
+)
+
+const handRaiseChips = computed(() => {
+  const hr = store.handRaises && typeof store.handRaises === 'object' ? store.handRaises : {}
+  return Object.keys(hr)
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
+    .map((id) => ({ id, n: Math.max(0, Math.floor(Number(hr[id]) || 0)) }))
+    .filter((x) => x.n > 0)
+})
+
+function sessionTally(sess) {
+  let f = 0
+  let a = 0
+  for (const v of sess?.votes || []) {
+    if (v.choice === 'against') a += 1
+    else f += 1
+  }
+  return { f, a }
+}
 </script>
 
 <template>
@@ -78,6 +100,35 @@ const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
         </li>
       </ul>
       <p v-else-if="votingActive" class="hcc-no-v">{{ t('hostChrome.noVotes') }}</p>
+    </details>
+
+    <details v-if="handRaiseChips.length" class="hcc-sess hcc-sess--hands">
+      <summary class="hcc-sess__sum">✋ {{ t('hostChrome.sessionHands') }}</summary>
+      <ul class="hcc-sess-list">
+        <li v-for="row in handRaiseChips" :key="row.id" class="hcc-sess-li">
+          <span>{{ row.id }}</span>
+          <span class="hcc-sess-n">×{{ row.n }}</span>
+        </li>
+      </ul>
+    </details>
+
+    <details v-if="voteHistory.length" class="hcc-sess hcc-sess--hist">
+      <summary class="hcc-sess__sum">{{ t('hostChrome.sessionHistory') }}</summary>
+      <p class="hcc-sess-hint">{{ t('hostChrome.sessionHistoryHint') }}</p>
+      <div class="hcc-hist-stack">
+        <div v-for="sess in voteHistory" :key="sess.id" class="hcc-hist-card">
+          <p class="hcc-hist-card__title">
+            R{{ sess.round }} · {{ t('hostChrome.target') }} {{ sess.target || '—' }} · 👍 {{ sessionTally(sess).f }} · 👎
+            {{ sessionTally(sess).a }}
+          </p>
+          <ul v-if="sess.votes && sess.votes.length" class="hcc-hist-ul">
+            <li v-for="(v, idx) in sess.votes" :key="sess.id + '-' + idx + '-' + v.voter" class="hcc-hist-li">
+              <span class="hcc-hist-voter">{{ v.voter }}</span>
+              <span class="hcc-hist-glyph">{{ choiceGlyph(v.choice) }}</span>
+            </li>
+          </ul>
+        </div>
+      </div>
     </details>
   </section>
 </template>

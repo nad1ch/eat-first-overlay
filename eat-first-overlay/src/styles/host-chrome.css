@@ -617,6 +617,105 @@
   color: var(--text-muted);
 }
 
+.hcc-sess {
+  margin-top: var(--ui-space-6);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--ui-radius-lg);
+  padding: var(--ui-space-2) var(--ui-space-6) var(--ui-space-6);
+  background: color-mix(in srgb, var(--bg-obs-hint) 92%, transparent);
+}
+
+.hcc-sess__sum {
+  font-size: 0.52rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  cursor: pointer;
+  list-style: none;
+}
+
+.hcc-sess__sum::-webkit-details-marker {
+  display: none;
+}
+
+.hcc-sess-hint {
+  margin: 0.25rem 0 0.35rem;
+  font-size: 0.48rem;
+  line-height: 1.35;
+  color: var(--text-highlight);
+  font-weight: 600;
+}
+
+.hcc-sess-list {
+  list-style: none;
+  margin: 0.2rem 0 0;
+  padding: 0;
+  max-height: 4.5rem;
+  overflow-y: auto;
+}
+
+.hcc-sess-li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.35rem;
+  font-size: 0.52rem;
+  font-family: var(--font-display);
+  padding: 0.12rem 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.hcc-sess-n {
+  font-weight: 800;
+  color: var(--text-body);
+}
+
+.hcc-hist-stack {
+  margin-top: 0.25rem;
+  max-height: 8rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.hcc-hist-card {
+  padding: 0.3rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card-solid);
+}
+
+.hcc-hist-card__title {
+  margin: 0;
+  font-size: 0.5rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--text-body);
+  line-height: 1.35;
+}
+
+.hcc-hist-ul {
+  margin: 0.25rem 0 0;
+  padding: 0 0 0 0.85rem;
+  font-size: 0.48rem;
+}
+
+.hcc-hist-li {
+  margin: 0.08rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.hcc-hist-voter {
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+.hcc-hist-glyph {
+  margin-left: auto;
+}
+
 @container hcc-controls (max-width: 400px) {
   .hcc-show-phase-row {
     gap: var(--ui-space-10);

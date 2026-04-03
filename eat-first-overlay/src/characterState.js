@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { pickRandomActiveCardTemplate } from './data/activeCards.js'
+import { pickRandomActiveCardTemplateAvoiding } from './data/activeCards.js'
 import { normalizeGenderForStorage } from './utils/genderDisplay.js'
 
 export const GAME_TITLE = 'Кого ми з’їмо першим'
@@ -155,8 +155,17 @@ export function snapshotCharacter(target = characterState) {
   return out
 }
 
-export function assignRandomActiveCard(target = characterState) {
-  const t = pickRandomActiveCardTemplate()
+/**
+ * @param {object} [target]
+ * @param {{ usedTemplateIds?: Set<string>, excludeTemplateIds?: Set<string> }} [options]
+ * usedTemplateIds — накопичувальний набір: вибір уникає цих id, після призначення новий templateId додається.
+ * excludeTemplateIds — лише виключення при виборі (наприклад карти інших гравців), без додавання.
+ */
+export function assignRandomActiveCard(target = characterState, options = {}) {
+  const cumulative = options.usedTemplateIds
+  const exclude =
+    cumulative ?? options.excludeTemplateIds ?? new Set()
+  const t = pickRandomActiveCardTemplateAvoiding(exclude)
   target.activeCard = {
     title: t.title,
     description: t.description,
@@ -165,4 +174,5 @@ export function assignRandomActiveCard(target = characterState) {
     templateId: t.templateId,
   }
   target.activeCardRequest = false
+  if (cumulative) cumulative.add(t.templateId)
 }

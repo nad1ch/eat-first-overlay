@@ -3,7 +3,17 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } f
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ADMIN_KEY, HOST_PANEL_QUERY_KEY, HOST_PANEL_QUERY_VALUE } from '../config/access.js'
-import { rollFieldValue, rollRandomIntoCharacter, ages, genders, pickNameForGender } from '../data/randomPools.js'
+import {
+  rollFieldValue,
+  rollRandomIntoCharacter,
+  ages,
+  genders,
+  pickNameForGender,
+  createEmptyUsedState,
+  mergePlayerDataIntoUsedState,
+  traitExcludeSetFromPlayers,
+  activeTemplateExcludeSetFromPlayers,
+} from '../data/randomPools.js'
 import { scenarioIds } from '../data/scenarios.js'
 import {
   characterState,
@@ -12,7 +22,7 @@ import {
   applyRemoteCharacterData,
   snapshotCharacter,
 } from '../characterState'
-import { pickRandomActiveCardTemplate } from '../data/activeCards.js'
+import { pickRandomActiveCardTemplateAvoiding } from '../data/activeCards.js'
 import { applyActiveCardEffect } from '../services/activeCardEffects.js'
 import {
   saveCharacter,
@@ -69,6 +79,11 @@ import {
   getValidatedLastPlayerSlot,
   routeHasExplicitPlayerSlot,
 } from '../utils/persistedPlayerSlot.js'
+import {
+  loadHostSessionStats,
+  saveHostSessionStats,
+  clearHostSessionStats,
+} from '../utils/hostSessionStatsStorage.js'
 import AppPageLoader from '../ui/molecules/AppPageLoader.vue'
 import ConfirmDialog from '../ui/molecules/ConfirmDialog.vue'
 import UiMenuSelect from '../ui/molecules/UiMenuSelect.vue'
@@ -589,6 +604,9 @@ async function controlReset() {
   try {
     loadError.value = null
     await resetGameRoomControls(gameId.value)
+    clearHostSessionStats(gameId.value)
+    hostSessionStats.value = { v: 1, voteSessions: [], handRaises: {} }
+    prevHandsForStats.value = null
     showToast(t('toast.roomReset'))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
@@ -789,30 +807,78 @@ async function submitPlayerVote(choice) {
 }
 
 function revealDemographics(open) {
+  if (!open && !isAdmin.value && characterState.demographicsRevealed) {
+    showToast(t('toast.revealCannotCloseProfile'))
+    return
+  }
+  if (open && !isAdmin.value) {
+    if (characterState.demographicsRevealed) return
+    const ledger = syncRevealLedgerForOpenAttempt()
+    const rr = roomRoundLive.value
+    const profOpen = Boolean(characterState.profession?.revealed)
+    if (rr === 1 && !profOpen) {
+      showToast(t('toast.revealProfessionFirst'))
+      return
+    }
+    if (ledger.count >= ledger.maxForRound) {
+      showToast(t('toast.revealRoundLimit', { round: rr }))
+      return
+    }
+    ledger.count += 1
+  }
   if (open) playRevealFlipSound(0.09)
   characterState.demographicsRevealed = open
   characterState.identityRevealed = open
 }
 
-function computeRevealMaxForRound(rr, professionAlreadyRevealed) {
-  if (rr === 1) return professionAlreadyRevealed ? 1 : 2
+/** Ліміт «слотів» відкриття за раунд (гравець): 6 характеристик + профіль (вік/стать) — кожен слот з ліміту. Раунд 1: два слоти (спочатку професія). Далі: один. */
+function computeRevealMaxForRound(rr) {
+  if (rr === 1) return 2
   return 1
+}
+
+/** Скільки з CORE_FIELD_KEYS зараз відкрито (для узгодження лічильника з Firestore). */
+function countRevealedCoreTraits() {
+  return CORE_FIELD_KEYS.filter((k) => characterState[k]?.revealed === true).length
+}
+
+/** Слоти відкриття: картки + показ профілю (оверлей). */
+function countPlayerRevealSlotsUsed() {
+  return countRevealedCoreTraits() + (characterState.demographicsRevealed ? 1 : 0)
+}
+
+/**
+ * Після зміни полів / завантаження: count не може бути більшим за фактично відкриті слоти
+ * (картки + профіль), інакше лічильник з БД блокує відкриття в тому ж раунді.
+ */
+function reconcilePlayerRevealLedgerCount() {
+  if (isAdmin.value) return
+  const rr = roomRoundLive.value
+  const L = characterState.revealLedger
+  if (!L || typeof L !== 'object') return
+  if (L.round !== rr) return
+  const nUsed = countPlayerRevealSlotsUsed()
+  if (L.count > nUsed) L.count = nUsed
+  L.maxForRound = computeRevealMaxForRound(rr)
 }
 
 /** Синхронізує лічильник відкриттів з поточним раундом кімнати (гравець). */
 function syncRevealLedgerForOpenAttempt() {
   const rr = roomRoundLive.value
-  const prof = Boolean(characterState.profession?.revealed)
-  const maxForRound = computeRevealMaxForRound(rr, prof)
+  const maxForRound = computeRevealMaxForRound(rr)
   const cur = characterState.revealLedger
   if (!cur || typeof cur !== 'object') {
     characterState.revealLedger = { round: rr, count: 0, maxForRound }
+    reconcilePlayerRevealLedgerCount()
     return characterState.revealLedger
   }
   if (cur.round !== rr || !(cur.maxForRound >= 1)) {
     characterState.revealLedger = { round: rr, count: 0, maxForRound }
+    reconcilePlayerRevealLedgerCount()
     return characterState.revealLedger
   }
+  cur.maxForRound = maxForRound
+  reconcilePlayerRevealLedgerCount()
   return cur
 }
 
@@ -827,6 +893,10 @@ function revealTrait(key, open) {
   }
 
   if (!open) {
+    if (!isAdmin.value && CORE_FIELD_KEYS.includes(key) && slot.revealed) {
+      showToast(t('toast.revealCannotCloseTrait'))
+      return
+    }
     playRevealFlipSound(0.09)
     slot.revealed = false
     return
@@ -1017,13 +1087,91 @@ async function hostVotingStart() {
   }
 }
 
-/** Локальний журнал завершених голосувань для ведучого (не в Firestore). */
-const hostVoteLog = ref([])
+/** Локальна статистика сесії (localStorage по gameId): голосування + підрахунок підняття рук. */
+const hostSessionStats = ref({ v: 1, voteSessions: [], handRaises: {} })
 
-function slotLabelShort(id) {
-  const s = String(id ?? '')
-  const m = s.match(/^p(\d+)$/i)
-  return m ? m[1] : s.replace(/^p/i, '') || s
+function persistHostStats() {
+  saveHostSessionStats(gameId.value, {
+    voteSessions: hostSessionStats.value.voteSessions || [],
+    handRaises: hostSessionStats.value.handRaises || {},
+  })
+}
+
+function bumpHandRaiseSlot(pidRaw) {
+  if (!isAdmin.value) return
+  const pid = normalizePlayerSlotId(pidRaw)
+  if (!pid) return
+  const hr = { ...(hostSessionStats.value.handRaises || {}) }
+  hr[pid] = (hr[pid] || 0) + 1
+  hostSessionStats.value = {
+    v: 1,
+    voteSessions: hostSessionStats.value.voteSessions || [],
+    handRaises: hr,
+  }
+  persistHostStats()
+}
+
+/** null = ще не «заряджено» — перший знімок рук без лічильника (щоб не порахувати вже підняті). */
+const prevHandsForStats = ref(null)
+
+watch([gameId, isAdmin], () => {
+  if (!isAdmin.value) return
+  hostSessionStats.value = loadHostSessionStats(gameId.value)
+  prevHandsForStats.value = null
+}, { immediate: true })
+
+watch(
+  () => ({
+    admin: isAdmin.value,
+    snap: gotGameRoomSnap.value,
+    hands: gameRoom.value?.hands,
+  }),
+  ({ admin, snap, hands }) => {
+    if (!admin || !snap) return
+    const h = hands && typeof hands === 'object' ? { ...hands } : {}
+    if (prevHandsForStats.value === null) {
+      prevHandsForStats.value = h
+      return
+    }
+    const prev = prevHandsForStats.value
+    for (const [pid, up] of Object.entries(h)) {
+      if (up === true && prev[pid] !== true) bumpHandRaiseSlot(pid)
+    }
+    prevHandsForStats.value = h
+  },
+  { deep: true },
+)
+
+const hostHandRaiseRows = computed(() => {
+  const hr = hostSessionStats.value?.handRaises || {}
+  const ids = new Set(PLAYER_SLOTS.map((s) => normalizePlayerSlotId(s)))
+  for (const k of Object.keys(hr)) ids.add(normalizePlayerSlotId(k))
+  return [...ids].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
+    .map((id) => ({ id, n: Math.max(0, Math.floor(Number(hr[id]) || 0)) }))
+})
+
+function hostSessionVoteTally(sess) {
+  const votes = sess?.votes || []
+  let forC = 0
+  let ag = 0
+  for (const v of votes) {
+    if (v.choice === 'against') ag += 1
+    else forC += 1
+  }
+  return { forC, ag }
+}
+
+function hostSessionEndedLabel(ts) {
+  const n = Math.floor(Number(ts) || 0)
+  if (!n) return '—'
+  return new Date(n).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+}
+
+function hostClearSessionStatsOnly() {
+  if (!isAdmin.value) return
+  clearHostSessionStats(gameId.value)
+  hostSessionStats.value = { v: 1, voteSessions: [], handRaises: {} }
+  showToast(t('toast.sessionStatsCleared'))
 }
 
 async function hostFinishVoting() {
@@ -1033,12 +1181,24 @@ async function hostFinishVoting() {
     const target = String(gameRoom.value?.voting?.targetPlayer ?? '').trim()
     const rr = roomRoundLive.value
     const list = [...votesLiveRound.value]
-    const parts = list.map(
-      (v) => `${slotLabelShort(v.id)} ${v.choice === 'against' ? 'проти' : 'за'}`,
-    )
-    const time = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })
-    const line = `${time} · R${rr} · ціль ${target || '—'} · ${parts.length ? parts.join(', ') : 'немає голосів'}`
-    hostVoteLog.value = [{ id: `${Date.now()}-${Math.random()}`, line }, ...hostVoteLog.value].slice(0, 40)
+    const votesPayload = list.map((v) => ({
+      voter: normalizePlayerSlotId(v.id),
+      choice: v.choice === 'against' ? 'against' : 'for',
+    }))
+    const entry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      endedAt: Date.now(),
+      round: rr,
+      target: target || '',
+      votes: votesPayload,
+    }
+    const vs = [entry, ...(hostSessionStats.value.voteSessions || [])].slice(0, 50)
+    hostSessionStats.value = {
+      v: 1,
+      voteSessions: vs,
+      handRaises: hostSessionStats.value.handRaises || {},
+    }
+    persistHostStats()
 
     await setRoomVoting(gameId.value, false, '')
     await clearAllVotes(gameId.value)
@@ -1159,12 +1319,28 @@ watchEffect(() => {
     speakingDuration: speakingDuration.value,
     phaseOptions: PHASE_OPTIONS,
     actions: hostChromeActions,
+    voteHistorySessions: hostSessionStats.value.voteSessions || [],
+    handRaises: hostSessionStats.value.handRaises || {},
   })
 })
 
+function buildUsedStateExcludingEditorSlot() {
+  const us = createEmptyUsedState()
+  const eid = String(editorPlayerId.value)
+  for (const p of allPlayers.value) {
+    if (String(p.id) === eid) continue
+    mergePlayerDataIntoUsedState(p, us)
+  }
+  return us
+}
+
 function rerollSingleTrait(fieldKey) {
   if (!isAdmin.value) return
-  characterState[fieldKey].value = rollFieldValue(fieldKey, scenarioForRolls.value)
+  characterState[fieldKey].value = rollFieldValue(
+    fieldKey,
+    scenarioForRolls.value,
+    traitExcludeSetFromPlayers(allPlayers.value, fieldKey, editorPlayerId.value),
+  )
 }
 
 function rerollIdentity() {
@@ -1179,7 +1355,10 @@ function rerollIdentity() {
 
 function generateRandomCharacter() {
   if (!isAdmin.value) return
-  rollRandomIntoCharacter(characterState, { scenarioId: selectedScenario.value })
+  rollRandomIntoCharacter(characterState, {
+    scenarioId: selectedScenario.value,
+    usedState: buildUsedStateExcludingEditorSlot(),
+  })
 }
 
 async function globalRollField(fieldKey) {
@@ -1187,7 +1366,7 @@ async function globalRollField(fieldKey) {
   try {
     loadError.value = null
     const sid = scenarioForRolls.value
-    await applyGlobalAction(gameId.value, fieldKey, () => rollFieldValue(fieldKey, sid))
+    await applyGlobalAction(gameId.value, fieldKey, sid)
     showToast(t('toast.allField', { field: t(`traits.${fieldKey}`) }))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
@@ -1489,6 +1668,7 @@ function applyFromFirestoreSnapshot(data) {
   } finally {
     syncing.value = false
     nextTick(() => {
+      reconcilePlayerRevealLedgerCount()
       skipRemoteAutosave.value = false
     })
   }
@@ -1570,6 +1750,51 @@ const playerRevealLocked = computed(
   () => !isAdmin.value && Boolean(characterState.eliminated),
 )
 
+const HOST_BLOCKS_KEY = 'eat-first:host-blocks-v1'
+function defaultHostBlocksOpen() {
+  return { live: true, activeCard: true, players: true, gen: true, editor: true }
+}
+function readHostBlocksOpen() {
+  if (typeof sessionStorage === 'undefined') return defaultHostBlocksOpen()
+  try {
+    const raw = sessionStorage.getItem(HOST_BLOCKS_KEY)
+    if (!raw) return defaultHostBlocksOpen()
+    const o = JSON.parse(raw)
+    if (!o || typeof o !== 'object') return defaultHostBlocksOpen()
+    return { ...defaultHostBlocksOpen(), ...o }
+  } catch {
+    return defaultHostBlocksOpen()
+  }
+}
+const hostBlocksOpen = ref(readHostBlocksOpen())
+watch(
+  hostBlocksOpen,
+  (v) => {
+    try {
+      sessionStorage.setItem(HOST_BLOCKS_KEY, JSON.stringify(v))
+    } catch {
+      /* ignore */
+    }
+  },
+  { deep: true },
+)
+function hostCollapseAllBlocks() {
+  const o = hostBlocksOpen.value
+  o.live = false
+  o.activeCard = false
+  o.players = false
+  o.gen = false
+  o.editor = false
+}
+function hostExpandAllBlocks() {
+  const o = hostBlocksOpen.value
+  o.live = true
+  o.activeCard = true
+  o.players = true
+  o.gen = true
+  o.editor = true
+}
+
 const activeCardPanelKey = computed(
   () =>
     `${characterState.activeCard.used ? 'u' : 'a'}-${characterState.activeCardRequest ? 'r' : 'n'}-${String(characterState.activeCard.title ?? '').slice(0, 24)}`,
@@ -1582,7 +1807,8 @@ function toggleEliminated() {
 
 function rerollActiveCardOnly() {
   if (!isAdmin.value) return
-  const t = pickRandomActiveCardTemplate()
+  const ex = activeTemplateExcludeSetFromPlayers(allPlayers.value, editorPlayerId.value)
+  const t = pickRandomActiveCardTemplateAvoiding(ex)
   characterState.activeCard = {
     title: t.title,
     description: t.description,
@@ -1609,36 +1835,92 @@ function rerollActiveCardOnly() {
     <div class="mode-strip" :class="{ admin: isAdmin, player: !isAdmin }">
       <span class="mode-label">{{ modeLabel }}</span>
       <span v-if="!isAdmin" class="status-pill" :data-s="myStatusLabel">{{ myStatusLabel }}</span>
-      <button
-        v-if="isAdmin"
-        type="button"
-        class="host-forget-btn"
-        @click="hostForgetSavedAndLeave"
-      >
-        {{ t('control.hostForgetKey') }}
-      </button>
+      <div v-if="isAdmin" class="host-mode-actions">
+        <button type="button" class="host-strip-btn" @click="hostCollapseAllBlocks">
+          {{ t('control.hostCollapseAll') }}
+        </button>
+        <button type="button" class="host-strip-btn" @click="hostExpandAllBlocks">
+          {{ t('control.hostExpandAll') }}
+        </button>
+        <button type="button" class="host-forget-btn" @click="hostForgetSavedAndLeave">
+          {{ t('control.hostForgetKey') }}
+        </button>
+      </div>
     </div>
 
     <template v-if="isAdmin">
       <section class="admin-zone admin-zone--live admin-card admin-zone--live-priority" :aria-label="t('control.ariaLive')">
-        <ShowDeskHeader
-          class="admin-zone__header"
-          :game-title="t('game.title')"
-          :game-id="gameId"
-          :game-phase="String(gameRoom.gamePhase || 'intro')"
-          :scenario-label="t(`scenarios.${selectedScenario}.label`)"
-          :alive-count="aliveCount"
-          :personal-url="personalUrlAbsolute"
-          :global-url="globalUrlAbsolute"
-          @copy-personal="copyPersonal"
-          @copy-global="copyGlobal"
-        />
-        <details v-if="hostVoteLog.length" class="vote-log-details">
-          <summary class="vote-log-details__sum">{{ t('control.voteLog', { n: hostVoteLog.length }) }}</summary>
-          <ul class="vote-log-details__list">
-            <li v-for="row in hostVoteLog" :key="row.id" class="vote-log-details__li">{{ row.line }}</li>
-          </ul>
-        </details>
+        <button
+          type="button"
+          class="host-block-fold"
+          :aria-expanded="hostBlocksOpen.live"
+          @click="hostBlocksOpen.live = !hostBlocksOpen.live"
+        >
+          <span class="host-block-fold__chev" aria-hidden="true">{{ hostBlocksOpen.live ? '▼' : '▶' }}</span>
+          <span class="host-block-fold__label">{{ t('control.hostBlockLive') }}</span>
+        </button>
+        <div v-show="hostBlocksOpen.live" class="host-block-fold__body">
+          <ShowDeskHeader
+            class="admin-zone__header"
+            :game-title="t('game.title')"
+            :game-id="gameId"
+            :game-phase="String(gameRoom.gamePhase || 'intro')"
+            :scenario-label="t(`scenarios.${selectedScenario}.label`)"
+            :alive-count="aliveCount"
+            :personal-url="personalUrlAbsolute"
+            :global-url="globalUrlAbsolute"
+            @copy-personal="copyPersonal"
+            @copy-global="copyGlobal"
+          />
+          <details v-if="isAdmin" class="host-session-stats">
+            <summary class="host-session-stats__sum">{{ t('control.hostSessionTitle') }}</summary>
+            <div class="host-session-stats__inner">
+              <section class="host-session-stats__block" :aria-label="t('control.hostSessionHands')">
+                <h4 class="host-session-stats__h">{{ t('control.hostSessionHands') }}</h4>
+                <p class="host-session-stats__hint">{{ t('control.hostSessionHandsHint') }}</p>
+                <ul class="host-session-hands">
+                  <li v-for="row in hostHandRaiseRows" :key="row.id" class="host-session-hands__li">
+                    <span class="host-session-hands__id">{{ row.id }}</span>
+                    <span class="host-session-hands__n">✋ × {{ row.n }}</span>
+                  </li>
+                </ul>
+              </section>
+              <section class="host-session-stats__block" :aria-label="t('control.hostSessionVotes')">
+                <h4 class="host-session-stats__h">{{ t('control.hostSessionVotes') }}</h4>
+                <p v-if="!(hostSessionStats.voteSessions && hostSessionStats.voteSessions.length)" class="host-session-muted">
+                  {{ t('control.hostSessionVotesEmpty') }}
+                </p>
+                <div
+                  v-for="sess in hostSessionStats.voteSessions"
+                  :key="sess.id"
+                  class="host-session-vote-card"
+                >
+                  <div class="host-session-vote-card__head">
+                    <span class="host-session-vote-card__meta"
+                      >R{{ sess.round }} · {{ t('control.hostSessionTarget') }} {{ sess.target || '—' }}</span
+                    >
+                    <span class="host-session-vote-card__tally"
+                      >👍 {{ hostSessionVoteTally(sess).forC }} · 👎 {{ hostSessionVoteTally(sess).ag }} ·
+                      {{ hostSessionEndedLabel(sess.endedAt) }}</span
+                    >
+                  </div>
+                  <ul v-if="sess.votes && sess.votes.length" class="host-session-vote-card__ul">
+                    <li v-for="(v, idx) in sess.votes" :key="sess.id + '-' + idx + '-' + v.voter" class="host-session-vote-card__li">
+                      <span class="host-session-vote-card__voter">{{ v.voter }}</span>
+                      <span class="host-session-vote-card__arrow">→</span>
+                      <span class="host-session-vote-card__tgt">{{ sess.target || '—' }}</span>
+                      <span class="host-session-vote-card__ch">{{ v.choice === 'against' ? '👎' : '👍' }}</span>
+                    </li>
+                  </ul>
+                  <p v-else class="host-session-muted host-session-muted--tight">{{ t('control.hostSessionNoBallots') }}</p>
+                </div>
+              </section>
+              <button type="button" class="btn-soft host-session-clear" @click="hostClearSessionStatsOnly">
+                {{ t('control.hostSessionClear') }}
+              </button>
+            </div>
+          </details>
+        </div>
       </section>
 
       <section
@@ -1646,7 +1928,16 @@ function rerollActiveCardOnly() {
         class="admin-zone admin-zone--players admin-zone--host-active-card"
         :aria-label="t('control.ariaActiveCard')"
       >
-        <h2 class="zone-kicker">{{ t('control.activeCard') }} · {{ editorPlayerId }}</h2>
+        <button
+          type="button"
+          class="host-block-fold"
+          :aria-expanded="hostBlocksOpen.activeCard"
+          @click="hostBlocksOpen.activeCard = !hostBlocksOpen.activeCard"
+        >
+          <span class="host-block-fold__chev" aria-hidden="true">{{ hostBlocksOpen.activeCard ? '▼' : '▶' }}</span>
+          <span class="host-block-fold__label zone-kicker zone-kicker--fold">{{ t('control.activeCard') }} · {{ editorPlayerId }}</span>
+        </button>
+        <div v-show="hostBlocksOpen.activeCard" class="host-block-fold__body">
         <div class="active-card-box active-card-box--host-standalone">
           <div v-if="characterState.activeCardRequest" class="card-request-host">
             <p class="card-request-host__text">{{ t('control.cardRequestHost') }}</p>
@@ -1699,6 +1990,7 @@ function rerollActiveCardOnly() {
             </button>
           </div>
         </div>
+        </div>
       </section>
 
       <section
@@ -1706,7 +1998,16 @@ function rerollActiveCardOnly() {
         :class="{ 'admin-zone--nominated-active': nominatedPlayerActive }"
         :aria-label="t('control.ariaPlayers')"
       >
-        <h2 class="zone-kicker">{{ t('control.zonePlayers') }}</h2>
+        <button
+          type="button"
+          class="host-block-fold"
+          :aria-expanded="hostBlocksOpen.players"
+          @click="hostBlocksOpen.players = !hostBlocksOpen.players"
+        >
+          <span class="host-block-fold__chev" aria-hidden="true">{{ hostBlocksOpen.players ? '▼' : '▶' }}</span>
+          <span class="host-block-fold__label zone-kicker zone-kicker--fold">{{ t('control.zonePlayers') }}</span>
+        </button>
+        <div v-show="hostBlocksOpen.players" class="host-block-fold__body">
         <ShowPlayersRoster
           v-model:selected-player-id="selectedDeskPlayerId"
           :players="allPlayers"
@@ -1746,10 +2047,22 @@ function rerollActiveCardOnly() {
             <button type="button" class="btn-soft btn-lift" @click="createAndGoToPlayer">+</button>
           </div>
         </aside>
+        </div>
       </section>
 
       <section class="admin-zone admin-zone--generate admin-zone--tier-lower" :aria-label="t('control.ariaGen')">
-        <h2 class="zone-kicker zone-kicker--soft zone-kicker--gen-title">{{ t('control.zoneGen') }}</h2>
+        <button
+          type="button"
+          class="host-block-fold host-block-fold--soft"
+          :aria-expanded="hostBlocksOpen.gen"
+          @click="hostBlocksOpen.gen = !hostBlocksOpen.gen"
+        >
+          <span class="host-block-fold__chev" aria-hidden="true">{{ hostBlocksOpen.gen ? '▼' : '▶' }}</span>
+          <span class="host-block-fold__label zone-kicker zone-kicker--soft zone-kicker--gen-title zone-kicker--fold">{{
+            t('control.zoneGen')
+          }}</span>
+        </button>
+        <div v-show="hostBlocksOpen.gen" class="host-block-fold__body">
         <div class="gen-bar gen-bar--actions gen-bar--compact">
           <button type="button" class="btn-neon btn-neon--compact" @click="askGenerateRandomCharacter">
             {{ t('control.genPlayer') }}
@@ -1801,6 +2114,7 @@ function rerollActiveCardOnly() {
             variant="block"
           />
           <button type="button" class="btn-primary btn-primary--compact" @click="askGlobalRollSelected">OK</button>
+        </div>
         </div>
       </section>
 
@@ -1887,8 +2201,21 @@ function rerollActiveCardOnly() {
         <span class="panel-hydrate-spinner" />
         <span class="panel-hydrate-label">{{ t('loader.panelCard') }}</span>
       </div>
-      <h2 class="panel-kicker">{{ isAdmin ? t('control.editorTitle', { id: editorPlayerId }) : t('control.yourChar') }}</h2>
+      <div class="editor-panel__head">
+        <h2 class="panel-kicker">{{ isAdmin ? t('control.editorTitle', { id: editorPlayerId }) : t('control.yourChar') }}</h2>
+        <button
+          v-if="isAdmin"
+          type="button"
+          class="host-block-fold host-block-fold--panel"
+          :aria-expanded="hostBlocksOpen.editor"
+          :aria-label="hostBlocksOpen.editor ? t('control.hostSectionCollapse') : t('control.hostSectionExpand')"
+          @click="hostBlocksOpen.editor = !hostBlocksOpen.editor"
+        >
+          <span class="host-block-fold__chev" aria-hidden="true">{{ hostBlocksOpen.editor ? '▼' : '▶' }}</span>
+        </button>
+      </div>
 
+      <div v-show="!isAdmin || hostBlocksOpen.editor" class="editor-panel__collapsible">
       <div v-if="isAdmin" class="trait-block trait-block--identity">
         <div class="trait-toolbar">
           <span class="trait-label">{{ t('control.profileOverlay') }}</span>
@@ -2079,6 +2406,7 @@ function rerollActiveCardOnly() {
           {{ characterState.eliminated ? 'Повернути в гру' : 'Вибув' }}
         </button>
       </div>
+      </div>
     </section>
 
     <Teleport to="body">
@@ -2100,6 +2428,76 @@ function rerollActiveCardOnly() {
 .admin-zone--live-priority.admin-card {
   border-color: var(--border-strong);
   box-shadow: 0 0 32px var(--accent-glow);
+}
+
+.host-block-fold {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  margin: 0 0 0.5rem;
+  padding: 0.35rem 0.15rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--text-muted-soft);
+  border-radius: 10px;
+  box-sizing: border-box;
+}
+
+.host-block-fold:hover {
+  color: var(--text-heading);
+  background: var(--bg-muted);
+}
+
+.host-block-fold--soft {
+  color: var(--text-muted);
+}
+
+.host-block-fold__chev {
+  flex-shrink: 0;
+  width: 1.1rem;
+  font-size: 0.65rem;
+  opacity: 0.85;
+}
+
+.host-block-fold__label {
+  flex: 1;
+  margin: 0;
+}
+
+.zone-kicker--fold {
+  margin: 0;
+  text-align: left;
+}
+
+.host-block-fold__body {
+  min-width: 0;
+}
+
+.host-block-fold--panel {
+  margin: 0;
+  padding: 0.2rem 0.35rem;
+  width: auto;
+  flex-shrink: 0;
+}
+
+.editor-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.editor-panel__head .panel-kicker {
+  margin-bottom: 0;
+}
+
+.editor-panel__collapsible {
+  min-width: 0;
 }
 
 .admin-zone {
@@ -2229,6 +2627,157 @@ function rerollActiveCardOnly() {
 
 .vote-log-details__li {
   margin: 0.2rem 0;
+}
+
+.host-session-stats {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.65rem 0.65rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-cyan-strong, var(--border-subtle));
+  background: color-mix(in srgb, var(--bg-muted) 88%, var(--bg-card-solid));
+  font-size: 0.7rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.host-session-stats__sum {
+  cursor: pointer;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 0.62rem;
+  color: var(--text-cyan, var(--text-muted));
+  list-style: none;
+}
+
+.host-session-stats__sum::-webkit-details-marker {
+  display: none;
+}
+
+.host-session-stats__inner {
+  margin-top: 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.host-session-stats__block {
+  min-width: 0;
+}
+
+.host-session-stats__h {
+  margin: 0 0 0.35rem;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.host-session-stats__hint {
+  margin: 0 0 0.45rem;
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.host-session-muted {
+  margin: 0.25rem 0 0;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.host-session-muted--tight {
+  margin: 0.2rem 0 0;
+}
+
+.host-session-hands {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+  gap: 0.35rem 0.65rem;
+}
+
+.host-session-hands__li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.28rem 0.45rem;
+  border-radius: 8px;
+  background: var(--bg-card-solid);
+  border: 1px solid var(--border-subtle);
+  font-family: var(--font-display, monospace);
+  font-size: 0.68rem;
+}
+
+.host-session-hands__n {
+  font-weight: 800;
+  color: var(--text-highlight, var(--text-heading));
+}
+
+.host-session-vote-card {
+  margin-top: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card-solid);
+}
+
+.host-session-vote-card__head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.host-session-vote-card__meta {
+  font-weight: 700;
+  color: var(--text-heading);
+  font-size: 0.66rem;
+}
+
+.host-session-vote-card__tally {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+}
+
+.host-session-vote-card__ul {
+  margin: 0.45rem 0 0;
+  padding: 0 0 0 1rem;
+  font-size: 0.64rem;
+}
+
+.host-session-vote-card__li {
+  margin: 0.15rem 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.host-session-vote-card__voter {
+  font-weight: 700;
+  font-family: var(--font-display, monospace);
+}
+
+.host-session-vote-card__arrow {
+  opacity: 0.45;
+}
+
+.host-session-vote-card__tgt {
+  opacity: 0.85;
+}
+
+.host-session-vote-card__ch {
+  margin-left: auto;
+}
+
+.host-session-clear {
+  align-self: flex-start;
+  font-size: 0.62rem;
 }
 
 .admin-zone--generate {
@@ -2535,8 +3084,34 @@ function rerollActiveCardOnly() {
   border-color: var(--border-panel);
 }
 
-.host-forget-btn {
+.host-mode-actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.host-strip-btn {
+  padding: 0.28rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-muted-soft);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.host-strip-btn:hover {
+  color: var(--text-heading);
+  border-color: var(--border);
+}
+
+.host-forget-btn {
+  margin-left: 0;
   padding: 0.28rem 0.55rem;
   border-radius: 8px;
   border: 1px solid var(--border-subtle);
