@@ -112,8 +112,9 @@ const emit = defineEmits(['copy-personal', 'copy-global'])
 
 .desk-copy-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
+  align-items: stretch;
 }
 
 @media (max-width: 720px) {
@@ -123,6 +124,9 @@ const emit = defineEmits(['copy-personal', 'copy-global'])
 }
 
 .copy-block {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
   padding: 0.65rem 0.75rem;
   border-radius: 14px;
   background: var(--bg-muted);

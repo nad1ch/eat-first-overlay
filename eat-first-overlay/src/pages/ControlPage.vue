@@ -50,6 +50,7 @@ import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
 import { normalizePlayerSlotId } from '../utils/playerSlot.js'
 import { formatGenderDisplay } from '../utils/genderDisplay.js'
 import AppPageLoader from '../components/ui/AppPageLoader.vue'
+import UiMenuSelect from '../ui/molecules/UiMenuSelect.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -110,6 +111,13 @@ const selectedScenario = ref('classic_crash')
 const timerSpeakerSlot = ref('p1')
 const speakingDuration = ref(30)
 const globalFieldPick = ref('profession')
+
+const scenarioMenuOptions = computed(() =>
+  scenarioIds.map((sid) => ({ value: sid, label: t(`scenarios.${sid}.label`) })),
+)
+const fieldMenuOptions = computed(() =>
+  fieldConfig.map((row) => ({ value: row.key, label: t(`traits.${row.key}`) })),
+)
 
 const gameRoom = ref({})
 const allPlayers = ref([])
@@ -1139,25 +1147,30 @@ function rerollActiveCardOnly() {
         <h2 class="zone-kicker zone-kicker--soft zone-kicker--gen-title">{{ t('control.zoneGen') }}</h2>
         <div class="gen-bar gen-bar--actions gen-bar--compact">
           <button type="button" class="btn-neon btn-neon--compact" @click="generateRandomCharacter">
-            Generate Player
+            {{ t('control.genPlayer') }}
           </button>
           <button type="button" class="btn-neon btn-neon--wide btn-neon--compact" @click="regenerateAllPlayers">
-            Generate all players
+            {{ t('control.genAll') }}
           </button>
           <button
             type="button"
             class="btn-neon btn-neon--soft btn-neon--compact"
             @click="regenerateActiveCardsForAllPlayers"
           >
-            Active cards — all players
+            {{ t('control.genActiveAll') }}
           </button>
         </div>
         <p class="hint-sc hint-sc--tight hint-sc--muted">{{ t(`scenarios.${selectedScenario}.hint`) }}</p>
         <div class="scenario-row">
           <label class="field-label field-label--inline">{{ t('control.scenario') }}</label>
-          <select v-model="selectedScenario" class="input select select--compact" @change="persistScenarioChoice">
-            <option v-for="sid in scenarioIds" :key="sid" :value="sid">{{ t(`scenarios.${sid}.label`) }}</option>
-          </select>
+          <UiMenuSelect
+            v-model="selectedScenario"
+            class="control-menu-select"
+            :options="scenarioMenuOptions"
+            :aria-label="t('control.scenario')"
+            variant="block"
+            @change="persistScenarioChoice"
+          />
         </div>
         <h3 class="sub-kicker sub-kicker--soft">{{ t('control.globalAll') }}</h3>
         <div class="global-btns global-btns--compact">
@@ -1168,9 +1181,13 @@ function rerollActiveCardOnly() {
         </div>
         <div class="pick-row pick-row--compact">
           <label class="field-label">{{ t('control.fieldForAll') }}</label>
-          <select v-model="globalFieldPick" class="input select select--compact">
-            <option v-for="row in fieldConfig" :key="row.key" :value="row.key">{{ t(`traits.${row.key}`) }}</option>
-          </select>
+          <UiMenuSelect
+            v-model="globalFieldPick"
+            class="control-menu-select"
+            :options="fieldMenuOptions"
+            :aria-label="t('control.fieldForAll')"
+            variant="block"
+          />
           <button type="button" class="btn-primary btn-primary--compact" @click="globalRollSelected">OK</button>
         </div>
       </section>
@@ -1649,9 +1666,7 @@ function rerollActiveCardOnly() {
   margin: 0;
 }
 
-.select--compact {
-  padding: 0.38rem 0.5rem;
-  font-size: 0.76rem;
+.control-menu-select {
   flex: 1 1 12rem;
   min-width: 10rem;
   max-width: 22rem;

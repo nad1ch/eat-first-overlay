@@ -1,8 +1,10 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import OverlayPage from './pages/OverlayPage.vue'
-import ControlPage from './pages/ControlPage.vue'
-import JoinPage from './pages/JoinPage.vue'
-import AdminGatePage from './pages/AdminGatePage.vue'
+import { trackPageView } from './analytics/bootstrap.js'
+
+const JoinPage = () => import('./pages/JoinPage.vue')
+const AdminGatePage = () => import('./pages/AdminGatePage.vue')
+const OverlayPage = () => import('./pages/OverlayPage.vue')
+const ControlPage = () => import('./pages/ControlPage.vue')
 
 const routes = [
   { path: '/join', name: 'join', component: JoinPage },
@@ -15,4 +17,17 @@ const routes = [
 export const router = createRouter({
   history: createWebHistory(),
   routes,
+})
+
+const DOC_TITLE_BASE = 'Кого ми з’їмо першим'
+
+router.afterEach((to) => {
+  const byPath = {
+    '/join': `${DOC_TITLE_BASE} · Лобі`,
+    '/admin': `${DOC_TITLE_BASE} · Доступ ведучого`,
+    '/control': `${DOC_TITLE_BASE} · Панель`,
+    '/overlay': `${DOC_TITLE_BASE} · Overlay`,
+  }
+  document.title = byPath[to.path] ?? DOC_TITLE_BASE
+  trackPageView(to.fullPath)
 })

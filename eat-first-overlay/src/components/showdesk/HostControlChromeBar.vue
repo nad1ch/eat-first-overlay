@@ -419,7 +419,8 @@ function act(name, ...args) {
 .hcc-right {
   flex: 1 1 420px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
   gap: 0.85rem;
   min-width: min(100%, 320px);
 }
@@ -431,6 +432,11 @@ function act(name, ...args) {
 }
 
 .hcc-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
   padding: 0.65rem 0.75rem 0.75rem;
   border-radius: 14px;
   border: 1px solid var(--border);

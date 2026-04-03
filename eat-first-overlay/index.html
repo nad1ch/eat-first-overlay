@@ -2,18 +2,46 @@
 <html lang="uk">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Інтерфейс шоу «Кого ми з’їмо першим»: лобі, панель гравця та ведучого, overlay для OBS. Канал nad1ch." />
     <link rel="icon" type="image/png" href="/favicon.png" sizes="512x512" />
     <link rel="apple-touch-icon" href="/favicon.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#5b21b6" />
+    <meta name="color-scheme" content="dark light" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Кого ми з’їмо першим — show UI" />
+    <meta property="og:description" content="Лобі, control-панель і браузерний overlay для стріму. Офіційний UI шоу nad1ch." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Кого ми з’їмо першим — show UI" />
+    <meta name="twitter:description" content="Лобі, control-панель і браузерний overlay для стріму." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Orbitron:wght@500;700;800;900&display=swap"
+    />
+    <link
       href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Orbitron:wght@500;700;800;900&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
     />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Orbitron:wght@500;700;800;900&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
     <title>Кого ми з’їмо першим</title>
   </head>
   <body>
+    <noscript>
+      <p>
+        Інтерфейс шоу «Кого ми з’їмо першим» — лобі, панель гравця та ведучого, overlay для OBS. Увімкніть JavaScript,
+        щоб користуватися додатком.
+      </p>
+    </noscript>
     <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
   </body>

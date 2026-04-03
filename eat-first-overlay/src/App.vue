@@ -5,13 +5,16 @@ import { useI18n } from 'vue-i18n'
 import { useTheme } from './composables/useTheme.js'
 import { hostControlChromeStore } from './composables/hostControlChrome.js'
 import HostControlChromeBar from './components/showdesk/HostControlChromeBar.vue'
+import AppHeaderToolbar from './ui/organisms/AppHeaderToolbar.vue'
+import AppSiteFooter from './ui/organisms/AppSiteFooter.vue'
 import { persistLocale, LOCALE_OPTIONS } from './i18n'
+
+const localeMenuOptions = LOCALE_OPTIONS.map((o) => ({ value: o.code, label: o.label }))
 
 const route = useRoute()
 const { t, locale } = useI18n()
 const { theme, toggleTheme } = useTheme()
 
-/** На /control не включаємо `player` у key — інакше Vue перемонтовує всю сторінку при зміні слота ведучим. */
 const routeViewKey = computed(() => {
   if (route.path === '/control') {
     const q = route.query
@@ -21,24 +24,12 @@ const routeViewKey = computed(() => {
 })
 
 const showChrome = computed(() => route.path !== '/overlay')
-
 const hostChromeOn = computed(() => hostControlChromeStore.active === true)
-
 const votingGlow = computed(() => Boolean(hostControlChromeStore.gameRoom?.voting?.active))
-
-/** М’який перехід між сторінками (оверлей — лише fade). */
 const routeTransition = computed(() => (route.path === '/overlay' ? 'route-fade' : 'route-slide'))
-
 const themeIcon = computed(() => (theme.value === 'dark' ? '☀️' : '🌙'))
 const themeLabel = computed(() => (theme.value === 'dark' ? t('app.themeLight') : t('app.themeDark')))
-
-function onLocaleChange(ev) {
-  persistLocale(ev.target.value)
-}
-
 const footerYear = new Date().getFullYear()
-
-const streamerTwitchUrl = 'https://www.twitch.tv/nad1ch'
 </script>
 
 <template>
@@ -52,41 +43,14 @@ const streamerTwitchUrl = 'https://www.twitch.tv/nad1ch'
         <span class="app-shell-brand">{{
           hostChromeOn ? t('app.brandHost') : t('game.title')
         }}</span>
-        <div class="app-shell-header__end">
-          <a
-            class="app-shell-mini-brand"
-            :href="streamerTwitchUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-            :aria-label="t('app.twitchAria')"
-          >
-            <img
-              class="app-shell-mini-brand__logo"
-              src="/brand-nad1ch-transparent.png"
-              width="32"
-              height="32"
-              alt=""
-            />
-            <span class="app-shell-mini-brand__nick">nad1ch</span>
-          </a>
-          <select
-            class="locale-select"
-            :aria-label="t('app.langAria')"
-            :value="locale"
-            @change="onLocaleChange"
-          >
-            <option v-for="opt in LOCALE_OPTIONS" :key="opt.code" :value="opt.code">{{ opt.label }}</option>
-          </select>
-          <button
-            type="button"
-            class="theme-toggle"
-            :title="themeLabel"
-            :aria-label="themeLabel"
-            @click="toggleTheme"
-          >
-            {{ themeIcon }}
-          </button>
-        </div>
+        <AppHeaderToolbar
+          :locale-menu-options="localeMenuOptions"
+          :model-locale="locale"
+          :theme-icon="themeIcon"
+          :theme-label="themeLabel"
+          @update:locale="persistLocale"
+          @toggle-theme="toggleTheme"
+        />
       </div>
       <HostControlChromeBar v-if="hostChromeOn" />
     </header>
@@ -98,33 +62,7 @@ const streamerTwitchUrl = 'https://www.twitch.tv/nad1ch'
       </RouterView>
     </main>
 
-    <footer v-if="showChrome" class="app-site-footer">
-      <div class="app-site-footer__inner">
-        <a
-          class="app-site-footer__brand-link"
-          :href="streamerTwitchUrl"
-          target="_blank"
-          rel="noopener noreferrer"
-          :aria-label="t('app.twitchAria')"
-        >
-          <div class="app-site-footer__logo-wrap">
-            <img
-              class="app-site-footer__logo"
-              src="/brand-nad1ch-transparent.png"
-              width="44"
-              height="44"
-              alt=""
-            />
-          </div>
-          <span class="app-site-footer__nick">nad1ch</span>
-        </a>
-        <div class="app-site-footer__meta">
-          <p class="app-site-footer__copy">
-            {{ t('app.footerLine', { year: footerYear }) }}
-          </p>
-        </div>
-      </div>
-    </footer>
+    <AppSiteFooter v-if="showChrome" :year="footerYear" />
   </div>
 </template>
 
