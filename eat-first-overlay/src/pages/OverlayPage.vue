@@ -46,6 +46,18 @@ const gameRoom = ref({})
 const votes = ref([])
 const aliveForCinema = ref(0)
 
+/** Якщо в URL є ?token= і він не збігається з joinToken у Firestore — приховуємо картку. Без token — як раніше (OBS). */
+const overlayTokenGateBlocks = computed(() => {
+  if (!isPersonal.value) return false
+  const urlTok = String(route.query.token ?? '').trim()
+  if (!urlTok) return false
+  const p = singlePlayer.value
+  if (!p) return false
+  const st = typeof p.joinToken === 'string' ? p.joinToken.trim() : ''
+  if (!st) return false
+  return urlTok !== st
+})
+
 let unsubscribe = null
 let unsubPlayersCount = null
 let unsubGameRoom = null
@@ -458,7 +470,15 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <div v-if="isPersonal && !singlePlayer" class="personal-wait" role="status">
+    <div v-if="isPersonal && overlayTokenGateBlocks" class="overlay-token-wall" role="alert">
+      <p class="overlay-token-wall__title">{{ t('overlayPage.tokenMismatchTitle') }}</p>
+      <p class="overlay-token-wall__hint">{{ t('overlayPage.tokenMismatchHint') }}</p>
+      <button type="button" class="overlay-token-wall__btn" @click="router.push({ path: '/join', query: { game: gameId } })">
+        {{ t('overlayPage.tokenMismatchCta') }}
+      </button>
+    </div>
+
+    <div v-else-if="isPersonal && !singlePlayer" class="personal-wait" role="status">
       <span class="personal-wait__spin" aria-hidden="true" />
       <span class="personal-wait__msg">{{ t('overlayPage.noData', { id: personalPlayerId }) }}</span>
     </div>
@@ -480,7 +500,7 @@ onUnmounted(() => {
       <p class="overlay-vote-top__hint">{{ t('overlayPage.voteInPanel') }}</p>
     </div>
 
-    <div v-if="isPersonal" class="single-stage single-stage--hud">
+    <div v-if="isPersonal && !overlayTokenGateBlocks" class="single-stage single-stage--hud">
       <OverlayPlayerCard
         v-if="singlePlayer"
         :player="singlePlayer"
@@ -890,6 +910,56 @@ onUnmounted(() => {
 .overlay-firestore-wait__txt {
   font-size: 0.82rem;
   color: rgba(226, 220, 255, 0.88);
+}
+
+.overlay-token-wall {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  padding: 1.5rem;
+  text-align: center;
+  background: rgba(10, 8, 18, 0.92);
+  color: rgba(226, 220, 255, 0.95);
+  animation: ui-fade-in 0.35s ease both;
+}
+
+.overlay-token-wall__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.overlay-token-wall__hint {
+  margin: 0;
+  max-width: 22rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: rgba(226, 220, 255, 0.72);
+}
+
+.overlay-token-wall__btn {
+  margin-top: 0.35rem;
+  padding: 0.5rem 1rem;
+  border-radius: 10px;
+  font-weight: 800;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border: 1px solid rgba(196, 181, 253, 0.45);
+  background: rgba(168, 85, 247, 0.25);
+  color: rgba(251, 245, 255, 0.98);
+}
+
+.overlay-token-wall__btn:hover {
+  filter: brightness(1.08);
 }
 
 .personal-wait {

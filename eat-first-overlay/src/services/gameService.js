@@ -404,6 +404,65 @@ export async function setGameHandRaised(gameId, playerId, raised) {
 }
 
 /**
+ * Зайняти слот із лобі: joinToken + joinDeviceId (Firestore transaction — перший клік забирає слот).
+ * Повторний вхід з того самого deviceId видає новий токен.
+ * @param {{ deviceId?: string, name?: string }} options
+ * @returns {Promise<{ ok: true, token: string } | { ok: false, reason: 'taken' | 'no-slot' | 'no-device' }>}
+ */
+export async function claimPlayerSlot(gameId, playerId, options = {}) {
+  const gid = String(gameId ?? '').trim()
+  const pid = normalizePlayerSlotId(playerId)
+  const deviceId = String(options.deviceId ?? '').trim()
+  const displayName = String(options.name ?? '').trim().slice(0, 64)
+  if (!gid || !pid) return { ok: false, reason: 'no-slot' }
+  if (deviceId.length < 8) return { ok: false, reason: 'no-device' }
+
+  const token = (() => {
+    try {
+      const a = new Uint8Array(24)
+      crypto.getRandomValues(a)
+      return Array.from(a, (b) => b.toString(16).padStart(2, '0')).join('')
+    } catch {
+      return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 20)}`.replace(/[^a-z0-9]/gi, '')
+        .slice(0, 48)
+    }
+  })()
+
+  const pref = playerDocRef(gid, pid)
+
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(pref)
+      if (!snap.exists()) {
+        const e = new Error('NO_SLOT')
+        e.code = 'NO_SLOT'
+        throw e
+      }
+      const d = snap.data()
+      const exTok = typeof d.joinToken === 'string' ? d.joinToken.trim() : ''
+      const exDev = typeof d.joinDeviceId === 'string' ? d.joinDeviceId.trim() : ''
+      if (exTok.length > 0 && exDev !== deviceId) {
+        const e = new Error('TAKEN')
+        e.code = 'TAKEN'
+        throw e
+      }
+      const patch = {
+        joinToken: token,
+        joinDeviceId: deviceId,
+        joinClaimedAt: Timestamp.now(),
+      }
+      if (displayName) patch.name = displayName
+      tx.update(pref, patch)
+    })
+    return { ok: true, token }
+  } catch (e) {
+    if (e && e.code === 'TAKEN') return { ok: false, reason: 'taken' }
+    if (e && e.code === 'NO_SLOT') return { ok: false, reason: 'no-slot' }
+    throw e
+  }
+}
+
+/**
  * Голос з персонального оверлею: games/{gameId}/votes/{voterPlayerId}
  * Один голос на раунд: якщо вже є запис з тим самим round — не писати.
  * @returns {{ ok: true } | { ok: false, reason: string }}

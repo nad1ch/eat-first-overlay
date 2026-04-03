@@ -1,13 +1,17 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { subscribeToGameRoom, subscribeToPlayers } from '../services/gameService'
+import { subscribeToGameRoom, subscribeToPlayers, claimPlayerSlot } from '../services/gameService'
+import { getOrCreateDeviceId } from '../utils/deviceId.js'
+import { setJoinSessionToken } from '../utils/joinSessionToken.js'
+import { useI18n } from 'vue-i18n'
 import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
 import AppPageLoader from '../ui/molecules/AppPageLoader.vue'
 import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId.js'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 
 const gameInput = ref('test1')
 
@@ -105,8 +109,10 @@ watch(
 
 onUnmounted(() => {
   clearJoinLoaderFallback()
+  if (joinToastTimer) clearTimeout(joinToastTimer)
   if (unsub) unsub()
   if (unsubRoom) unsubRoom()
+  if (typeof document !== 'undefined') document.body.style.overflow = ''
 })
 
 const SLOT_IDS = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10']
@@ -123,12 +129,119 @@ function slotNum(id) {
   return s.replace(/^p/i, '') || s
 }
 
+/** OBS / стрім: без токена (публічне джерело). */
 function openPersonalOverlay(pid) {
   router.push({ path: '/overlay', query: { game: gameId.value, player: String(pid).trim() } })
 }
 
-function openPlayerControl(pid) {
-  router.push({ path: '/control', query: { game: gameId.value, player: String(pid).trim() } })
+const joinActionBusy = ref(false)
+const joinToast = ref('')
+let joinToastTimer = null
+
+const nameModalOpen = ref(false)
+const pendingClaimPlayerId = ref('')
+const nameModalDraft = ref('')
+const nameModalInputRef = ref(null)
+
+watch(nameModalOpen, (open) => {
+  if (typeof document === 'undefined') return
+  document.body.style.overflow = open ? 'hidden' : ''
+})
+
+function showJoinToast(msg) {
+  joinToast.value = msg
+  if (joinToastTimer) clearTimeout(joinToastTimer)
+  joinToastTimer = setTimeout(() => {
+    joinToastTimer = null
+    joinToast.value = ''
+  }, 4200)
+}
+
+function slotJoinToken(p) {
+  const t = p && typeof p.joinToken === 'string' ? p.joinToken.trim() : ''
+  return t.length > 0 ? t : ''
+}
+
+function slotTakenByOther(p) {
+  const tok = slotJoinToken(p)
+  if (!tok) return false
+  const dev = typeof p.joinDeviceId === 'string' ? p.joinDeviceId.trim() : ''
+  return dev.length > 0 && dev !== getOrCreateDeviceId()
+}
+
+function slotIsMine(p) {
+  const tok = slotJoinToken(p)
+  if (!tok) return false
+  const dev = typeof p.joinDeviceId === 'string' ? p.joinDeviceId.trim() : ''
+  return dev === getOrCreateDeviceId()
+}
+
+function resetNameModal() {
+  nameModalOpen.value = false
+  pendingClaimPlayerId.value = ''
+  nameModalDraft.value = ''
+}
+
+function cancelNameModal() {
+  resetNameModal()
+}
+
+async function confirmNameModal() {
+  const id = pendingClaimPlayerId.value
+  if (!id) {
+    resetNameModal()
+    return
+  }
+  const displayName = String(nameModalDraft.value ?? '').trim().slice(0, 64)
+  resetNameModal()
+  await runClaimSlot(id, displayName)
+}
+
+/** Панель гравця: зайняття слота + токен у URL. */
+async function runClaimSlot(id, displayName) {
+  if (!id || joinActionBusy.value) return
+  joinActionBusy.value = true
+  try {
+    const res = await claimPlayerSlot(gameId.value, id, {
+      deviceId: getOrCreateDeviceId(),
+      name: displayName,
+    })
+    if (!res.ok) {
+      if (res.reason === 'taken') showJoinToast(t('join.slotTakenToast'))
+      else if (res.reason === 'no-slot') showJoinToast(t('join.noPlayerDoc'))
+      else if (res.reason === 'no-device') showJoinToast(t('join.noDevice'))
+      return
+    }
+    setJoinSessionToken(gameId.value, id, res.token)
+    router.push({
+      path: '/control',
+      query: { game: gameId.value, player: id, token: res.token },
+    })
+  } catch (e) {
+    showJoinToast(e instanceof Error ? e.message : String(e))
+  } finally {
+    joinActionBusy.value = false
+  }
+}
+
+async function openPlayerControl(pid) {
+  const id = String(pid ?? '').trim()
+  if (!id || joinActionBusy.value) return
+  const row = slotsForGrid.value.find((x) => x.id === id) || { id }
+  if (slotTakenByOther(row)) {
+    showJoinToast(t('join.slotTakenToast'))
+    return
+  }
+  const firstClaim = !slotJoinToken(row)
+  if (firstClaim) {
+    pendingClaimPlayerId.value = id
+    nameModalDraft.value = typeof row.name === 'string' ? row.name : ''
+    nameModalOpen.value = true
+    await nextTick()
+    nameModalInputRef.value?.focus()
+    return
+  }
+  await runClaimSlot(id, '')
 }
 
 function scrollToPlayerSlots() {
@@ -250,11 +363,18 @@ function handUpJoin(pid) {
           v-for="p in slotsForGrid"
           :key="p.id"
           class="pcard anim-scale-in"
-          :class="{ elim: p.eliminated === true, 'pcard--empty': !(p.name && String(p.name).trim()) }"
+          :class="{
+            elim: p.eliminated === true,
+            'pcard--empty': !(p.name && String(p.name).trim()),
+            'pcard--taken': slotTakenByOther(p),
+            'pcard--mine': slotIsMine(p),
+          }"
         >
           <span class="num">{{ $t('join.slot', { n: slotNum(p.id) }) }}</span>
           <span class="nm">{{ (p.name && String(p.name).trim()) || $t('join.noName') }}</span>
           <span v-if="p.eliminated" class="badge">{{ $t('join.eliminated') }}</span>
+          <span v-else-if="slotTakenByOther(p)" class="badge badge--taken">{{ $t('join.slotTaken') }}</span>
+          <span v-else-if="slotIsMine(p)" class="badge badge--mine">{{ $t('join.youAreHere') }}</span>
           <div class="pcard-status-row">
             <span
               class="pcard-ov"
@@ -266,10 +386,28 @@ function handUpJoin(pid) {
             <span v-if="handUpJoin(p.id)" class="pcard-hand" :title="$t('join.handUp')">✋</span>
           </div>
           <div class="pcard-actions">
-            <button type="button" class="pcard-btn pcard-btn--primary" @click="openPlayerControl(p.id)">
-              {{ $t('join.myPanel') }}
+            <button
+              type="button"
+              class="pcard-btn pcard-btn--primary"
+              :disabled="joinActionBusy || p.eliminated === true || slotTakenByOther(p)"
+              @click="openPlayerControl(p.id)"
+            >
+              {{
+                p.eliminated === true
+                  ? $t('join.eliminated')
+                  : slotTakenByOther(p)
+                    ? $t('join.slotTaken')
+                    : slotIsMine(p)
+                      ? $t('join.openPanel')
+                      : $t('join.claimSlot')
+              }}
             </button>
-            <button type="button" class="pcard-btn" @click="openPersonalOverlay(p.id)">
+            <button
+              type="button"
+              class="pcard-btn"
+              :disabled="p.eliminated === true"
+              @click="openPersonalOverlay(p.id)"
+            >
               {{ $t('join.obsOverlayBtn') }}
             </button>
           </div>
@@ -277,6 +415,48 @@ function handUpJoin(pid) {
       </div>
     </section>
 
+    <Teleport to="body">
+      <div v-if="joinToast" class="join-toast" role="status">{{ joinToast }}</div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="nameModalOpen" class="join-name-modal" role="presentation">
+        <button type="button" class="join-name-modal__backdrop" :aria-label="t('join.nameModalCancel')" @click="cancelNameModal" />
+        <div
+          class="join-name-modal__panel"
+          role="dialog"
+          aria-modal="true"
+          :aria-labelledby="'join-name-modal-title'"
+          :aria-describedby="'join-name-modal-desc'"
+          tabindex="-1"
+          @click.stop
+        >
+          <p id="join-name-modal-title" class="join-name-modal__eyebrow">{{ t('join.nameModalTitle') }}</p>
+          <p id="join-name-modal-desc" class="join-name-modal__hint">{{ t('join.promptNameOptional') }}</p>
+          <input
+            id="join-name-input"
+            ref="nameModalInputRef"
+            v-model="nameModalDraft"
+            type="text"
+            class="join-name-modal__input"
+            maxlength="64"
+            autocomplete="nickname"
+            :aria-label="t('join.nameModalPlaceholder')"
+            :placeholder="t('join.nameModalPlaceholder')"
+            @keydown.enter.prevent="confirmNameModal"
+            @keydown.escape.prevent="cancelNameModal"
+          />
+          <div class="join-name-modal__actions">
+            <button type="button" class="join-name-modal__btn join-name-modal__btn--ghost" @click="cancelNameModal">
+              {{ t('join.nameModalCancel') }}
+            </button>
+            <button type="button" class="join-name-modal__btn join-name-modal__btn--primary" @click="confirmNameModal">
+              {{ t('join.nameModalContinue') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -803,5 +983,186 @@ function handUpJoin(pid) {
   text-transform: uppercase;
   color: var(--error-text);
   align-self: flex-start;
+}
+
+.badge--taken {
+  color: var(--error-text);
+}
+
+.badge--mine {
+  color: var(--reveal-on-text, #4ade80);
+}
+
+.pcard--taken {
+  border-color: rgba(120, 120, 120, 0.4);
+}
+
+.pcard--mine {
+  border-color: var(--reveal-on-border, rgba(74, 222, 128, 0.45));
+  box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.12);
+}
+
+.pcard-btn:disabled,
+.pcard-btn--primary:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+  transform: none;
+  pointer-events: none;
+}
+
+.join-name-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  animation: join-name-modal-in 0.22s ease both;
+}
+
+@keyframes join-name-modal-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.join-name-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  cursor: pointer;
+  background: radial-gradient(ellipse 120% 80% at 50% 40%, rgba(88, 28, 135, 0.45), rgba(15, 10, 28, 0.88));
+}
+
+.join-name-modal__panel {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 22rem;
+  padding: 1.35rem 1.35rem 1.15rem;
+  border-radius: 16px;
+  border: 1px solid var(--border-strong, rgba(196, 181, 253, 0.28));
+  background: linear-gradient(165deg, var(--bg-card, #1f1830) 0%, rgba(30, 22, 48, 0.98) 100%);
+  box-shadow:
+    0 0 0 1px rgba(168, 85, 247, 0.12),
+    0 24px 56px rgba(0, 0, 0, 0.55);
+  outline: none;
+}
+
+.join-name-modal__eyebrow {
+  margin: 0 0 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-family: var(--font-display);
+  color: var(--text-muted);
+}
+
+.join-name-modal__hint {
+  margin: 0 0 1rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-body);
+}
+
+.join-name-modal__input {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 1.1rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-input);
+  background: var(--bg-input);
+  color: var(--text-body);
+  font-size: 0.92rem;
+  font-weight: 600;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.join-name-modal__input::placeholder {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.join-name-modal__input:focus {
+  outline: none;
+  border-color: var(--accent, #a78bfa);
+  box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.22);
+}
+
+.join-name-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.join-name-modal__btn {
+  margin: 0;
+  padding: 0.5rem 1rem;
+  border-radius: 11px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition:
+    transform 0.12s ease,
+    filter 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.join-name-modal__btn--ghost {
+  border-color: var(--border-subtle);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.join-name-modal__btn--ghost:hover {
+  border-color: var(--border-strong);
+  color: var(--text-title);
+}
+
+.join-name-modal__btn--primary {
+  border-color: var(--border-strong);
+  background: var(--accent-fill);
+  color: var(--text-title);
+}
+
+.join-name-modal__btn--primary:hover {
+  transform: scale(1.02);
+  filter: brightness(1.06);
+}
+
+.join-name-modal__btn:focus-visible {
+  outline: 2px solid var(--accent, #a78bfa);
+  outline-offset: 2px;
+}
+
+.join-toast {
+  position: fixed;
+  bottom: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  max-width: min(22rem, calc(100vw - 2rem));
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-card, 0 8px 28px rgba(0, 0, 0, 0.35));
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-body);
+  pointer-events: none;
 }
 </style>

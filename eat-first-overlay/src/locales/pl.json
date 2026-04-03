@@ -52,7 +52,19 @@
     "overlayClosed": "Overlay: zamknięty",
     "handUp": "Podniesiona ręka",
     "myPanel": "Mój panel",
-    "obsOverlayBtn": "OBS overlay"
+    "obsOverlayBtn": "OBS overlay",
+    "claimSlot": "Zajmij slot",
+    "openPanel": "Mój panel",
+    "slotTaken": "Zajęty",
+    "youAreHere": "Ty tutaj",
+    "slotTakenToast": "Ten slot jest zajęty na innym urządzeniu.",
+    "noPlayerDoc": "Brak dokumentu gracza dla tego slotu (proś prowadzącego o pokój).",
+    "noDevice": "Nie udało się utworzyć id urządzenia — inna przeglądarka lub włącz pamięć.",
+    "promptNameOptional": "Opcjonalnie — jak widzą cię przy stole. Puste pole = bez imienia.",
+    "nameModalTitle": "Imię przy stole",
+    "nameModalPlaceholder": "Nazwa na ekranie",
+    "nameModalContinue": "Dalej",
+    "nameModalCancel": "Anuluj"
   },
   "admin": {
     "eyebrow": "Prowadzący",
@@ -231,6 +243,9 @@
   },
   "control": {
     "accessDenied": "Brak dostępu",
+    "slotAccessTitle": "Ten link do panelu nie jest dla ciebie",
+    "slotAccessHint": "Otwórz lobby, wybierz swój slot i naciśnij „Mój panel” — lub tę samą przeglądarkę, w której zająłeś slot.",
+    "slotAccessCta": "Do lobby",
     "deniedBefore": "Nieprawidłowy lub brak ",
     "deniedAfter": " dla prowadzącego.",
     "hostForgetKey": "Zapomnij klucz (wyjdź z panelu)",
@@ -349,7 +364,10 @@
     "voteInPanel": "Głosuj w panelu gracza (control)",
     "roundN": "ROUND {n}",
     "revealCard": "ODKRYWAMY KARTĘ",
-    "phaseBanner": "Faza: {phase} · Runda {round} · W pokoju: {n}"
+    "phaseBanner": "Faza: {phase} · Runda {round} · W pokoju: {n}",
+    "tokenMismatchTitle": "Link nieważny",
+    "tokenMismatchHint": "Otwórz lobby i overlay ze swojego slotu (OBS: link bez tokenu).",
+    "tokenMismatchCta": "Lobby"
   },
   "overlayCard": {
     "eliminated": "OUT",

@@ -52,7 +52,19 @@
     "overlayClosed": "Overlay: closed",
     "handUp": "Hand raised",
     "myPanel": "My panel",
-    "obsOverlayBtn": "OBS overlay"
+    "obsOverlayBtn": "OBS overlay",
+    "claimSlot": "Claim slot",
+    "openPanel": "My panel",
+    "slotTaken": "Taken",
+    "youAreHere": "You’re here",
+    "slotTakenToast": "This slot is taken on another device.",
+    "noPlayerDoc": "No player document for this slot yet (ask the host to add the room).",
+    "noDevice": "Could not create a device id — try another browser or enable storage.",
+    "promptNameOptional": "Optional — how others see you at the table. Leave empty to skip.",
+    "nameModalTitle": "Name at the table",
+    "nameModalPlaceholder": "Display name",
+    "nameModalContinue": "Continue",
+    "nameModalCancel": "Cancel"
   },
   "admin": {
     "eyebrow": "Host",
@@ -231,6 +243,9 @@
   },
   "control": {
     "accessDenied": "Access denied",
+    "slotAccessTitle": "This panel link isn’t valid for you",
+    "slotAccessHint": "Open the lobby, pick your slot, and tap “My panel” — or use the same browser where you claimed the slot.",
+    "slotAccessCta": "Open lobby",
     "deniedBefore": "Invalid or missing ",
     "deniedAfter": " for the host.",
     "hostForgetKey": "Forget key (leave host panel)",
@@ -349,7 +364,10 @@
     "voteInPanel": "Vote in the player panel",
     "roundN": "ROUND {n}",
     "revealCard": "REVEALING A CARD",
-    "phaseBanner": "Phase: {phase} · Round {round} · In room: {n}"
+    "phaseBanner": "Phase: {phase} · Round {round} · In room: {n}",
+    "tokenMismatchTitle": "Link not valid",
+    "tokenMismatchHint": "Open the lobby and open your overlay from your slot (OBS uses the link without a token).",
+    "tokenMismatchCta": "Lobby"
   },
   "overlayCard": {
     "eliminated": "OUT",

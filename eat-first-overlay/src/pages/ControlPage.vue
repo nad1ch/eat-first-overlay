@@ -74,6 +74,7 @@ import {
   getValidatedPersistedHostKey,
   clearHostAccessSession,
 } from '../utils/persistedHostSession.js'
+import { getJoinSessionToken } from '../utils/joinSessionToken.js'
 import {
   saveLastPlayerSlot,
   getValidatedLastPlayerSlot,
@@ -131,6 +132,16 @@ const modeLabel = computed(() => {
   return t('control.modePlayer')
 })
 
+const playerSlotAccessBlocked = computed(() => {
+  if (isAdmin.value || adminAccessDenied.value) return false
+  if (!playerJoinGateReady.value || !playerId.value) return false
+  const st = playerDocJoinToken.value
+  if (!st) return false
+  const urlT = String(route.query.token ?? '').trim()
+  const sess = getJoinSessionToken(gameId.value, playerId.value)
+  return urlT !== st && sess !== st
+})
+
 const overlayHrefGlobal = computed(() => ({
   path: '/overlay',
   query: { game: gameId.value },
@@ -146,6 +157,9 @@ const syncing = ref(false)
 const skipRemoteAutosave = ref(false)
 /** Перший snap персонажа з Firestore (лоадер на панелі). */
 const panelHydrating = ref(false)
+/** Для гравця: joinToken з того ж документа що й персонаж (захист пульта). */
+const playerDocJoinToken = ref('')
+const playerJoinGateReady = ref(false)
 const loadError = ref(null)
 const newPlayerId = ref('')
 const draftGameId = ref('')
@@ -1676,7 +1690,13 @@ function applyFromFirestoreSnapshot(data) {
 
 /** Поля службові Firestore — не передаємо в редактор персонажа. */
 watch(characterState, () => {
-  if (syncing.value || skipRemoteAutosave.value || adminAccessDenied.value) return
+  if (
+    syncing.value ||
+    skipRemoteAutosave.value ||
+    adminAccessDenied.value ||
+    playerSlotAccessBlocked.value
+  )
+    return
   scheduleSave()
 }, { deep: true })
 
@@ -1708,12 +1728,40 @@ watch(
 
     loadError.value = null
     panelHydrating.value = true
+    if (!isAdmin.value) {
+      playerJoinGateReady.value = false
+      playerDocJoinToken.value = ''
+    }
     unsubCharacter = subscribeToCharacter(gid, pid, (data) => {
+      if (!isAdmin.value) {
+        playerDocJoinToken.value =
+          data && typeof data.joinToken === 'string' ? String(data.joinToken).trim() : ''
+        playerJoinGateReady.value = true
+      }
       applyFromFirestoreSnapshot(data)
       panelHydrating.value = false
     })
   },
   { immediate: true },
+)
+
+watch(
+  () => ({
+    adm: isAdmin.value,
+    gid: gameId.value,
+    pid: playerId.value,
+    routeTok: String(route.query.token ?? '').trim(),
+    docTok: playerDocJoinToken.value,
+    ready: playerJoinGateReady.value,
+  }),
+  (o) => {
+    if (o.adm || !o.ready || !o.docTok) return
+    const sess = getJoinSessionToken(o.gid, o.pid)
+    if (!sess || sess !== o.docTok) return
+    if (o.routeTok === sess) return
+    router.replace({ path: '/control', query: { ...route.query, token: sess } })
+  },
+  { flush: 'post' },
 )
 
 watch(
@@ -1823,6 +1871,14 @@ function rerollActiveCardOnly() {
   <div v-if="adminAccessDenied" class="access-denied">
     <h1 class="denied-title">{{ t('control.accessDenied') }}</h1>
     <p class="denied-text">{{ t('control.deniedBefore') }}<code>key</code>{{ t('control.deniedAfter') }}</p>
+  </div>
+
+  <div v-else-if="playerSlotAccessBlocked" class="access-denied">
+    <h1 class="denied-title">{{ t('control.slotAccessTitle') }}</h1>
+    <p class="denied-text">{{ t('control.slotAccessHint') }}</p>
+    <router-link class="denied-back" :to="{ path: '/join', query: { game: gameId } }">
+      {{ t('control.slotAccessCta') }}
+    </router-link>
   </div>
 
   <div v-else class="desk">
@@ -4136,6 +4192,27 @@ function rerollActiveCardOnly() {
 
 .denied-title {
   color: var(--error-text);
+}
+
+.denied-text {
+  max-width: 26rem;
+  margin: 0.5rem 0 1rem;
+  line-height: 1.5;
+}
+
+.denied-back {
+  display: inline-block;
+  padding: 0.55rem 1.1rem;
+  border-radius: 10px;
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--text-title);
+  background: var(--accent-fill);
+  border: 1px solid var(--border-strong);
+}
+
+.denied-back:hover {
+  filter: brightness(1.06);
 }
 </style>
 

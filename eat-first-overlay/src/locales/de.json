@@ -52,7 +52,19 @@
     "overlayClosed": "Overlay: zu",
     "handUp": "Hand oben",
     "myPanel": "Mein Panel",
-    "obsOverlayBtn": "OBS-Overlay"
+    "obsOverlayBtn": "OBS-Overlay",
+    "claimSlot": "Slot belegen",
+    "openPanel": "Mein Panel",
+    "slotTaken": "Belegt",
+    "youAreHere": "Du bist hier",
+    "slotTakenToast": "Dieser Slot ist auf einem anderen Gerät belegt.",
+    "noPlayerDoc": "Für diesen Slot gibt es noch kein Spieler-Dokument (Host muss den Raum anlegen).",
+    "noDevice": "Geräte-ID konnte nicht erstellt werden — anderer Browser oder Speicher erlauben.",
+    "promptNameOptional": "Optional — wie andere dich am Tisch sehen. Leer lassen zum Überspringen.",
+    "nameModalTitle": "Name am Tisch",
+    "nameModalPlaceholder": "Anzeigename",
+    "nameModalContinue": "Weiter",
+    "nameModalCancel": "Abbrechen"
   },
   "admin": {
     "eyebrow": "Host",
@@ -217,6 +229,9 @@
   },
   "control": {
     "accessDenied": "Zugriff verweigert",
+    "slotAccessTitle": "Dieser Panel-Link gilt nicht für dich",
+    "slotAccessHint": "Öffne die Lobby, wähle deinen Slot und tippe „Mein Panel“ — oder denselben Browser, in dem du den Slot belegt hast.",
+    "slotAccessCta": "Zur Lobby",
     "deniedBefore": "Ungültig oder fehlend ",
     "deniedAfter": " für den Host.",
     "hostForgetKey": "Schlüssel vergessen (Host-Panel verlassen)",
@@ -317,7 +332,10 @@
     "voteInPanel": "Im Spielerpanel (control) abstimmen",
     "roundN": "ROUND {n}",
     "revealCard": "KARTE WIRD AUFGEDECKT",
-    "phaseBanner": "Phase: {phase} · Runde {round} · Im Raum: {n}"
+    "phaseBanner": "Phase: {phase} · Runde {round} · Im Raum: {n}",
+    "tokenMismatchTitle": "Link ungültig",
+    "tokenMismatchHint": "Lobby öffnen und Overlay von deinem Slot (OBS: Link ohne Token).",
+    "tokenMismatchCta": "Lobby"
   },
   "overlayCard": {
     "eliminated": "OUT",

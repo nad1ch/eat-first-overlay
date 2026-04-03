@@ -52,7 +52,19 @@
     "overlayClosed": "Оверлей: закрито",
     "handUp": "Піднята рука",
     "myPanel": "Моя панель",
-    "obsOverlayBtn": "OBS оверлей"
+    "obsOverlayBtn": "OBS оверлей",
+    "claimSlot": "Зайняти слот",
+    "openPanel": "Моя панель",
+    "slotTaken": "Зайнятий",
+    "youAreHere": "Ти тут",
+    "slotTakenToast": "Цей слот зайнятий на іншому пристрої.",
+    "noPlayerDoc": "Ще немає документа гравця для цього слоту (попроси ведучого додати кімнату).",
+    "noDevice": "Не вдалося створити id пристрою — спробуй інший браузер або увімкни сховище.",
+    "promptNameOptional": "Необов’язково — як тебе показувати за столом. Порожнє поле — без імені.",
+    "nameModalTitle": "Ім’я за столом",
+    "nameModalPlaceholder": "Як показувати на екрані",
+    "nameModalContinue": "Продовжити",
+    "nameModalCancel": "Скасувати"
   },
   "admin": {
     "eyebrow": "Ведучий",
@@ -216,6 +228,9 @@
   },
   "control": {
     "accessDenied": "Доступ заборонено",
+    "slotAccessTitle": "Це посилання на панель не для тебе",
+    "slotAccessHint": "Відкрий лобі, обери свій слот і натисни «Моя панель» — або той самий браузер, де ти вже займав слот.",
+    "slotAccessCta": "До лобі",
     "deniedBefore": "Невірний або відсутній ",
     "deniedAfter": " для ведучого.",
     "hostForgetKey": "Забути ключ (вийти з пульта)",
@@ -334,7 +349,10 @@
     "voteInPanel": "Голосуй у панелі гравця",
     "roundN": "РАУНД {n}",
     "revealCard": "ВІДКРИВАЄМО КАРТУ",
-    "phaseBanner": "Фаза: {phase} · Раунд {round} · У кімнаті: {n}"
+    "phaseBanner": "Фаза: {phase} · Раунд {round} · У кімнаті: {n}",
+    "tokenMismatchTitle": "Посилання недійсне",
+    "tokenMismatchHint": "Відкрий лобі й оверлей зі свого слоту (у OBS — посилання без токена).",
+    "tokenMismatchCta": "Лобі"
   },
   "overlayCard": {
     "eliminated": "ВИБУВ",

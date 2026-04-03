@@ -41,7 +41,35 @@ service cloud.firestore {
 
     match /games/{gameId}/players/{playerId} {
       allow read: if true;
-      allow create, update: if request.resource.data.key == "123456";
+      allow create: if request.resource.data.key == "123456";
+
+      // Оновлення ведучим (повний документ з key) або лише поля «зайняття» слота з лобі (joinToken / deviceId).
+      function playerJoinDiffKeys() {
+        return request.resource.data.diff(resource.data).affectedKeys();
+      }
+      function playerJoinPayloadOk() {
+        let d = playerJoinDiffKeys();
+        return request.resource.data.key == resource.data.key
+          && resource.data.key == "123456"
+          && (d.hasOnly(['joinToken', 'joinDeviceId', 'joinClaimedAt'])
+            || d.hasOnly(['joinToken', 'joinDeviceId', 'joinClaimedAt', 'name']))
+          && request.resource.data.joinToken is string
+          && request.resource.data.joinToken.size() >= 32
+          && request.resource.data.joinToken.size() <= 128
+          && request.resource.data.joinDeviceId is string
+          && request.resource.data.joinDeviceId.size() >= 8
+          && request.resource.data.joinDeviceId.size() <= 128
+          && request.resource.data.joinClaimedAt is timestamp
+          && (!d.hasAny(['name'])
+            || (request.resource.data.name is string && request.resource.data.name.size() <= 64))
+          && (!resource.data.keys().hasAny(['joinToken'])
+            || resource.data.joinToken == ''
+            || resource.data.joinDeviceId == request.resource.data.joinDeviceId);
+      }
+
+      allow update: if request.resource.data.key == "123456"
+        || playerJoinPayloadOk();
+
       // delete: request.resource немає; старі документи могли бути без поля key — тоді key == "123456" не спрацьовує.
       allow delete: if resource.data.key == "123456"
         || !resource.data.keys().hasAny(['key']);
