@@ -52,7 +52,17 @@ const footerYear = new Date().getFullYear()
           @toggle-theme="toggleTheme"
         />
       </div>
-      <HostControlChromeBar v-if="hostChromeOn" />
+      <div v-if="hostChromeOn" class="app-shell-header__host-stack">
+        <p
+          v-if="hostControlChromeStore.summaryLine"
+          class="app-shell-host-summary"
+          role="status"
+          :title="hostControlChromeStore.summaryLine"
+        >
+          <span class="app-shell-host-summary__inner">{{ hostControlChromeStore.summaryLine }}</span>
+        </p>
+        <HostControlChromeBar />
+      </div>
     </header>
     <main class="app-shell-main" :class="{ 'app-shell-main--full': !showChrome }">
       <RouterView v-slot="{ Component }">

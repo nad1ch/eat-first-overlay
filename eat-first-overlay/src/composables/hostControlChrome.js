@@ -22,4 +22,5 @@ export function syncHostControlChrome(patch) {
 export function clearHostControlChrome() {
   hostControlChromeStore.active = false
   hostControlChromeStore.actions = null
+  hostControlChromeStore.summaryLine = ''
 }

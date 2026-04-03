@@ -3,6 +3,195 @@
  * тема перемикається через data-theme на <html>.
  */
 
+/**
+ * Пресети розмірів кнопок керування (однакові відступи / висота / шрифт).
+ * Кольори й варіанти (primary, danger…) задаються окремими класами або модифікаторами.
+ */
+:root {
+  --ui-control-compact-radius: 8px;
+  --ui-control-compact-pad-y: 0.3rem;
+  --ui-control-compact-pad-x: 0.55rem;
+  --ui-control-compact-font: 0.62rem;
+  --ui-control-compact-weight: 700;
+  --ui-control-compact-min-h: 1.9rem;
+  --ui-control-compact-gap: 0.28rem;
+  --ui-control-compact-line: 1.2;
+
+  --ui-control-xl-radius: 11px;
+  --ui-control-xl-pad-y: 0.55rem;
+  --ui-control-xl-pad-x: 0.75rem;
+  --ui-control-xl-font: 0.82rem;
+  --ui-control-xl-weight: 800;
+  --ui-control-xl-letter: 0.04em;
+  --ui-control-xl-border: 2px solid transparent;
+  --ui-control-xl-min-w: 5.5rem;
+
+  /* Іконки в ряду таймера (пауза / play / reset) */
+  --ui-control-ghost-min-w: 2.75rem;
+  --ui-control-ghost-pad-x: 0.5rem;
+  --ui-control-ghost-font: 0.95rem;
+
+  /* Кнопка Next біля таймера */
+  --ui-control-next-font: 0.72rem;
+
+  /* Таймер: пресет між компактом і XL */
+  --ui-control-dur-radius: 10px;
+  --ui-control-dur-pad-y: 0.42rem;
+  --ui-control-dur-pad-x: 0.55rem;
+  --ui-control-dur-font: 0.78rem;
+  --ui-control-dur-weight: 800;
+  --ui-control-dur-min-w: 3.2rem;
+
+  /**
+   * Дизайн-система: відступи, радіуси, типографіка ролей, контейнери.
+   * У компонентах посилайся на змінні замість «магічних» чисел.
+   */
+  --ui-space-1: 0.15rem;
+  --ui-space-2: 0.28rem;
+  --ui-space-3: 0.35rem;
+  --ui-space-4: 0.4rem;
+  --ui-space-5: 0.45rem;
+  --ui-space-6: 0.5rem;
+  --ui-space-7: 0.55rem;
+  --ui-space-8: 0.62rem;
+  --ui-space-9: 0.65rem;
+  --ui-space-10: 0.75rem;
+  --ui-space-11: 0.85rem;
+  --ui-space-12: 1rem;
+
+  --ui-radius-sm: 6px;
+  --ui-radius-md: 8px;
+  --ui-radius-lg: 10px;
+  --ui-radius-panel: 14px;
+
+  --ui-type-overline-size: 0.48rem;
+  --ui-type-overline-weight: 800;
+  --ui-type-overline-track: 0.12em;
+
+  --ui-type-panel-title-size: 0.52rem;
+  --ui-type-panel-title-weight: 900;
+  --ui-type-panel-title-track: 0.14em;
+
+  --ui-type-caption-size: 0.58rem;
+  --ui-type-caption-weight: 700;
+
+  --ui-type-summary-size-min: 0.5rem;
+  --ui-type-summary-size-pref: 0.54rem;
+  --ui-type-summary-size-max: 0.58rem;
+
+  --ui-container-panel-pad-x: 0.75rem;
+  --ui-container-panel-pad-y: 0.65rem;
+  --ui-container-panel-pad-bottom: 0.75rem;
+  --ui-container-panel-radius: var(--ui-radius-panel);
+  --ui-container-split-gap: 0.75rem;
+  --ui-container-split-columns: repeat(3, minmax(0, 1fr));
+  --ui-container-inset-gap: 0.35rem;
+
+  --ui-shell-host-pad-y: 0.4rem;
+  --ui-shell-host-pad-x: 0.85rem;
+  --ui-shell-host-pad-bottom: 0.35rem;
+
+  --ui-summary-bar-pad-y: 0.32rem;
+  --ui-summary-bar-pad-x: 0.5rem;
+  --ui-summary-bar-radius: var(--ui-radius-md);
+  --ui-summary-bar-margin-y: 0.35rem;
+  --ui-summary-bar-margin-bottom: 0.3rem;
+
+  /** Відстань між блоками «ШОУ» і «ФАЗА» (звужується в @container / @media). */
+  --hcc-show-phase-gap: 1rem;
+}
+
+/** Базовий клас для компактних кнопок поза host-chrome (за потреби додай до <button>). */
+.ui-control-btn--compact {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--ui-control-compact-min-h);
+  padding: var(--ui-control-compact-pad-y) var(--ui-control-compact-pad-x);
+  border-radius: var(--ui-control-compact-radius);
+  font-size: var(--ui-control-compact-font);
+  font-weight: var(--ui-control-compact-weight);
+  line-height: var(--ui-control-compact-line);
+  cursor: pointer;
+  border: 1px solid var(--border-input);
+  background: var(--bg-muted-strong);
+  color: var(--text-body);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ui-control-btn--compact:focus {
+  outline: none;
+}
+
+.ui-control-btn--compact:focus-visible {
+  outline: 2px solid var(--border-cyan-strong);
+  outline-offset: 1px;
+}
+
+/** Пресет картки/панелі (опційно додай до секції). */
+.ui-container-panel {
+  padding: var(--ui-container-panel-pad-y) var(--ui-container-panel-pad-x)
+    var(--ui-container-panel-pad-bottom);
+  border-radius: var(--ui-container-panel-radius);
+  border: 1px solid var(--border);
+  background: var(--bg-muted);
+  box-shadow: 0 2px 12px var(--shadow-elevated);
+}
+
+/** Менші кнопки пульта (голосування / таймер / пресети секунд) на вузьких екранах. */
+@media (max-width: 768px) {
+  :root {
+    --ui-control-xl-pad-y: 0.44rem;
+    --ui-control-xl-pad-x: 0.58rem;
+    --ui-control-xl-font: 0.74rem;
+    --ui-control-xl-radius: 9px;
+    --ui-control-xl-min-w: 4.65rem;
+
+    --ui-control-dur-pad-y: 0.34rem;
+    --ui-control-dur-pad-x: 0.46rem;
+    --ui-control-dur-font: 0.7rem;
+    --ui-control-dur-min-w: 2.85rem;
+
+    --ui-control-compact-min-h: 1.72rem;
+    --ui-control-compact-pad-y: 0.26rem;
+    --ui-control-compact-font: 0.58rem;
+
+    --ui-control-ghost-min-w: 2.4rem;
+    --ui-control-ghost-pad-x: 0.42rem;
+    --ui-control-ghost-font: 0.88rem;
+    --ui-control-next-font: 0.66rem;
+  }
+}
+
+@media (max-width: 520px) {
+  :root {
+    --hcc-show-phase-gap: 0.55rem;
+    --ui-container-split-gap: 0.55rem;
+    --ui-control-compact-pad-x: 0.42rem;
+
+    --ui-control-xl-pad-y: 0.34rem;
+    --ui-control-xl-pad-x: 0.46rem;
+    --ui-control-xl-font: 0.66rem;
+    --ui-control-xl-radius: 8px;
+    --ui-control-xl-min-w: 3.85rem;
+
+    --ui-control-dur-pad-y: 0.26rem;
+    --ui-control-dur-pad-x: 0.36rem;
+    --ui-control-dur-font: 0.62rem;
+    --ui-control-dur-min-w: 2.45rem;
+
+    --ui-control-compact-min-h: 1.52rem;
+    --ui-control-compact-pad-y: 0.22rem;
+    --ui-control-compact-font: 0.52rem;
+
+    --ui-control-ghost-min-w: 2.05rem;
+    --ui-control-ghost-pad-x: 0.36rem;
+    --ui-control-ghost-font: 0.82rem;
+    --ui-control-next-font: 0.58rem;
+  }
+}
+
 :root,
 [data-theme='dark'] {
   --font-body: 'Plus Jakarta Sans', system-ui, 'Segoe UI', sans-serif;
@@ -427,13 +616,120 @@ body::-webkit-scrollbar-thumb:hover {
 
 /* Пульт: одна нижня межа для всього блоку (без другої смуги під рядком бренду) */
 .app-shell-header--host {
-  padding: 0.4rem 0.85rem 0.35rem;
+  padding: var(--ui-shell-host-pad-y) var(--ui-shell-host-pad-x) var(--ui-shell-host-pad-bottom);
   border-bottom: 1px solid var(--border-subtle);
   box-shadow: 0 6px 24px var(--shadow-elevated);
 }
 
 .app-shell-header--host.app-shell-header--vote-on {
   border-bottom-color: rgba(56, 189, 248, 0.28);
+}
+
+/**
+ * Пульт у шапці: на вузьких/низьких вікнах обмежуємо висоту й даємо внутрішній скрол,
+ * щоб основний контент сторінки лишався видимим під sticky header.
+ */
+.app-shell-header__host-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+@media (max-width: 1000px), (max-height: 820px) {
+  .app-shell-header__host-stack {
+    max-height: min(
+      46vh,
+      calc(100dvh - 5.25rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))
+    );
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    padding-bottom: var(--ui-space-1);
+  }
+
+  .app-shell-header__host-stack::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .app-shell-header__host-stack::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 999px;
+  }
+
+  .app-shell-header--host {
+    --ui-summary-bar-margin-y: 0.2rem;
+    --ui-summary-bar-margin-bottom: 0.18rem;
+    --ui-summary-bar-pad-y: 0.24rem;
+    --ui-shell-host-pad-y: 0.28rem;
+    --ui-shell-host-pad-bottom: 0.22rem;
+    --ui-shell-host-pad-x: 0.65rem;
+    --ui-container-panel-pad-y: 0.42rem;
+    --ui-container-panel-pad-bottom: 0.48rem;
+    --ui-container-panel-pad-x: 0.55rem;
+    --ui-space-8: 0.42rem;
+    --ui-space-7: 0.38rem;
+    --hcc-show-phase-gap: 0.5rem;
+    --ui-container-split-gap: 0.5rem;
+  }
+}
+
+@media (max-width: 600px), (max-height: 700px) {
+  .app-shell-header__host-stack {
+    max-height: min(
+      42vh,
+      calc(100dvh - 4.85rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))
+    );
+  }
+}
+
+/**
+ * Рядок стану шоу (ведучий): текст по центру, якщо вміщується;
+ * довгий рядок — горизонтальний скрол (внутрішній span зберігає nowrap).
+ */
+.app-shell-host-summary {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  margin: var(--ui-summary-bar-margin-y) 0 var(--ui-summary-bar-margin-bottom);
+  padding: var(--ui-summary-bar-pad-y) var(--ui-summary-bar-pad-x);
+  border-radius: var(--ui-summary-bar-radius);
+  background: var(--bg-muted-strong);
+  border: 1px solid var(--border-subtle);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.app-shell-host-summary__inner {
+  display: inline-block;
+  max-width: 100%;
+  font-size: clamp(
+    var(--ui-type-summary-size-min),
+    calc(var(--ui-type-summary-size-pref) + 0.2vw),
+    var(--ui-type-summary-size-max)
+  );
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.35;
+  color: var(--text-body);
+  font-family: var(--font-display);
+  white-space: nowrap;
+  text-align: center;
+}
+
+.app-shell-host-summary::-webkit-scrollbar {
+  height: 4px;
+}
+
+.app-shell-host-summary::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 999px;
 }
 
 .app-shell-brand {

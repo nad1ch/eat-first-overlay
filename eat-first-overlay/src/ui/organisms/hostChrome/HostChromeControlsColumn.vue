@@ -35,11 +35,20 @@ const raisedHandSlots = computed(() => {
 
 <template>
   <section class="hcc-panel hcc-panel--controls" :aria-label="t('hostChrome.show')">
-    <p class="hcc-summary" role="status" :title="store.summaryLine">{{ store.summaryLine }}</p>
-    <p v-if="raisedHandSlots.length" class="hcc-hands-row" role="status">
-      ✋ {{ t('hostChrome.handsUp') }}
-      <strong>{{ raisedHandSlots.map(slotNum).join(', ') }}</strong>
-    </p>
+    <div
+      v-if="raisedHandSlots.length"
+      class="hcc-hands-bar"
+      role="group"
+      :aria-label="t('hostChrome.handsUp')"
+    >
+      <p class="hcc-hands-row" role="status">
+        ✋ {{ t('hostChrome.handsUp') }}
+        <strong>{{ raisedHandSlots.map(slotNum).join(', ') }}</strong>
+      </p>
+      <button type="button" class="hcc-clear-hands hcc-clear-hands--compact" @click="act('clearHands')">
+        {{ t('hostChrome.clearHands') }}
+      </button>
+    </div>
 
     <div class="hcc-left-round">
       <span class="hcc-left-lab">{{ t('hostChrome.round') }}</span>
@@ -66,35 +75,36 @@ const raisedHandSlots = computed(() => {
       </div>
     </div>
 
-    <p class="hcc-left-lab hcc-left-lab--spaced">{{ t('hostChrome.show') }}</p>
-    <div class="hcc-show-btns">
-      <button type="button" class="hcc-btn-sm hcc-btn-sm--go" @click="act('startRound')">
-        {{ t('hostChrome.showStart') }}
-      </button>
-      <button type="button" class="hcc-btn-sm hcc-btn-sm--pause" @click="act('pauseShow')">
-        {{ t('hostChrome.showPause') }}
-      </button>
-      <button type="button" class="hcc-btn-sm hcc-btn-sm--reset" @click="act('resetRoom')">
-        {{ t('hostChrome.showReset') }}
-      </button>
+    <div class="hcc-show-phase-row" role="group">
+      <div class="hcc-mol hcc-mol--show" :aria-label="t('hostChrome.show')">
+        <p class="hcc-left-lab">{{ t('hostChrome.show') }}</p>
+        <div class="hcc-show-btns">
+          <button type="button" class="hcc-btn-sm hcc-btn-sm--go" @click="act('startRound')">
+            {{ t('hostChrome.showStart') }}
+          </button>
+          <button type="button" class="hcc-btn-sm hcc-btn-sm--pause" @click="act('pauseShow')">
+            {{ t('hostChrome.showPause') }}
+          </button>
+          <button type="button" class="hcc-btn-sm hcc-btn-sm--reset" @click="act('resetRoom')">
+            {{ t('hostChrome.showReset') }}
+          </button>
+        </div>
+      </div>
+      <div class="hcc-mol hcc-mol--phase" :aria-label="t('hostChrome.phase')">
+        <p class="hcc-left-lab">{{ t('hostChrome.phase') }}</p>
+        <div class="hcc-phase-chips">
+          <button
+            v-for="ph in store.phaseOptions"
+            :key="ph"
+            type="button"
+            class="hcc-chip hcc-chip--phase"
+            :class="{ on: phaseLabel === ph }"
+            @click="act('setPhase', ph)"
+          >
+            {{ ph }}
+          </button>
+        </div>
+      </div>
     </div>
-
-    <p class="hcc-left-lab hcc-left-lab--spaced">{{ t('hostChrome.phase') }}</p>
-    <div class="hcc-phase-chips">
-      <button
-        v-for="ph in store.phaseOptions"
-        :key="ph"
-        type="button"
-        class="hcc-chip hcc-chip--phase"
-        :class="{ on: phaseLabel === ph }"
-        @click="act('setPhase', ph)"
-      >
-        {{ ph }}
-      </button>
-    </div>
-
-    <button type="button" class="hcc-clear-hands" @click="act('clearHands')">
-      {{ t('hostChrome.clearHands') }}
-    </button>
   </section>
 </template>

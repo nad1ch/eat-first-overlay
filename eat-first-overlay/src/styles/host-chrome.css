@@ -5,7 +5,7 @@
 
 .hcc {
   width: 100%;
-  padding: 0.25rem 0 0;
+  padding: var(--ui-space-3) 0 0;
   border-top: none;
   transition:
     box-shadow 0.25s ease,
@@ -21,9 +21,9 @@
 
 .hcc-split {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: var(--ui-container-split-columns);
   align-items: stretch;
-  gap: 0.75rem;
+  gap: var(--ui-container-split-gap);
   width: 100%;
 }
 
@@ -39,25 +39,46 @@
   min-width: 0;
   min-height: 0;
   height: 100%;
-  padding: 0.65rem 0.75rem 0.75rem;
-  border-radius: 14px;
+  padding: var(--ui-container-panel-pad-y) var(--ui-container-panel-pad-x)
+    var(--ui-container-panel-pad-bottom);
+  border-radius: var(--ui-container-panel-radius);
   border: 1px solid var(--border);
   background: var(--bg-muted);
   box-shadow: 0 2px 12px var(--shadow-elevated);
 }
 
+.hcc-panel--controls {
+  container-type: inline-size;
+  container-name: hcc-controls;
+}
+
 .hcc-panel-title {
-  margin: 0 0 0.4rem;
-  font-size: 0.52rem;
-  font-weight: 900;
-  letter-spacing: 0.14em;
+  margin: 0 0 var(--ui-space-6);
+  font-size: var(--ui-type-panel-title-size);
+  font-weight: var(--ui-type-panel-title-weight);
+  letter-spacing: var(--ui-type-panel-title-track);
   color: var(--text-muted);
 }
 
+.hcc-hands-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-5);
+  margin: 0 0 var(--ui-space-6);
+  flex-wrap: wrap;
+}
+
+.hcc-hands-bar .hcc-hands-row {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .hcc-hands-row {
-  margin: 0 0 0.5rem;
-  font-size: 0.58rem;
-  font-weight: 700;
+  margin: 0 0 var(--ui-space-6);
+  font-size: var(--ui-type-caption-size);
+  font-weight: var(--ui-type-caption-weight);
   letter-spacing: 0.04em;
   color: var(--text-secondary);
   line-height: 1.35;
@@ -65,67 +86,129 @@
 
 .hcc-hands-row strong {
   color: var(--text-highlight);
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-display);
   font-weight: 800;
-}
-
-.hcc-summary {
-  margin: 0 0 0.55rem;
-  padding: 0.28rem 0.45rem;
-  border-radius: 8px;
-  background: var(--bg-muted-strong);
-  border: 1px solid var(--border-subtle);
-  font-size: 0.54rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  line-height: 1.35;
-  color: var(--text-body);
-  font-family: 'Orbitron', sans-serif;
-  overflow-x: auto;
-  white-space: nowrap;
 }
 
 .hcc-left-lab {
-  margin: 0 0 0.2rem;
-  font-size: 0.48rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  margin: 0 0 var(--ui-space-1);
+  font-size: var(--ui-type-overline-size);
+  font-weight: var(--ui-type-overline-weight);
+  letter-spacing: var(--ui-type-overline-track);
   text-transform: uppercase;
   color: var(--text-muted);
 }
 
-.hcc-left-lab--spaced {
-  margin-top: 0.62rem;
+/**
+ * ШОУ + ФАЗА завжди в один ряд; якщо колонка вузька — горизонтальний скрол рядка.
+ * ФАЗА лишається справа (`margin-left: auto`).
+ */
+.hcc-show-phase-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: var(--hcc-show-phase-gap);
+  width: 100%;
+  min-width: 0;
+  margin-top: var(--ui-space-8);
+  padding-top: var(--ui-space-7);
+  padding-bottom: var(--ui-space-1);
+  border-top: 1px solid var(--border-subtle);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.hcc-show-phase-row::-webkit-scrollbar {
+  height: 4px;
+}
+
+.hcc-show-phase-row::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 999px;
+}
+
+.hcc-mol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-2);
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.hcc-mol--show {
+  flex: 0 0 auto;
+  align-items: flex-start;
+}
+
+.hcc-mol--phase {
+  flex: 0 0 auto;
+  margin-left: auto;
+  align-items: flex-end;
+  text-align: right;
+}
+
+.hcc-mol--phase .hcc-left-lab {
+  align-self: flex-end;
+}
+
+.hcc-mol--phase .hcc-phase-chips {
+  justify-content: flex-end;
 }
 
 .hcc-left-round {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.35rem;
+  gap: var(--ui-container-inset-gap);
 }
 
 .hcc-round {
   display: inline-flex;
   align-items: center;
-  gap: 0.15rem;
+  gap: 0.2rem;
 }
 
 .hcc-step {
-  min-width: 1.6rem;
-  height: 1.6rem;
-  border-radius: 7px;
-  font-size: 1rem;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: 1.75rem;
+  height: 1.75rem;
+  min-width: 1.75rem;
+  min-height: 1.75rem;
+  margin: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  border-radius: var(--ui-radius-md);
+  font-size: 1.05rem;
   font-weight: 700;
+  font-family: inherit;
   cursor: pointer;
   border: 1px solid var(--border-input);
   background: var(--reveal-bg);
   color: var(--text-body);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hcc-step:focus {
+  outline: none;
+}
+
+.hcc-step:focus-visible {
+  outline: 2px solid var(--border-cyan-strong);
+  outline-offset: 1px;
 }
 
 .hcc-step:disabled {
-  opacity: 0.3;
+  opacity: 0.35;
   cursor: not-allowed;
+  border-color: var(--border-input);
+  background: var(--bg-muted-strong);
 }
 
 .hcc-round__mid {
@@ -138,10 +221,11 @@
   text-align: center;
 }
 
-.hcc-show-btns {
+.hcc-show-btns,
+.hcc-phase-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.28rem;
+  gap: var(--ui-control-compact-gap);
 }
 
 .hcc-target-block__id {
@@ -152,13 +236,44 @@
   color: var(--text-highlight);
 }
 
-.hcc-btn-sm {
-  padding: 0.28rem 0.5rem;
-  border-radius: 7px;
-  font-size: 0.62rem;
-  font-weight: 700;
+/** Компактні кнопки пульта: ті самі токени, що .ui-control-btn--compact у theme.css */
+.hcc-btn-sm,
+.hcc-chip {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--ui-control-compact-min-h);
+  padding: var(--ui-control-compact-pad-y) var(--ui-control-compact-pad-x);
+  border-radius: var(--ui-control-compact-radius);
+  font-size: var(--ui-control-compact-font);
+  font-weight: var(--ui-control-compact-weight);
+  line-height: var(--ui-control-compact-line);
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hcc-btn-sm:focus,
+.hcc-chip:focus {
+  outline: none;
+}
+
+.hcc-btn-sm:focus-visible,
+.hcc-chip:focus-visible {
+  outline: 2px solid var(--border-cyan-strong);
+  outline-offset: 1px;
+}
+
+.hcc-btn-sm {
   border: 1px solid transparent;
+}
+
+.hcc-chip {
+  font-family: var(--font-display);
+  text-transform: lowercase;
+  border: 1px solid var(--border-input);
+  background: var(--bg-muted-strong);
+  color: var(--text-body);
 }
 
 .hcc-btn-sm--go {
@@ -177,25 +292,6 @@
   background: var(--reveal-off-bg);
   border-color: var(--reveal-off-border);
   color: var(--reveal-off-text);
-}
-
-.hcc-phase-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.22rem;
-}
-
-.hcc-chip {
-  padding: 0.18rem 0.4rem;
-  border-radius: 6px;
-  font-size: 0.55rem;
-  font-weight: 700;
-  font-family: 'Orbitron', sans-serif;
-  text-transform: lowercase;
-  border: 1px solid var(--border-input);
-  background: var(--bg-muted-strong);
-  color: var(--text-body);
-  cursor: pointer;
 }
 
 .hcc-chip.on {
@@ -225,6 +321,20 @@
   color: var(--text-body);
 }
 
+.hcc-clear-hands--compact {
+  margin-top: 0;
+  width: auto;
+  max-width: min(100%, 11rem);
+  flex: 0 0 auto;
+  min-height: var(--ui-control-compact-min-h);
+  padding: var(--ui-control-compact-pad-y) var(--ui-control-compact-pad-x);
+  border-radius: var(--ui-control-compact-radius);
+  font-size: var(--ui-control-compact-font);
+  font-weight: var(--ui-control-compact-weight);
+  line-height: var(--ui-control-compact-line);
+  text-align: center;
+}
+
 .hcc-clear-hands:hover {
   border-color: rgba(251, 191, 36, 0.45);
   color: var(--text-highlight);
@@ -233,38 +343,38 @@
 .hcc-target-block {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
-  margin-bottom: 0.45rem;
-  padding: 0.35rem 0.45rem;
-  border-radius: 10px;
+  gap: var(--ui-space-1);
+  margin-bottom: var(--ui-space-5);
+  padding: var(--ui-space-3) var(--ui-space-5);
+  border-radius: var(--ui-radius-lg);
   border: 1px solid var(--border-strong);
   background: var(--bg-card-solid);
 }
 
 .hcc-target-block__lbl {
-  font-size: 0.48rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  font-size: var(--ui-type-overline-size);
+  font-weight: var(--ui-type-overline-weight);
+  letter-spacing: var(--ui-type-overline-track);
   color: var(--text-muted);
 }
 
 .hcc-vote-big {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-bottom: 0.4rem;
+  gap: var(--ui-space-6);
+  margin-bottom: var(--ui-space-6);
 }
 
 .hcc-btn-xl {
   flex: 1 1 auto;
-  min-width: 5.5rem;
-  padding: 0.55rem 0.75rem;
-  border-radius: 11px;
-  font-size: 0.82rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  min-width: var(--ui-control-xl-min-w);
+  padding: var(--ui-control-xl-pad-y) var(--ui-control-xl-pad-x);
+  border-radius: var(--ui-control-xl-radius);
+  font-size: var(--ui-control-xl-font);
+  font-weight: var(--ui-control-xl-weight);
+  letter-spacing: var(--ui-control-xl-letter);
   cursor: pointer;
-  border: 2px solid transparent;
+  border: var(--ui-control-xl-border);
 }
 
 .hcc-btn-xl:disabled {
@@ -292,40 +402,45 @@
 
 .hcc-btn-xl--ghost {
   flex: 0 0 auto;
-  min-width: 2.75rem;
-  padding-left: 0.5rem;
-  padding-right: 0.5rem;
+  min-width: var(--ui-control-ghost-min-w);
+  padding-left: var(--ui-control-ghost-pad-x);
+  padding-right: var(--ui-control-ghost-pad-x);
   border-color: var(--border-input);
   background: var(--bg-card-solid);
   color: var(--text-body);
-  font-size: 0.95rem;
+  font-size: var(--ui-control-ghost-font);
 }
 
 .hcc-btn-xl--next {
   border-color: var(--reveal-on-border);
   background: var(--reveal-on-bg);
   color: var(--reveal-on-text);
-  font-size: 0.72rem;
+  font-size: var(--ui-control-next-font);
 }
 
 .hcc-timer-dur {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-bottom: 0.45rem;
+  gap: var(--ui-container-inset-gap);
+  margin-bottom: var(--ui-space-5);
 }
 
 .hcc-chip-xl {
-  min-width: 3.2rem;
-  padding: 0.42rem 0.55rem;
-  border-radius: 10px;
-  font-size: 0.78rem;
-  font-weight: 800;
-  font-family: 'Orbitron', sans-serif;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--ui-control-dur-min-w);
+  padding: var(--ui-control-dur-pad-y) var(--ui-control-dur-pad-x);
+  border-radius: var(--ui-control-dur-radius);
+  font-size: var(--ui-control-dur-font);
+  font-weight: var(--ui-control-dur-weight);
+  font-family: var(--font-display);
   border: 2px solid var(--border-input);
   background: var(--bg-card-solid);
   color: var(--text-body);
   cursor: pointer;
+  line-height: var(--ui-control-compact-line);
 }
 
 .hcc-chip-xl.on {
@@ -337,7 +452,7 @@
 .hcc-timer-big {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: var(--ui-container-inset-gap);
   align-items: center;
 }
 
@@ -347,16 +462,16 @@
 }
 
 .hcc-pause-note {
-  margin: 0.4rem 0 0;
-  font-size: 0.62rem;
+  margin: var(--ui-space-6) 0 0;
+  font-size: var(--ui-control-compact-font);
   font-weight: 800;
   color: var(--text-highlight);
 }
 
 .hcc-live {
   border: 1px solid var(--border-cyan);
-  border-radius: 10px;
-  padding: 0.25rem 0.4rem 0.4rem;
+  border-radius: var(--ui-radius-lg);
+  padding: var(--ui-space-2) var(--ui-space-6) var(--ui-space-6);
   background: var(--bg-obs-hint);
 }
 
@@ -378,7 +493,7 @@
 }
 
 .hcc-live__sc {
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-display);
   color: var(--text-body);
 }
 
@@ -416,7 +531,7 @@
   align-items: center;
   gap: 0.25rem;
   font-size: 0.55rem;
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-display);
   color: var(--text-body);
   padding: 0.1rem 0;
   border-bottom: 1px solid var(--border-subtle);
@@ -439,4 +554,16 @@
   margin: 0.15rem 0 0;
   font-size: 0.52rem;
   color: var(--text-muted);
+}
+
+@container hcc-controls (max-width: 400px) {
+  .hcc-show-phase-row {
+    gap: var(--ui-space-10);
+  }
+}
+
+@container hcc-controls (max-width: 300px) {
+  .hcc-show-phase-row {
+    gap: var(--ui-space-6);
+  }
 }
