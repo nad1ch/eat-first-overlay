@@ -1,11 +1,11 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ADMIN_KEY } from '../config/access.js'
 import { rollFieldValue, rollRandomIntoCharacter, ages, genders, pickNameForGender } from '../data/randomPools.js'
-import { scenarioIds, getScenarioLabel, getScenarioHint } from '../data/scenarios.js'
+import { scenarioIds } from '../data/scenarios.js'
 import {
-  GAME_TITLE,
   characterState,
   CORE_FIELD_KEYS,
   fieldConfig,
@@ -53,6 +53,7 @@ import AppPageLoader from '../components/ui/AppPageLoader.vue'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 
 const wantsAdmin = computed(() => String(route.query.role ?? '').toLowerCase() === 'admin')
 const urlKey = computed(() => String(route.query.key ?? '').trim())
@@ -64,9 +65,9 @@ const gameId = computed(() => String(route.query.game ?? 'test1'))
 const playerId = computed(() => normalizePlayerSlotId(route.query.player))
 
 const modeLabel = computed(() => {
-  if (adminAccessDenied.value) return 'Access denied'
-  if (isAdmin.value) return 'Ведучий'
-  return 'Гравець'
+  if (adminAccessDenied.value) return t('control.accessDenied')
+  if (isAdmin.value) return t('control.modeHost')
+  return t('control.modePlayer')
 })
 
 const overlayHrefGlobal = computed(() => ({
@@ -158,18 +159,18 @@ function showToast(msg) {
 async function copyPersonal() {
   try {
     await navigator.clipboard.writeText(personalUrlAbsolute.value)
-    showToast('Скопійовано')
+    showToast(t('toast.copied'))
   } catch {
-    showToast('Помилка копіювання')
+    showToast(t('toast.copyError'))
   }
 }
 
 async function copyGlobal() {
   try {
     await navigator.clipboard.writeText(globalUrlAbsolute.value)
-    showToast('Скопійовано')
+    showToast(t('toast.copied'))
   } catch {
-    showToast('Помилка копіювання')
+    showToast(t('toast.copyError'))
   }
 }
 
@@ -273,8 +274,8 @@ const hostSummaryLine = computed(() => {
   const r = roomRoundLive.value
   const sp = String(gameRoom.value?.currentSpeaker ?? '').trim() || '—'
   const tg = String(gameRoom.value?.voting?.targetPlayer ?? '').trim()
-  const tgTxt = tg ? `TARGET ${tg}` : 'TARGET —'
-  const v = gameRoom.value?.voting?.active ? 'VOTING ON' : 'VOTING OFF'
+  const tgTxt = tg ? t('hostChrome.summaryTargetLine', { slot: tg }) : t('hostChrome.summaryTargetNone')
+  const v = gameRoom.value?.voting?.active ? t('hostChrome.votingOn') : t('hostChrome.votingOff')
   const hc = raisedHandsCount.value
   return `${ph} · R${r} · ${sp} · ${tgTxt} · ${v} · ✋ ${hc}`
 })
@@ -301,12 +302,12 @@ const scenarioForRolls = computed(
 )
 
 const myStatusLabel = computed(() => {
-  if (characterState.eliminated) return 'ВИБУВ'
+  if (characterState.eliminated) return t('status.eliminated')
   const sp = String(gameRoom.value?.currentSpeaker ?? '').trim()
-  if (sp && sp === playerId.value) return 'ГОВОРИШ'
+  if (sp && sp === playerId.value) return t('status.speaking')
   const ap = String(gameRoom.value?.activePlayer ?? '').trim()
-  if (ap && ap === playerId.value) return 'SPOTLIGHT'
-  return 'ЧЕКАЄШ'
+  if (ap && ap === playerId.value) return t('status.spotlight')
+  return t('status.waiting')
 })
 
 const hostTimerRemaining = computed(() => {
@@ -350,7 +351,7 @@ async function controlStartRound() {
   try {
     loadError.value = null
     await setGamePhase(gameId.value, 'discussion')
-    showToast('Фаза: discussion')
+    showToast(t('toast.phaseDiscussion'))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -363,11 +364,11 @@ async function controlPauseShow() {
     loadError.value = null
     if (r != null && r >= 0 && gameRoom.value?.timerPaused !== true) {
       await pauseSpeakingTimer(gameId.value, r)
-      showToast('Таймер на паузі')
+      showToast(t('toast.timerPaused'))
     } else if (gameRoom.value?.timerPaused === true) {
-      showToast('Уже на паузі')
+      showToast(t('toast.alreadyPaused'))
     } else {
-      showToast('Таймер не активний')
+      showToast(t('toast.timerInactive'))
     }
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
@@ -379,7 +380,7 @@ async function controlReset() {
   try {
     loadError.value = null
     await resetGameRoomControls(gameId.value)
-    showToast('Кімнату скинуто')
+    showToast(t('toast.roomReset'))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -392,7 +393,7 @@ async function adminStartSpeakingTimer() {
   try {
     loadError.value = null
     await startSpeakingTimer(gameId.value, slot, sec)
-    showToast(`${slot} · ${sec}s`)
+    showToast(t('toast.slotTimer', { slot, sec }))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -401,12 +402,12 @@ async function adminStartSpeakingTimer() {
 async function adminPauseTimerOnly() {
   const r = hostTimerRemaining.value
   if (r == null) {
-    showToast('Немає активного таймера')
+    showToast(t('toast.noActiveTimer'))
     return
   }
   try {
     await pauseSpeakingTimer(gameId.value, r)
-    showToast('Пауза')
+    showToast(t('toast.pause'))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -415,7 +416,7 @@ async function adminPauseTimerOnly() {
 async function adminResumeTimer() {
   try {
     await resumeSpeakingTimer(gameId.value)
-    showToast('Продовжено')
+    showToast(t('toast.resumed'))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -426,7 +427,7 @@ async function adminClearTimer() {
   try {
     loadError.value = null
     await clearSpeakingTimer(gameId.value)
-    showToast('Спікера знято')
+    showToast(t('toast.speakerCleared'))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -436,7 +437,7 @@ async function setPhase(ph) {
   if (!isAdmin.value) return
   try {
     await setGamePhase(gameId.value, ph)
-    showToast(`Фаза: ${ph}`)
+    showToast(t('toast.phaseNamed', { phase: ph }))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -475,7 +476,7 @@ async function setMyHandRaised(raised) {
   try {
     loadError.value = null
     await setGameHandRaised(gameId.value, playerId.value, raised)
-    showToast(raised ? '✋ Руку піднято' : 'Руку опущено')
+    showToast(raised ? t('toast.handRaised') : t('toast.handLowered'))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -525,11 +526,11 @@ async function submitPlayerVote(choice) {
     const res = await saveVote(gid, voter, target, choice, rr)
     if (res.ok) {
       playVoteSubmitSound(0.14)
-      showToast('Голос зараховано')
+      showToast(t('toast.voteRecorded'))
     } else if (res.reason === 'already-voted') {
-      showToast('Ти вже голосував у цьому раунді')
+      showToast(t('toast.alreadyVoted'))
     } else {
-      showToast('Не вдалося надіслати голос')
+      showToast(t('toast.voteSendFail'))
     }
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
@@ -559,7 +560,7 @@ async function hostToggleNomination({ target, by }) {
     const exists = cur.some((x) => x.target === t && x.by === b)
     const next = exists ? cur.filter((x) => !(x.target === t && x.by === b)) : [...cur, { target: t, by: b }]
     await setGameNominations(gameId.value, next)
-    showToast(exists ? 'Номінацію знято' : 'Номінація')
+    showToast(exists ? t('toast.nomRemoved') : t('toast.nomAdded'))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -577,18 +578,18 @@ async function onRosterHostCommand({ type, playerId: pid }) {
         if (cur === p) {
           await clearSpeakingTimer(gameId.value)
           await saveGameRoom(gameId.value, { currentSpeaker: '' })
-          showToast('Спікера знято')
+          showToast(t('toast.speakerCleared'))
         } else {
           timerSpeakerSlot.value = p
           await saveGameRoom(gameId.value, { currentSpeaker: p })
-          showToast(p)
+          showToast(t('toast.speakerSet', { slot: p }))
         }
         break
       }
       case 'vote-target': {
         const active = Boolean(gameRoom.value?.voting?.active)
         await setRoomVoting(gameId.value, active, p)
-        showToast('Ціль обрано')
+        showToast(t('toast.voteTargetSet'))
         break
       }
       case 'spotlight': {
@@ -628,7 +629,7 @@ async function hostResetPlayerRoles(pid) {
     if (String(gr?.activePlayer ?? '').trim() === p) {
       await saveGameRoom(gameId.value, { activePlayer: '' })
     }
-    showToast('Скинуто')
+    showToast(t('toast.cleared'))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -638,13 +639,13 @@ async function hostVotingStart() {
   if (!isAdmin.value) return
   const tp = String(gameRoom.value?.voting?.targetPlayer ?? '').trim()
   if (!tp) {
-    showToast('Оберіть ціль голосування')
+    showToast(t('toast.pickVoteTarget'))
     return
   }
   try {
     loadError.value = null
     await setRoomVoting(gameId.value, true, tp)
-    showToast('Голосування відкрито')
+    showToast(t('toast.votingOpened'))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -675,7 +676,7 @@ async function hostFinishVoting() {
 
     await setRoomVoting(gameId.value, false, '')
     await clearAllVotes(gameId.value)
-    showToast('Голосування завершено')
+    showToast(t('toast.votingClosed'))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -688,7 +689,7 @@ async function hostRemoveVote(voterId) {
   try {
     loadError.value = null
     await deleteVoteDoc(gameId.value, v)
-    showToast(`Голос ${v} знято`)
+    showToast(t('toast.voteRemoved', { slot: v }))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -702,7 +703,7 @@ async function hostRoundDelta(d) {
   try {
     loadError.value = null
     await setRoomRound(gameId.value, next)
-    showToast('Раунд змінено')
+    showToast(t('toast.roundChanged'))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -713,7 +714,7 @@ async function hostClearHands() {
   try {
     loadError.value = null
     await clearAllHands(gameId.value)
-    showToast('Руки скинуто')
+    showToast(t('toast.handsCleared'))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -735,14 +736,14 @@ async function adminNextSpeaker() {
         loadError.value = null
         timerSpeakerSlot.value = slot
         await startSpeakingTimer(gameId.value, slot, sec)
-        showToast(`${slot} · ${sec}s`)
+        showToast(t('toast.slotTimer', { slot, sec }))
       } catch (e) {
         loadError.value = e instanceof Error ? e.message : String(e)
       }
       return
     }
   }
-  showToast('Немає активних гравців')
+  showToast(t('toast.noAlivePlayers'))
 }
 
 const hostChromeActions = {
@@ -807,7 +808,7 @@ async function globalRollField(fieldKey) {
     loadError.value = null
     const sid = scenarioForRolls.value
     await applyGlobalAction(gameId.value, fieldKey, () => rollFieldValue(fieldKey, sid))
-    showToast(`Усім: ${fieldKey}`)
+    showToast(t('toast.allField', { field: t(`traits.${fieldKey}`) }))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -827,7 +828,7 @@ async function regenerateAllPlayers() {
   try {
     loadError.value = null
     await regenerateAllPlayersRandom(gameId.value, selectedScenario.value)
-    showToast('Усіх перегенеровано')
+    showToast(t('toast.allRegenerated'))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -838,7 +839,7 @@ async function regenerateActiveCardsForAllPlayers() {
   try {
     loadError.value = null
     await regenerateAllPlayersActiveCards(gameId.value)
-    showToast('Активні карти оновлено для всіх')
+    showToast(t('toast.activeCardsUpdated'))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -848,7 +849,7 @@ async function confirmActiveCardEffect() {
   if (!isAdmin.value) return
   const eid = String(characterState.activeCard?.effectId || '')
   if (!eid) {
-    showToast('Немає effectId у карти')
+    showToast(t('toast.noEffectId'))
     return
   }
   try {
@@ -880,7 +881,7 @@ async function clearCardRequest() {
   if (!isAdmin.value) return
   characterState.activeCardRequest = false
   await saveCharacter(gameId.value, editorPlayerId.value, snapshotCharacter(characterState))
-  showToast('Запит знято')
+  showToast(t('toast.requestCancelled'))
 }
 
 async function requestCardFromHost() {
@@ -1062,14 +1063,14 @@ function rerollActiveCardOnly() {
 
 <template>
   <div v-if="adminAccessDenied" class="access-denied">
-    <h1 class="denied-title">Access denied</h1>
-    <p class="denied-text">Невірний або відсутній <code>key</code> для ведучого.</p>
+    <h1 class="denied-title">{{ t('control.accessDenied') }}</h1>
+    <p class="denied-text">{{ t('control.deniedBefore') }}<code>key</code>{{ t('control.deniedAfter') }}</p>
   </div>
 
   <div v-else class="desk">
     <AppPageLoader
       :visible="showControlPageLoader"
-      label="Підтягуємо кімнату та картку…"
+      :label="t('loader.control')"
     />
     <div class="mode-strip" :class="{ admin: isAdmin, player: !isAdmin }">
       <span class="mode-label">{{ modeLabel }}</span>
@@ -1077,13 +1078,13 @@ function rerollActiveCardOnly() {
     </div>
 
     <template v-if="isAdmin">
-      <section class="admin-zone admin-zone--live admin-card admin-zone--live-priority" aria-label="Live">
+      <section class="admin-zone admin-zone--live admin-card admin-zone--live-priority" :aria-label="t('control.ariaLive')">
         <ShowDeskHeader
           class="admin-zone__header"
-          :game-title="GAME_TITLE"
+          :game-title="t('game.title')"
           :game-id="gameId"
           :game-phase="String(gameRoom.gamePhase || 'intro')"
-          :scenario-label="getScenarioLabel(selectedScenario)"
+          :scenario-label="t(`scenarios.${selectedScenario}.label`)"
           :alive-count="aliveCount"
           :personal-url="personalUrlAbsolute"
           :global-url="globalUrlAbsolute"
@@ -1091,7 +1092,7 @@ function rerollActiveCardOnly() {
           @copy-global="copyGlobal"
         />
         <details v-if="hostVoteLog.length" class="vote-log-details">
-          <summary class="vote-log-details__sum">Журнал голосувань ({{ hostVoteLog.length }})</summary>
+          <summary class="vote-log-details__sum">{{ t('control.voteLog', { n: hostVoteLog.length }) }}</summary>
           <ul class="vote-log-details__list">
             <li v-for="row in hostVoteLog" :key="row.id" class="vote-log-details__li">{{ row.line }}</li>
           </ul>
@@ -1101,9 +1102,9 @@ function rerollActiveCardOnly() {
       <section
         class="admin-zone admin-zone--players"
         :class="{ 'admin-zone--nominated-active': nominatedPlayerActive }"
-        aria-label="Гравці"
+        :aria-label="t('control.ariaPlayers')"
       >
-        <h2 class="zone-kicker">ГРАВЦІ</h2>
+        <h2 class="zone-kicker">{{ t('control.zonePlayers') }}</h2>
         <ShowPlayersRoster
           v-model:selected-player-id="selectedDeskPlayerId"
           :players="allPlayers"
@@ -1121,12 +1122,12 @@ function rerollActiveCardOnly() {
           @toggle-nomination="hostToggleNomination"
         />
         <aside class="side-tools side-tools--inline">
-          <label class="field-label">Game id</label>
+          <label class="field-label">{{ t('control.gameId') }}</label>
           <div class="inline">
             <input v-model="draftGameId" type="text" class="input" />
             <button type="button" class="btn-soft btn-lift" @click="applyNewGame">OK</button>
           </div>
-          <label class="field-label mt">Новий player id</label>
+          <label class="field-label mt">{{ t('control.newPlayerId') }}</label>
           <div class="inline">
             <input v-model="newPlayerId" type="text" class="input" placeholder="p11" />
             <button type="button" class="btn-soft btn-lift" @click="createAndGoToPlayer">+</button>
@@ -1134,8 +1135,8 @@ function rerollActiveCardOnly() {
         </aside>
       </section>
 
-      <section class="admin-zone admin-zone--generate admin-zone--tier-lower" aria-label="Генерація">
-        <h2 class="zone-kicker zone-kicker--soft zone-kicker--gen-title">ГЕНЕРАЦІЯ</h2>
+      <section class="admin-zone admin-zone--generate admin-zone--tier-lower" :aria-label="t('control.ariaGen')">
+        <h2 class="zone-kicker zone-kicker--soft zone-kicker--gen-title">{{ t('control.zoneGen') }}</h2>
         <div class="gen-bar gen-bar--actions gen-bar--compact">
           <button type="button" class="btn-neon btn-neon--compact" @click="generateRandomCharacter">
             Generate Player
@@ -1151,24 +1152,24 @@ function rerollActiveCardOnly() {
             Active cards — all players
           </button>
         </div>
-        <p class="hint-sc hint-sc--tight hint-sc--muted">{{ getScenarioHint(selectedScenario) }}</p>
+        <p class="hint-sc hint-sc--tight hint-sc--muted">{{ t(`scenarios.${selectedScenario}.hint`) }}</p>
         <div class="scenario-row">
-          <label class="field-label field-label--inline">Сценарій</label>
+          <label class="field-label field-label--inline">{{ t('control.scenario') }}</label>
           <select v-model="selectedScenario" class="input select select--compact" @change="persistScenarioChoice">
-            <option v-for="sid in scenarioIds" :key="sid" :value="sid">{{ getScenarioLabel(sid) }}</option>
+            <option v-for="sid in scenarioIds" :key="sid" :value="sid">{{ t(`scenarios.${sid}.label`) }}</option>
           </select>
         </div>
-        <h3 class="sub-kicker sub-kicker--soft">Глобально всім</h3>
+        <h3 class="sub-kicker sub-kicker--soft">{{ t('control.globalAll') }}</h3>
         <div class="global-btns global-btns--compact">
-          <button type="button" class="gbtn" @click="globalRollField('profession')">Професія</button>
-          <button type="button" class="gbtn" @click="globalRollField('health')">Здоров’я</button>
-          <button type="button" class="gbtn" @click="globalRollField('phobia')">Фобія</button>
-          <button type="button" class="gbtn" @click="globalChaos">Chaos</button>
+          <button type="button" class="gbtn" @click="globalRollField('profession')">{{ t('traits.profession') }}</button>
+          <button type="button" class="gbtn" @click="globalRollField('health')">{{ t('traits.health') }}</button>
+          <button type="button" class="gbtn" @click="globalRollField('phobia')">{{ t('traits.phobia') }}</button>
+          <button type="button" class="gbtn" @click="globalChaos">{{ t('control.chaos') }}</button>
         </div>
         <div class="pick-row pick-row--compact">
-          <label class="field-label">Поле всім</label>
+          <label class="field-label">{{ t('control.fieldForAll') }}</label>
           <select v-model="globalFieldPick" class="input select select--compact">
-            <option v-for="row in fieldConfig" :key="row.key" :value="row.key">{{ row.label }}</option>
+            <option v-for="row in fieldConfig" :key="row.key" :value="row.key">{{ t(`traits.${row.key}`) }}</option>
           </select>
           <button type="button" class="btn-primary btn-primary--compact" @click="globalRollSelected">OK</button>
         </div>
@@ -1177,29 +1178,29 @@ function rerollActiveCardOnly() {
     </template>
 
     <div v-else class="player-hero">
-      <h1 class="player-title">{{ GAME_TITLE }}</h1>
-      <p class="player-phase">Фаза: {{ String(gameRoom.gamePhase || 'intro') }}</p>
-      <div class="hand-toggle" role="group" aria-label="Піднята рука">
+      <h1 class="player-title">{{ t('game.title') }}</h1>
+      <p class="player-phase">{{ t('control.playerPhase', { phase: String(gameRoom.gamePhase || 'intro') }) }}</p>
+      <div class="hand-toggle" role="group" :aria-label="t('control.handGroup')">
         <button
           type="button"
           class="hand-icon-btn"
           :class="{ 'hand-icon-btn--up': myHandRaised }"
           :aria-pressed="myHandRaised"
-          :aria-label="myHandRaised ? 'Опустити руку' : 'Підняти руку'"
-          :title="myHandRaised ? 'Рука піднята — натисни, щоб опустити' : 'Рука опущена — натисни, щоб підняти'"
+          :aria-label="myHandRaised ? t('control.handLower') : t('control.handRaise')"
+          :title="myHandRaised ? t('control.handLowerTitle') : t('control.handRaiseTitle')"
           @click="setMyHandRaised(!myHandRaised)"
         >
           <span class="hand-icon-btn__ico" aria-hidden="true">✋</span>
         </button>
-        <span class="hand-toggle__caption">{{ myHandRaised ? 'Піднято' : 'Опущено' }}</span>
+        <span class="hand-toggle__caption">{{ myHandRaised ? t('control.handUp') : t('control.handDown') }}</span>
       </div>
     </div>
 
     <div v-if="showPlayerVotingUi" class="player-vote-panel">
-      <p class="player-vote-panel__k">Голосування</p>
-      <p class="player-vote-panel__line">Голос проти гравця <strong>{{ playerVoteSlotLabel }}</strong></p>
-      <p v-if="playerIsVotingTarget" class="player-vote-panel__warn">Тебе голосують</p>
-      <p v-if="playerHasVotedThisRound" class="player-vote-panel__done">Ти вже проголосував у цьому раунді.</p>
+      <p class="player-vote-panel__k">{{ t('control.votingTitle') }}</p>
+      <p class="player-vote-panel__line">{{ t('control.voteAgainst', { name: playerVoteSlotLabel }) }}</p>
+      <p v-if="playerIsVotingTarget" class="player-vote-panel__warn">{{ t('control.youAreVoted') }}</p>
+      <p v-if="playerHasVotedThisRound" class="player-vote-panel__done">{{ t('control.youVotedAlready') }}</p>
       <div v-else class="player-vote-panel__row">
         <button
           type="button"
@@ -1207,7 +1208,7 @@ function rerollActiveCardOnly() {
           :disabled="playerVoteBusy"
           @click="submitPlayerVote('for')"
         >
-          👍 За
+          {{ t('control.voteFor') }}
         </button>
         <button
           type="button"
@@ -1215,7 +1216,7 @@ function rerollActiveCardOnly() {
           :disabled="playerVoteBusy"
           @click="submitPlayerVote('against')"
         >
-          👎 Проти
+          {{ t('control.voteAgainstBtn') }}
         </button>
       </div>
     </div>
@@ -1226,17 +1227,17 @@ function rerollActiveCardOnly() {
       class="panel editor-panel editor-panel--calm"
       :class="{ 'editor-panel--hydrating': panelHydrating }"
     >
-      <div v-if="panelHydrating" class="panel-hydrate-overlay" aria-busy="true" aria-label="Завантаження">
+      <div v-if="panelHydrating" class="panel-hydrate-overlay" aria-busy="true" :aria-label="t('control.panelLoadingAria')">
         <span class="panel-hydrate-spinner" />
-        <span class="panel-hydrate-label">Завантаження картки…</span>
+        <span class="panel-hydrate-label">{{ t('loader.panelCard') }}</span>
       </div>
-      <h2 class="panel-kicker">{{ isAdmin ? `Редактор: ${editorPlayerId}` : 'Твій персонаж' }}</h2>
+      <h2 class="panel-kicker">{{ isAdmin ? t('control.editorTitle', { id: editorPlayerId }) : t('control.yourChar') }}</h2>
 
       <div v-if="isAdmin" class="trait-block trait-block--identity">
         <div class="trait-toolbar">
-          <span class="trait-label">Профіль (оверлей)</span>
+          <span class="trait-label">{{ t('control.profileOverlay') }}</span>
           <div class="trait-actions">
-            <button type="button" class="icon-btn icon-btn--reroll" title="Перегенерувати" @click="rerollIdentity">
+            <button type="button" class="icon-btn icon-btn--reroll" :title="t('control.reroll')" @click="rerollIdentity">
               🎲
             </button>
             <button
@@ -1245,22 +1246,22 @@ function rerollActiveCardOnly() {
               :class="{ 'reveal-toggle--open': characterState.identityRevealed }"
               @click="revealIdentity(!characterState.identityRevealed)"
             >
-              {{ characterState.identityRevealed ? 'Відкрито' : 'Закрито' }}
+              {{ characterState.identityRevealed ? t('control.open') : t('control.closed') }}
             </button>
           </div>
         </div>
         <div class="meta-grid">
           <div>
-            <label class="field-label">Ім’я</label>
+            <label class="field-label">{{ t('control.name') }}</label>
             <input v-model="characterState.name" type="text" class="input" />
           </div>
           <div>
-            <label class="field-label">Вік</label>
+            <label class="field-label">{{ t('control.age') }}</label>
             <input v-model="characterState.age" type="text" class="input" />
           </div>
           <div>
-            <label class="field-label">Стать</label>
-            <input v-model="characterState.gender" type="text" class="input" placeholder="Чоловік / Жінка …" />
+            <label class="field-label">{{ t('control.gender') }}</label>
+            <input v-model="characterState.gender" type="text" class="input" :placeholder="t('control.genderPh')" />
           </div>
         </div>
       </div>
@@ -1268,7 +1269,7 @@ function rerollActiveCardOnly() {
       <div v-else class="player-char-grid">
         <div class="trait-block trait-block--player trait-block--identity player-char-grid__identity">
           <div class="trait-toolbar">
-            <span class="trait-label">Профіль</span>
+            <span class="trait-label">{{ t('control.profile') }}</span>
             <button
               v-if="!playerRevealLocked"
               type="button"
@@ -1276,14 +1277,14 @@ function rerollActiveCardOnly() {
               :class="{ 'reveal-toggle--open': characterState.identityRevealed }"
               @click="revealIdentity(!characterState.identityRevealed)"
             >
-              {{ characterState.identityRevealed ? 'Відкрито' : 'Закрито' }}
+              {{ characterState.identityRevealed ? t('control.open') : t('control.closed') }}
             </button>
           </div>
           <Transition name="stat-reveal" mode="out-in">
             <div v-if="characterState.identityRevealed" key="id-on" class="identity-reveal-block">
-              <p class="pv-line"><span class="mk">Ім’я</span> {{ characterState.name || '—' }}</p>
+              <p class="pv-line"><span class="mk">{{ t('control.name') }}</span> {{ characterState.name || '—' }}</p>
               <p class="pv-line">
-                <span class="mk">Вік · стать</span> {{ characterState.age || '—' }} ·
+                <span class="mk">{{ t('control.ageGender') }}</span> {{ characterState.age || '—' }} ·
                 {{ formatGenderDisplay(characterState.gender) }}
               </p>
             </div>
@@ -1292,10 +1293,10 @@ function rerollActiveCardOnly() {
         </div>
 
         <div class="player-char-grid__traits player-traits-cols">
-          <div class="player-traits-col" aria-label="Професія, здоров’я, фобія">
+          <div class="player-traits-col" :aria-label="t('control.ariaTraitsL')">
             <div v-for="row in PLAYER_TRAIT_COL_LEFT" :key="row.key" class="trait-block trait-block--player">
               <div class="trait-toolbar">
-                <span class="trait-label">{{ row.label }}</span>
+                <span class="trait-label">{{ t(`traits.${row.key}`) }}</span>
                 <button
                   v-if="!playerRevealLocked"
                   type="button"
@@ -1303,7 +1304,7 @@ function rerollActiveCardOnly() {
                   :class="{ 'reveal-toggle--open': characterState[row.key].revealed }"
                   @click="revealTrait(row.key, !characterState[row.key].revealed)"
                 >
-                  {{ characterState[row.key].revealed ? 'Відкрито' : 'Закрито' }}
+                  {{ characterState[row.key].revealed ? t('control.open') : t('control.closed') }}
                 </button>
               </div>
               <Transition name="stat-reveal" mode="out-in">
@@ -1318,10 +1319,10 @@ function rerollActiveCardOnly() {
               </Transition>
             </div>
           </div>
-          <div class="player-traits-col" aria-label="Багаж, факт, особливість">
+          <div class="player-traits-col" :aria-label="t('control.ariaTraitsR')">
             <div v-for="row in PLAYER_TRAIT_COL_RIGHT" :key="row.key" class="trait-block trait-block--player">
               <div class="trait-toolbar">
-                <span class="trait-label">{{ row.label }}</span>
+                <span class="trait-label">{{ t(`traits.${row.key}`) }}</span>
                 <button
                   v-if="!playerRevealLocked"
                   type="button"
@@ -1329,7 +1330,7 @@ function rerollActiveCardOnly() {
                   :class="{ 'reveal-toggle--open': characterState[row.key].revealed }"
                   @click="revealTrait(row.key, !characterState[row.key].revealed)"
                 >
-                  {{ characterState[row.key].revealed ? 'Відкрито' : 'Закрито' }}
+                  {{ characterState[row.key].revealed ? t('control.open') : t('control.closed') }}
                 </button>
               </div>
               <Transition name="stat-reveal" mode="out-in">
@@ -1350,12 +1351,12 @@ function rerollActiveCardOnly() {
       <div v-if="isAdmin" class="traits-stack">
         <div v-for="row in fieldConfig" :key="row.key" class="trait-block">
           <div class="trait-toolbar">
-            <span class="trait-label">{{ row.label }}</span>
+            <span class="trait-label">{{ t(`traits.${row.key}`) }}</span>
             <div class="trait-actions">
               <button
                 type="button"
                 class="icon-btn icon-btn--reroll"
-                title="Перегенерувати поле"
+                :title="t('control.rerollField')"
                 @click="rerollSingleTrait(row.key)"
               >
                 🎲
@@ -1366,7 +1367,7 @@ function rerollActiveCardOnly() {
                 :class="{ 'reveal-toggle--open': characterState[row.key].revealed }"
                 @click="revealTrait(row.key, !characterState[row.key].revealed)"
               >
-                {{ characterState[row.key].revealed ? 'Відкрито' : 'Закрито' }}
+                {{ characterState[row.key].revealed ? t('control.open') : t('control.closed') }}
               </button>
             </div>
           </div>
@@ -1375,31 +1376,36 @@ function rerollActiveCardOnly() {
       </div>
 
       <div class="active-card-box">
-        <h3 class="ac-title">Активна карта</h3>
+        <h3 class="ac-title">{{ t('control.activeCard') }}</h3>
         <template v-if="isAdmin">
           <div v-if="characterState.activeCardRequest" class="card-request-host">
-            <p class="card-request-host__text">Гравець хоче використати карту на шоу.</p>
+            <p class="card-request-host__text">{{ t('control.cardRequestHost') }}</p>
             <button
               type="button"
               class="btn-confirm-card"
               :disabled="characterState.activeCard.used"
               @click="confirmActiveCardEffect"
             >
-              ПІДТВЕРДИТИ КАРТУ
+              {{ t('control.confirmCard') }}
             </button>
           </div>
-          <input v-model="characterState.activeCard.title" type="text" class="input" placeholder="Заголовок" />
-          <textarea v-model="characterState.activeCard.description" class="textarea" rows="3" placeholder="Опис" />
+          <input v-model="characterState.activeCard.title" type="text" class="input" :placeholder="t('control.titlePh')" />
+          <textarea
+            v-model="characterState.activeCard.description"
+            class="textarea"
+            rows="3"
+            :placeholder="t('control.descPh')"
+          />
           <p class="ac-meta">effectId: <code>{{ characterState.activeCard.effectId || '—' }}</code></p>
           <div class="ac-actions">
-            <button type="button" class="btn-soft" @click="rerollActiveCardOnly">Нова карта (random)</button>
+            <button type="button" class="btn-soft" @click="rerollActiveCardOnly">{{ t('control.newCardRandom') }}</button>
             <button
               v-if="characterState.activeCardRequest"
               type="button"
               class="btn-soft"
               @click="clearCardRequest"
             >
-              Зняти запит гравця
+              {{ t('control.clearPlayerRequest') }}
             </button>
             <button
               v-if="!characterState.activeCardRequest"
@@ -1408,7 +1414,7 @@ function rerollActiveCardOnly() {
               :disabled="characterState.activeCard.used"
               @click="confirmActiveCardEffect"
             >
-              Застосувати ефект (без запиту)
+              {{ t('control.applyEffect') }}
             </button>
           </div>
         </template>
@@ -1416,9 +1422,9 @@ function rerollActiveCardOnly() {
           <div :key="activeCardPanelKey" class="active-card-player-block">
             <p class="ac-t">{{ characterState.activeCard.title || '—' }}</p>
             <p class="ac-d">{{ characterState.activeCard.description || '—' }}</p>
-            <p v-if="characterState.activeCard.used" class="ac-used">Використано</p>
+            <p v-if="characterState.activeCard.used" class="ac-used">{{ t('control.used') }}</p>
             <p v-else-if="characterState.activeCardRequest" class="ac-pending">
-              Очікує підтвердження ведучого
+              {{ t('control.awaitHost') }}
             </p>
             <button
               v-else

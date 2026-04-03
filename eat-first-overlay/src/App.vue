@@ -1,11 +1,14 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useTheme } from './composables/useTheme.js'
 import { hostControlChromeStore } from './composables/hostControlChrome.js'
 import HostControlChromeBar from './components/showdesk/HostControlChromeBar.vue'
+import { persistLocale, LOCALE_OPTIONS } from './i18n'
 
 const route = useRoute()
+const { t, locale } = useI18n()
 const { theme, toggleTheme } = useTheme()
 
 /** На /control не включаємо `player` у key — інакше Vue перемонтовує всю сторінку при зміні слота ведучим. */
@@ -27,7 +30,11 @@ const votingGlow = computed(() => Boolean(hostControlChromeStore.gameRoom?.votin
 const routeTransition = computed(() => (route.path === '/overlay' ? 'route-fade' : 'route-slide'))
 
 const themeIcon = computed(() => (theme.value === 'dark' ? '☀️' : '🌙'))
-const themeLabel = computed(() => (theme.value === 'dark' ? 'Світла тема' : 'Темна тема'))
+const themeLabel = computed(() => (theme.value === 'dark' ? t('app.themeLight') : t('app.themeDark')))
+
+function onLocaleChange(ev) {
+  persistLocale(ev.target.value)
+}
 
 const footerYear = new Date().getFullYear()
 
@@ -43,7 +50,7 @@ const streamerTwitchUrl = 'https://www.twitch.tv/nad1ch'
     >
       <div class="app-shell-header__top">
         <span class="app-shell-brand">{{
-          hostChromeOn ? 'Ведучий · пульт' : 'Кого ми з’їмо першим'
+          hostChromeOn ? t('app.brandHost') : t('game.title')
         }}</span>
         <div class="app-shell-header__end">
           <a
@@ -51,7 +58,7 @@ const streamerTwitchUrl = 'https://www.twitch.tv/nad1ch'
             :href="streamerTwitchUrl"
             target="_blank"
             rel="noopener noreferrer"
-            aria-label="Канал nad1ch на Twitch (відкриється в новій вкладці)"
+            :aria-label="t('app.twitchAria')"
           >
             <img
               class="app-shell-mini-brand__logo"
@@ -62,6 +69,14 @@ const streamerTwitchUrl = 'https://www.twitch.tv/nad1ch'
             />
             <span class="app-shell-mini-brand__nick">nad1ch</span>
           </a>
+          <select
+            class="locale-select"
+            :aria-label="t('app.langAria')"
+            :value="locale"
+            @change="onLocaleChange"
+          >
+            <option v-for="opt in LOCALE_OPTIONS" :key="opt.code" :value="opt.code">{{ opt.label }}</option>
+          </select>
           <button
             type="button"
             class="theme-toggle"
@@ -90,7 +105,7 @@ const streamerTwitchUrl = 'https://www.twitch.tv/nad1ch'
           :href="streamerTwitchUrl"
           target="_blank"
           rel="noopener noreferrer"
-          aria-label="Канал nad1ch на Twitch (відкриється в новій вкладці)"
+          :aria-label="t('app.twitchAria')"
         >
           <div class="app-site-footer__logo-wrap">
             <img
@@ -105,8 +120,7 @@ const streamerTwitchUrl = 'https://www.twitch.tv/nad1ch'
         </a>
         <div class="app-site-footer__meta">
           <p class="app-site-footer__copy">
-            © {{ footerYear }} nad1ch. Усі права захищено. «Кого ми з’їмо першим» — оригінальний
-            інтерфейс шоу.
+            {{ t('app.footerLine', { year: footerYear }) }}
           </p>
         </div>
       </div>

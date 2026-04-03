@@ -1,6 +1,9 @@
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { normalizePlayerSlotId } from '../../utils/playerSlot.js'
+
+const { t } = useI18n()
 
 const props = defineProps({
   players: { type: Array, default: () => [] },
@@ -51,9 +54,9 @@ function nominatorsLine(pid) {
 }
 
 function statusLine(p) {
-  if (p.eliminated === true) return 'Вибув'
-  if (String(p.id) === String(props.spotlightPlayerId || '').trim()) return 'Spotlight'
-  return '—'
+  if (p.eliminated === true) return t('roster.eliminated')
+  if (String(p.id) === String(props.spotlightPlayerId || '').trim()) return t('roster.spotlightStatus')
+  return t('roster.statusDash')
 }
 
 function isSpeak(p) {
@@ -161,13 +164,9 @@ const aliveSlotsForNom = computed(() => {
 
 <template>
   <section class="roster" :class="{ 'roster--embedded': useHostPanel }">
-    <h2 v-if="!useHostPanel" class="block-title">Гравці</h2>
+    <h2 v-if="!useHostPanel" class="block-title">{{ t('roster.title') }}</h2>
     <p class="roster-hint">
-      {{
-        useHostPanel
-          ? 'Ліворуч — слоти. Клік виділяє; усі дії — у панелі справа.'
-          : 'Клік — відкрити картку.'
-      }}
+      {{ useHostPanel ? t('roster.hintPanel') : t('roster.hintClick') }}
     </p>
 
     <div class="roster-shell" :class="{ 'roster-shell--panel': useHostPanel }">
@@ -200,36 +199,36 @@ const aliveSlotsForNom = computed(() => {
           >
             ✋
           </span>
-          <span v-if="p.eliminated === true" class="elim-badge" aria-hidden="true">ВИБУВ</span>
+          <span v-if="p.eliminated === true" class="elim-badge" aria-hidden="true">{{ t('roster.eliminated') }}</span>
           <div v-else-if="showBadgesRow(p)" class="pcard-badges">
-            <span v-if="isSpeak(p)" class="pcb pcb--speak">ГОВОРИТЬ</span>
+            <span v-if="isSpeak(p)" class="pcb pcb--speak">{{ t('roster.speaking') }}</span>
             <template v-else>
-              <span v-if="isVoteTargetCard(p)" class="pcb pcb--target">ЦІЛЬ</span>
+              <span v-if="isVoteTargetCard(p)" class="pcb pcb--target">{{ t('roster.targetBadge') }}</span>
               <template v-if="isNominatedCard(p)">
-                <span class="pcb pcb--nom">НОМІН.</span>
+                <span class="pcb pcb--nom">{{ t('roster.nomBadge') }}</span>
                 <span class="pcb pcb--nom-who">{{ nominatorsLine(p.id) }}</span>
               </template>
             </template>
           </div>
           <span class="num">{{ slotNum(p.id) }}</span>
           <span class="st">{{ statusLine(p) }}</span>
-          <span v-if="cardActive(p)" class="card-ico" title="Є активна карта">🃏</span>
+          <span v-if="cardActive(p)" class="card-ico" :title="t('roster.activeCardTitle')">🃏</span>
         </button>
       </div>
 
       <aside v-if="useHostPanel" class="act-panel">
         <template v-if="selectedPlayer">
           <p class="act-panel__id">{{ selectedPlayerId }}</p>
-          <button type="button" class="act-btn act-btn--soft" @click="openEditorSelected">📝 Редактор</button>
+          <button type="button" class="act-btn act-btn--soft" @click="openEditorSelected">{{ t('roster.editor') }}</button>
 
           <template v-if="!selectedEliminated">
             <button v-if="!speakerOnSelected" type="button" class="act-btn" @click="cmd('speaker')">
-              🎤 Спікер
+              {{ t('roster.speaker') }}
             </button>
-            <button v-else type="button" class="act-btn" @click="cmd('speaker')">✖ Забрати спікера</button>
+            <button v-else type="button" class="act-btn" @click="cmd('speaker')">{{ t('roster.speakerOff') }}</button>
 
-            <p class="act-sub">⚖️ Номінувати</p>
-            <p class="act-micro">Обраний слот виставляє. Обери, кого він номінує:</p>
+            <p class="act-sub">{{ t('roster.nominate') }}</p>
+            <p class="act-micro">{{ t('roster.nominateHint') }}</p>
             <div class="act-chips">
               <button
                 v-for="slot in aliveSlotsForNom"
@@ -244,15 +243,15 @@ const aliveSlotsForNom = computed(() => {
               </button>
             </div>
 
-            <button type="button" class="act-btn" @click="cmd('vote-target')">🗳️ Ціль голосування</button>
+            <button type="button" class="act-btn" @click="cmd('vote-target')">{{ t('roster.voteTarget') }}</button>
             <button type="button" class="act-btn act-btn--soft" @click="cmd('spotlight')">
-              {{ spotlightOnSelected ? '⭐ Зняти spotlight' : '⭐ Spotlight' }}
+              {{ spotlightOnSelected ? t('roster.spotlightOff') : t('roster.spotlight') }}
             </button>
           </template>
 
-          <button type="button" class="act-btn act-btn--danger" @click="cmd('reset')">❌ Скинути</button>
+          <button type="button" class="act-btn act-btn--danger" @click="cmd('reset')">{{ t('roster.reset') }}</button>
         </template>
-        <p v-else class="act-empty">Оберіть слот зліва</p>
+        <p v-else class="act-empty">{{ t('roster.pickSlot') }}</p>
       </aside>
     </div>
   </section>

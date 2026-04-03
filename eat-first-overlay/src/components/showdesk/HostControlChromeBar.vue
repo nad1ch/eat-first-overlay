@@ -1,6 +1,9 @@
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { hostControlChromeStore as store } from '../../composables/hostControlChrome.js'
+
+const { t } = useI18n()
 
 function slotNum(slot) {
   const s = String(slot ?? '')
@@ -63,18 +66,18 @@ function act(name, ...args) {
       <aside class="hcc-left">
         <p class="hcc-summary" role="status" :title="store.summaryLine">{{ store.summaryLine }}</p>
         <p v-if="raisedHandSlots.length" class="hcc-hands-row" role="status">
-          ✋ Підняті:
+          ✋ {{ t('hostChrome.handsUp') }}
           <strong>{{ raisedHandSlots.map(slotNum).join(', ') }}</strong>
         </p>
 
         <div class="hcc-left-round">
-          <span class="hcc-left-lab">Раунд</span>
+          <span class="hcc-left-lab">{{ t('hostChrome.round') }}</span>
           <div class="hcc-round">
             <button
               type="button"
               class="hcc-step"
               :disabled="!canDec"
-              aria-label="Мінус раунд"
+              :aria-label="t('hostChrome.roundMinus')"
               @click="act('roundDelta', -1)"
             >
               −
@@ -84,7 +87,7 @@ function act(name, ...args) {
               type="button"
               class="hcc-step"
               :disabled="!canInc"
-              aria-label="Плюс раунд"
+              :aria-label="t('hostChrome.roundPlus')"
               @click="act('roundDelta', 1)"
             >
               +
@@ -92,14 +95,14 @@ function act(name, ...args) {
           </div>
         </div>
 
-        <p class="hcc-left-lab hcc-left-lab--spaced">Шоу</p>
+        <p class="hcc-left-lab hcc-left-lab--spaced">{{ t('hostChrome.show') }}</p>
         <div class="hcc-show-btns">
           <button type="button" class="hcc-btn-sm hcc-btn-sm--go" @click="act('startRound')">Start</button>
           <button type="button" class="hcc-btn-sm hcc-btn-sm--pause" @click="act('pauseShow')">Pause</button>
           <button type="button" class="hcc-btn-sm hcc-btn-sm--reset" @click="act('resetRoom')">Reset</button>
         </div>
 
-        <p class="hcc-left-lab hcc-left-lab--spaced">Фаза</p>
+        <p class="hcc-left-lab hcc-left-lab--spaced">{{ t('hostChrome.phase') }}</p>
         <div class="hcc-phase-chips">
           <button
             v-for="ph in store.phaseOptions"
@@ -113,14 +116,16 @@ function act(name, ...args) {
           </button>
         </div>
 
-        <button type="button" class="hcc-clear-hands" @click="act('clearHands')">Скинути підняті руки ✋</button>
+        <button type="button" class="hcc-clear-hands" @click="act('clearHands')">
+          {{ t('hostChrome.clearHands') }}
+        </button>
       </aside>
 
       <div class="hcc-right">
-        <section class="hcc-panel hcc-panel--vote" aria-label="Голосування">
-          <h3 class="hcc-panel-title">Голосування</h3>
+        <section class="hcc-panel hcc-panel--vote" :aria-label="t('hostChrome.voting')">
+          <h3 class="hcc-panel-title">{{ t('hostChrome.voting') }}</h3>
           <div class="hcc-target-block">
-            <span class="hcc-target-block__lbl">Ціль</span>
+            <span class="hcc-target-block__lbl">{{ t('hostChrome.target') }}</span>
             <strong class="hcc-target-block__id">{{ targetPlayerId || '—' }}</strong>
           </div>
           <div class="hcc-vote-big">
@@ -128,44 +133,44 @@ function act(name, ...args) {
               type="button"
               class="hcc-btn-xl hcc-btn-xl--go"
               :disabled="!canStart"
-              title="Почати голосування"
+              :title="t('hostChrome.startVoteTitle')"
               @click="act('votingStart')"
             >
-              ▶ Старт
+              {{ t('hostChrome.start') }}
             </button>
             <button
               type="button"
               class="hcc-btn-xl hcc-btn-xl--stop"
               :disabled="!votingActive"
-              title="Завершити голосування"
+              :title="t('hostChrome.stopVoteTitle')"
               @click="act('votingFinish')"
             >
-              ■ Стоп
+              {{ t('hostChrome.stop') }}
             </button>
           </div>
           <details class="hcc-live">
             <summary class="hcc-live__sum">
-              Live
+              {{ t('hostChrome.live') }}
               <template v-if="showLiveScore">
                 <span class="hcc-live__sc">👍 {{ countFor }}</span>
                 <span class="hcc-live__sc">👎 {{ countAgainst }}</span>
               </template>
               <span v-else class="hcc-live__empty">· 0</span>
             </summary>
-            <p v-if="store.allPlayersVoted && votingActive" class="hcc-all">ВСІ ПРОГОЛОСУВАЛИ</p>
-            <p v-if="!targetPlayerId && !votingActive" class="hcc-hint">Ціль — у панелі гравця</p>
+            <p v-if="store.allPlayersVoted && votingActive" class="hcc-all">{{ t('hostChrome.allVoted') }}</p>
+            <p v-if="!targetPlayerId && !votingActive" class="hcc-hint">{{ t('hostChrome.targetHint') }}</p>
             <ul v-if="lines.length" class="hcc-list">
               <li v-for="row in lines" :key="row.voterId" class="hcc-li">
                 <span>{{ row.label }}</span>
                 <button type="button" class="hcc-rm" @click="act('removeVote', row.voterId)">×</button>
               </li>
             </ul>
-            <p v-else-if="votingActive" class="hcc-no-v">Немає голосів</p>
+            <p v-else-if="votingActive" class="hcc-no-v">{{ t('hostChrome.noVotes') }}</p>
           </details>
         </section>
 
-        <section class="hcc-panel hcc-panel--timer" aria-label="Таймер">
-          <h3 class="hcc-panel-title">Таймер</h3>
+        <section class="hcc-panel hcc-panel--timer" :aria-label="t('hostChrome.timer')">
+          <h3 class="hcc-panel-title">{{ t('hostChrome.timer') }}</h3>
           <div class="hcc-timer-dur">
             <button
               v-for="sec in [30, 60, 90]"
@@ -179,13 +184,17 @@ function act(name, ...args) {
             </button>
           </div>
           <div class="hcc-timer-big">
-            <button type="button" class="hcc-btn-xl hcc-btn-xl--primary" @click="act('startTimer')">▶ Таймер</button>
+            <button type="button" class="hcc-btn-xl hcc-btn-xl--primary" @click="act('startTimer')">
+              {{ t('hostChrome.timerStart') }}
+            </button>
             <button type="button" class="hcc-btn-xl hcc-btn-xl--ghost" @click="act('pauseTimer')">‖</button>
             <button type="button" class="hcc-btn-xl hcc-btn-xl--ghost" @click="act('resumeTimer')">▶</button>
             <button type="button" class="hcc-btn-xl hcc-btn-xl--ghost" @click="act('clearTimer')">↺</button>
-            <button type="button" class="hcc-btn-xl hcc-btn-xl--next" @click="act('nextSpeaker')">Next</button>
+            <button type="button" class="hcc-btn-xl hcc-btn-xl--next" @click="act('nextSpeaker')">
+              {{ t('hostChrome.next') }}
+            </button>
           </div>
-          <p v-if="store.gameRoom?.timerPaused" class="hcc-pause-note">Таймер на паузі</p>
+          <p v-if="store.gameRoom?.timerPaused" class="hcc-pause-note">{{ t('hostChrome.timerPausedNote') }}</p>
         </section>
       </div>
     </div>

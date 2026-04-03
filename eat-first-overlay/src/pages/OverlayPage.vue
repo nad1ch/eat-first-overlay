@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import OverlayPlayerCard from '../components/OverlayPlayerCard.vue'
 import {
   clearSpeakingTimer,
@@ -15,6 +16,7 @@ import { millisFromFirestore } from '../utils/firestoreTime.js'
 import AppPageLoader from '../components/ui/AppPageLoader.vue'
 
 const route = useRoute()
+const { t } = useI18n()
 
 const gotGameRoomOv = ref(false)
 const gotPrimaryOv = ref(false)
@@ -212,7 +214,7 @@ const globalStatusLine = computed(() => {
   const ph = String(gameRoom.value?.gamePhase || 'intro')
   const r = Math.min(8, Math.max(1, Math.floor(Number(gameRoom.value?.round) || 1)))
   const n = players.value.length
-  return `Фаза: ${ph} · Раунд ${r} · У кімнаті: ${n}`
+  return t('overlayPage.phaseBanner', { phase: ph, round: r, n })
 })
 
 /** Тільки глобальна сітка: на персональному оверлеї без vignette/фільтра по центру вебки */
@@ -391,7 +393,7 @@ onUnmounted(() => {
 <template>
   <AppPageLoader
     :visible="!overlayPageReady"
-    label="Синхронізуємо оверлей…"
+    :label="t('overlayPage.sync')"
   />
   <div
     class="overlay-root"
@@ -408,7 +410,7 @@ onUnmounted(() => {
       class="overlay-edge-hint overlay-edge-hint--all-voted"
       role="status"
     >
-      ВСІ ПРОГОЛОСУВАЛИ
+      {{ t('overlayPage.allVoted') }}
     </p>
     <p
       v-if="handsClusterMode && !isPersonal"
@@ -425,18 +427,18 @@ onUnmounted(() => {
       v-if="!isPersonal"
       class="board-head"
     >
-      <p class="eyebrow">Глобальний оверлей · {{ gameId }}</p>
-      <h1 class="title">Кого ми з’їмо першим</h1>
+      <p class="eyebrow">{{ t('overlayPage.globalEyebrow', { game: gameId }) }}</p>
+      <h1 class="title">{{ t('game.title') }}</h1>
       <p class="board-status">{{ globalStatusLine }}</p>
       <div v-if="players.length === 0" class="overlay-firestore-wait" role="status">
         <span class="overlay-firestore-wait__spin" aria-hidden="true" />
-        <span class="overlay-firestore-wait__txt">Очікуємо гравців у Firestore…</span>
+        <span class="overlay-firestore-wait__txt">{{ t('overlayPage.waitFirestore') }}</span>
       </div>
     </header>
 
     <div v-if="isPersonal && !singlePlayer" class="personal-wait" role="status">
       <span class="personal-wait__spin" aria-hidden="true" />
-      <span class="personal-wait__msg">Немає даних для {{ personalPlayerId }}…</span>
+      <span class="personal-wait__msg">{{ t('overlayPage.noData', { id: personalPlayerId }) }}</span>
     </div>
 
     <div
@@ -445,15 +447,15 @@ onUnmounted(() => {
       role="status"
       aria-live="polite"
     >
-      <p class="overlay-vote-top__k">ГОЛОСУВАННЯ</p>
-      <p class="overlay-vote-top__line">Проти гравця {{ slotNumFromId(votingTargetId) }}</p>
-      <p v-if="personalIsVoteTarget" class="overlay-vote-top__warn">ТЕБЕ ГОЛОСУЮТЬ</p>
+      <p class="overlay-vote-top__k">{{ t('overlayPage.voting') }}</p>
+      <p class="overlay-vote-top__line">{{ t('overlayPage.voteAgainst', { n: slotNumFromId(votingTargetId) }) }}</p>
+      <p v-if="personalIsVoteTarget" class="overlay-vote-top__warn">{{ t('overlayPage.youAreTarget') }}</p>
       <p class="overlay-vote-top__sc">
         👍 {{ personalOverlayVoteTally.for }}
         <span class="overlay-vote-top__dot">·</span>
         👎 {{ personalOverlayVoteTally.against }}
       </p>
-      <p class="overlay-vote-top__hint">Голосуй у панелі гравця (control)</p>
+      <p class="overlay-vote-top__hint">{{ t('overlayPage.voteInPanel') }}</p>
     </div>
 
     <div v-if="isPersonal" class="single-stage single-stage--hud">
@@ -521,8 +523,8 @@ onUnmounted(() => {
         role="status"
         aria-live="polite"
       >
-        <p class="round-banner__n">РАУНД {{ roomRound }}</p>
-        <p class="round-banner__t">ВІДКРИВАЄМО КАРТУ</p>
+        <p class="round-banner__n">{{ t('overlayPage.roundN', { n: roomRound }) }}</p>
+        <p class="round-banner__t">{{ t('overlayPage.revealCard') }}</p>
       </div>
     </Teleport>
   </div>

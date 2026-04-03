@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onUnmounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { fieldConfig } from '../characterState'
 import { formatGenderDisplay } from '../utils/genderDisplay.js'
 import { saveVote } from '../services/gameService'
@@ -49,14 +50,17 @@ const props = defineProps({
   audienceMode: { type: Boolean, default: false },
 })
 
+const { t, locale } = useI18n()
+
 const labelByKey = computed(() =>
-  Object.fromEntries(fieldConfig.map((f) => [f.key, f.label])),
+  Object.fromEntries(fieldConfig.map((f) => [f.key, t(`traits.${f.key}`)])),
 )
 
 /** Закрите поле в HUD: [ ПРОФЕСІЯ ] */
 function fieldLabelUi(fieldKey) {
   const raw = labelByKey.value[fieldKey] ?? fieldKey
-  return `[ ${String(raw).toLocaleUpperCase('uk')} ]`
+  const loc = typeof locale.value === 'string' && locale.value ? locale.value : 'uk'
+  return `[ ${String(raw).toLocaleUpperCase(loc)} ]`
 }
 
 function chunkFor(player, key) {
@@ -219,7 +223,7 @@ const votingShown = computed(
 
 const voteTargetDisplay = computed(() => playerIdDisplay({ id: votingTargetNorm.value }))
 
-const voteHintLine = computed(() => `ГОЛОС ПРОТИ ${voteTargetDisplay.value}`)
+const voteHintLine = computed(() => t('overlayCard.voteAgainst', { name: voteTargetDisplay.value }))
 
 const nominatorsLineNorm = computed(() => String(props.nominatorsLine ?? '').trim())
 
@@ -350,7 +354,7 @@ watch(
 )
 
 const voteAckText = computed(() => {
-  if (localVoteChoice.value && !props.hasVotedThisRound) return 'Твій голос зараховано'
+  if (localVoteChoice.value && !props.hasVotedThisRound) return t('overlayCard.voteRecorded')
   return ''
 })
 
@@ -433,8 +437,8 @@ async function submitVote(choice) {
   >
     <div v-if="isEliminated(player)" class="card-elim-screen card-elim-screen--cut">
       <img class="card-elim-screen__art" :src="deathSvgSrc" alt="" />
-      <p class="card-elim-screen__title">ВИБУВ</p>
-      <p class="card-elim-screen__hint">Слот закритий до кінця гри</p>
+      <p class="card-elim-screen__title">{{ t('overlayCard.eliminated') }}</p>
+      <p class="card-elim-screen__hint">{{ t('overlayCard.slotClosed') }}</p>
       <p class="card-elim-screen__slot">{{ playerIdDisplay(player) }}</p>
     </div>
 
@@ -444,11 +448,11 @@ async function submitVote(choice) {
         class="hand-badge hand-badge--grid"
         :class="{ 'hand-badge--pop': handPop }"
         aria-hidden="true"
-        title="Піднята рука"
+        :title="t('overlayCard.handUp')"
         >✋</span
       >
       <div v-if="showSpeakerTimer" class="card-grid-timer" aria-hidden="true">
-        <p v-if="isTimerTarget" class="card-speak-badge">ГОВОРИШ</p>
+        <p v-if="isTimerTarget" class="card-speak-badge">{{ t('overlayCard.speaking') }}</p>
         <div class="timer-ring-wrap" :class="{ 'timer-ring-wrap--urgent': timerUrgent }">
           <span class="timer-ring" :style="timerRingStyle" />
           <span class="timer-num" :class="{ 'timer-num--urgent': timerUrgent }">⏱ {{ speakerTimeLeft }}s</span>
@@ -459,7 +463,7 @@ async function submitVote(choice) {
           <p class="card-grid-id">{{ playerIdDisplay(player) }}</p>
         </div>
         <template v-if="isNominated">
-          <p class="nominee-nom-label">НОМІН.</p>
+          <p class="nominee-nom-label">{{ t('overlayCard.nomShort') }}</p>
           <p v-if="nominatorsUi" class="nominee-nom-who">{{ nominatorsUi }}</p>
         </template>
         <h2 class="card-grid-name">
@@ -499,9 +503,9 @@ async function submitVote(choice) {
         v-if="votingShown && !hideVoteStrip"
         class="vote-strip vote-strip--grid"
         :class="{ 'vote-strip--flash': voteFlash }"
-        aria-label="Голосування"
+        :aria-label="t('overlayCard.voteAria')"
       >
-        <p class="vote-strip__title">ГОЛОСУВАННЯ</p>
+        <p class="vote-strip__title">{{ t('overlayCard.voting') }}</p>
         <p class="vote-strip__target">{{ voteHintLine }}</p>
         <p v-if="showVoteScore" class="vote-score">
           <span class="vote-score__n" :class="{ 'vote-score__n--bump': bumpFor }">👍 {{ countFor }}</span>
@@ -523,7 +527,7 @@ async function submitVote(choice) {
             :disabled="voteButtonsLocked"
             @click="submitVote('for')"
           >
-            👍 <span class="vote-btn__lbl">за</span>
+            👍 <span class="vote-btn__lbl">{{ t('overlayCard.for') }}</span>
           </button>
           <span v-else class="vote-fake">👍</span>
           <button
@@ -534,7 +538,7 @@ async function submitVote(choice) {
             :disabled="voteButtonsLocked"
             @click="submitVote('against')"
           >
-            👎 <span class="vote-btn__lbl">проти</span>
+            👎 <span class="vote-btn__lbl">{{ t('overlayCard.against') }}</span>
           </button>
           <span v-else class="vote-fake">👎</span>
         </div>
@@ -561,22 +565,22 @@ async function submitVote(choice) {
       <div class="elim-solo-screen__base" aria-hidden="true" />
       <img class="elim-solo-screen__mark" :src="deathSvgSrc" alt="" />
       <div class="elim-solo-screen__content">
-        <p class="elim-solo-screen__kicker">Кого ми з’їмо першим</p>
-        <h2 class="elim-solo-screen__title">ВИБУВ</h2>
-        <p class="elim-solo-screen__subline">Слот закритий до кінця гри</p>
-        <p class="elim-solo-screen__slot">Гравець {{ playerIdDisplay(player) }}</p>
+        <p class="elim-solo-screen__kicker">{{ t('overlayCard.elimKicker') }}</p>
+        <h2 class="elim-solo-screen__title">{{ t('overlayCard.eliminated') }}</h2>
+        <p class="elim-solo-screen__subline">{{ t('overlayCard.slotClosed') }}</p>
+        <p class="elim-solo-screen__slot">{{ t('overlayCard.player', { name: playerIdDisplay(player) }) }}</p>
       </div>
     </div>
 
     <template v-else>
-      <p v-if="solo && idleWaiting" class="idle-wait-cue" role="status">ЧЕКАЄМО ГРАВЦЯ</p>
+      <p v-if="solo && idleWaiting" class="idle-wait-cue" role="status">{{ t('overlayCard.waitPlayer') }}</p>
       <div
         v-if="solo && showActiveCardChip"
         class="ac-chip"
-        :title="activeCardFrom(player).description || activeCardFrom(player).title || 'Є карта'"
+        :title="activeCardFrom(player).description || activeCardFrom(player).title || t('overlayCard.hasCardTitle')"
       >
         <span class="ac-chip-ico">🃏</span>
-        <span class="ac-chip-t">Є карта</span>
+        <span class="ac-chip-t">{{ t('overlayCard.hasCard') }}</span>
       </div>
 
       <div class="hud-zones">
@@ -605,17 +609,17 @@ async function submitVote(choice) {
           aria-hidden="true"
         >
           <span class="hand-wait-hud__ico">✋</span>
-          <span class="hand-wait-hud__txt">ЧЕКАЮ СЛОВА</span>
+          <span class="hand-wait-hud__txt">{{ t('overlayCard.waitWord') }}</span>
         </div>
         <div class="hud-tr-top">
           <span class="hud-slot-wrap">
             <span class="hud-slot">{{ playerIdDisplay(player) }}</span>
           </span>
-          <span v-if="isTimerTarget" class="hud-speak-badge">ГОВОРИШ</span>
+          <span v-if="isTimerTarget" class="hud-speak-badge">{{ t('overlayCard.speaking') }}</span>
         </div>
         <template v-if="solo && isNominated">
-          <p class="nominee-solo-kicker">ТИ НА ГОЛОСУВАННІ</p>
-          <p class="nominee-nom-label nominee-nom-label--hud">НОМІН.</p>
+          <p class="nominee-solo-kicker">{{ t('overlayCard.youOnVote') }}</p>
+          <p class="nominee-nom-label nominee-nom-label--hud">{{ t('overlayCard.nomShort') }}</p>
           <p v-if="nominatorsUi" class="nominee-nom-who nominee-nom-who--hud">{{ nominatorsUi }}</p>
         </template>
         <div v-if="showSpeakerTimer" class="hud-timer-stack">
@@ -679,10 +683,10 @@ async function submitVote(choice) {
         v-if="votingShown && !hideVoteStrip"
         class="vote-strip vote-strip--solo"
         :class="{ 'vote-strip--interactive': voteInteractive, 'vote-strip--flash': voteFlash }"
-        aria-label="Голосування"
+        :aria-label="t('overlayCard.voteAria')"
       >
-        <p class="vote-strip__title">ГОЛОСУВАННЯ</p>
-        <p v-if="voteInteractive && isVoteTargetSelf" class="vote-strip__dramatic">ТЕБЕ ГОЛОСУЮТЬ</p>
+        <p class="vote-strip__title">{{ t('overlayCard.voting') }}</p>
+        <p v-if="voteInteractive && isVoteTargetSelf" class="vote-strip__dramatic">{{ t('overlayCard.youAreBeingVoted') }}</p>
         <p class="vote-strip__target">{{ voteHintLine }}</p>
         <p v-if="showVoteScore" class="vote-score vote-score--solo">
           <span class="vote-score__n" :class="{ 'vote-score__n--bump': bumpFor }">👍 {{ countFor }}</span>
@@ -695,7 +699,7 @@ async function submitVote(choice) {
             class="vote-tally__it"
           >{{ playerIdDisplay({ id: v.id }) }}{{ v.choice === 'against' ? '👎' : '👍' }}</span>
         </p>
-        <p v-if="voteInteractive && hasVotedThisRound" class="vote-strip__voted-only">Ти вже проголосував</p>
+        <p v-if="voteInteractive && hasVotedThisRound" class="vote-strip__voted-only">{{ t('overlayCard.alreadyVotedShort') }}</p>
         <div v-else-if="voteInteractive" class="vote-strip__row">
           <button
             type="button"
@@ -704,7 +708,7 @@ async function submitVote(choice) {
             :disabled="voteButtonsLocked"
             @click="submitVote('for')"
           >
-            👍 <span class="vote-btn__lbl">за</span>
+            👍 <span class="vote-btn__lbl">{{ t('overlayCard.for') }}</span>
           </button>
           <button
             type="button"
@@ -713,7 +717,7 @@ async function submitVote(choice) {
             :disabled="voteButtonsLocked"
             @click="submitVote('against')"
           >
-            👎 <span class="vote-btn__lbl">проти</span>
+            👎 <span class="vote-btn__lbl">{{ t('overlayCard.against') }}</span>
           </button>
         </div>
         <p v-if="voteInteractive && voteAckText" class="vote-strip__ack">{{ voteAckText }}</p>

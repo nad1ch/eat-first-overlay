@@ -1,4 +1,8 @@
 <script setup>
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
+
 defineProps({
   gameTitle: { type: String, required: true },
   gameId: { type: String, required: true },
@@ -17,24 +21,24 @@ const emit = defineEmits(['copy-personal', 'copy-global'])
     <div class="desk-header-top">
       <div>
         <h1 class="desk-title">{{ gameTitle }}</h1>
-        <p class="desk-sub">Кімната: <code>{{ gameId }}</code></p>
+        <p class="desk-sub">{{ t('desk.room') }} <code>{{ gameId }}</code></p>
       </div>
       <div class="desk-stats">
-        <span class="pill">Живих: <strong>{{ aliveCount }}</strong></span>
-        <span class="pill">Фаза: <strong>{{ gamePhase }}</strong></span>
-        <span v-if="scenarioLabel" class="pill dim">Сценарій: {{ scenarioLabel }}</span>
+        <span class="pill">{{ t('desk.alive') }} <strong>{{ aliveCount }}</strong></span>
+        <span class="pill">{{ t('desk.phase') }} <strong>{{ gamePhase }}</strong></span>
+        <span v-if="scenarioLabel" class="pill dim">{{ t('desk.scenario') }} {{ scenarioLabel }}</span>
       </div>
     </div>
     <div class="desk-copy-row">
       <div class="copy-block">
-        <span class="copy-label">Overlay стрімера</span>
+        <span class="copy-label">{{ t('desk.copyStreamer') }}</span>
         <p class="copy-url">{{ personalUrl }}</p>
-        <button type="button" class="btn-copy" @click="emit('copy-personal')">Копіювати</button>
+        <button type="button" class="btn-copy" @click="emit('copy-personal')">{{ t('desk.copyBtn') }}</button>
       </div>
       <div class="copy-block">
-        <span class="copy-label">Overlay усіх</span>
+        <span class="copy-label">{{ t('desk.copyAll') }}</span>
         <p class="copy-url">{{ globalUrl }}</p>
-        <button type="button" class="btn-copy" @click="emit('copy-global')">Копіювати</button>
+        <button type="button" class="btn-copy" @click="emit('copy-global')">{{ t('desk.copyBtn') }}</button>
       </div>
     </div>
   </header>

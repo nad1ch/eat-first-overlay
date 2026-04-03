@@ -1,7 +1,10 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ADMIN_KEY } from '../config/access.js'
+
+const { t } = useI18n()
 
 const route = useRoute()
 const router = useRouter()
@@ -24,7 +27,7 @@ watch(
 function submit() {
   err.value = ''
   if (String(keyInput.value).trim() !== ADMIN_KEY) {
-    err.value = 'Невірний ключ доступу.'
+    err.value = t('admin.wrongKey')
     return
   }
   router.replace({
@@ -40,18 +43,18 @@ function backJoin() {
 
 <template>
   <div class="gate anim-fade-in">
-    <p class="eyebrow">Ведучий</p>
-    <h1 class="title">Admin</h1>
-    <p class="hint">Кімната: <strong>{{ gameId }}</strong></p>
+    <p class="eyebrow">{{ t('admin.eyebrow') }}</p>
+    <h1 class="title">{{ t('admin.title') }}</h1>
+    <p class="hint">{{ t('admin.room') }} <strong>{{ gameId }}</strong></p>
 
     <form class="form" @submit.prevent="submit">
-      <label class="lbl" for="k">Ключ</label>
+      <label class="lbl" for="k">{{ t('admin.key') }}</label>
       <input id="k" v-model="keyInput" type="password" class="inp" autocomplete="off" />
       <p v-if="err" class="err">{{ err }}</p>
-      <button type="submit" class="btn">Увійти в control</button>
+      <button type="submit" class="btn">{{ t('admin.submit') }}</button>
     </form>
 
-    <button type="button" class="link-back" @click="backJoin">← До лобі</button>
+    <button type="button" class="link-back" @click="backJoin">{{ t('admin.back') }}</button>
   </div>
 </template>
 

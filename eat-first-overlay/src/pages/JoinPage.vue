@@ -139,27 +139,26 @@ function handUpJoin(pid) {
   <div class="join">
     <AppPageLoader
       :visible="!joinLobbyReady"
-      label="Підключаємось до кімнати…"
+      :label="$t('join.loading')"
     />
     <div class="join-bg" aria-hidden="true" />
 
     <header class="join-hero anim-slide-up">
-      <p class="eyebrow">Live show</p>
-      <h1 class="title">Кого ми з’їмо першим</h1>
+      <p class="eyebrow">{{ $t('join.eyebrow') }}</p>
+      <h1 class="title">{{ $t('game.title') }}</h1>
       <p class="lead">
-        Лобі кімнати: персональні камери глядачі бачать через оверлей кожного стрімера — глобальна сітка лише
-        допоміжна.
+        {{ $t('join.lead') }}
       </p>
     </header>
 
     <ol class="join-steps anim-slide-up" style="animation-delay: 40ms">
-      <li><span class="join-steps__n">1</span> Введи game id і обери <strong>свій</strong> слот нижче</li>
-      <li><span class="join-steps__n">2</span> Відкрий свій overlay у OBS (кнопка «Оверлей» у слоті)</li>
-      <li><span class="join-steps__n">3</span> Керуй картками з панелі гравця («Моя панель»)</li>
+      <li><span class="join-steps__n">1</span> {{ $t('join.step1') }}</li>
+      <li><span class="join-steps__n">2</span> {{ $t('join.step2') }}</li>
+      <li><span class="join-steps__n">3</span> {{ $t('join.step3') }}</li>
     </ol>
 
     <div class="game-bar anim-slide-up" style="animation-delay: 80ms">
-      <label class="lbl" for="gid">Game id</label>
+      <label class="lbl" for="gid">{{ $t('join.gameId') }}</label>
       <div class="game-row">
         <input id="gid" v-model="gameInput" type="text" class="inp" autocomplete="off" />
         <button type="button" class="btn-go" @click="applyGameFromInput">OK</button>
@@ -167,46 +166,45 @@ function handUpJoin(pid) {
     </div>
 
     <section class="roles roles--clean" aria-labelledby="roles-title">
-      <h2 id="roles-title" class="roles-title">Хто ти зараз?</h2>
-      <p class="roles-hint">Ведучий і OBS — окремі входи. Гравець обирає слот у блоці нижче.</p>
+      <h2 id="roles-title" class="roles-title">{{ $t('join.whoTitle') }}</h2>
+      <p class="roles-hint">{{ $t('join.whoHint') }}</p>
       <div class="cta-grid anim-stagger">
         <button type="button" class="cta cta--play" style="--stagger-index: 0" @click="scrollToPlayerSlots">
           <span class="cta-ico" aria-hidden="true">🎤</span>
-          <span class="cta-t">Я гравець</span>
-          <span class="cta-d">Прокрутити до вибору слоту · потім «Моя панель»</span>
+          <span class="cta-t">{{ $t('join.ctaPlayer') }}</span>
+          <span class="cta-d">{{ $t('join.ctaPlayerSub') }}</span>
         </button>
         <button type="button" class="cta cta--host" style="--stagger-index: 1" @click="goAdmin">
           <span class="cta-ico" aria-hidden="true">🎮</span>
-          <span class="cta-t">Я ведучий</span>
-          <span class="cta-d">Пульт шоу · таймер · фази (ключ доступу)</span>
+          <span class="cta-t">{{ $t('join.ctaHost') }}</span>
+          <span class="cta-d">{{ $t('join.ctaHostSub') }}</span>
         </button>
         <button type="button" class="cta cta--obs" style="--stagger-index: 2" @click="goGlobalOverlay">
           <span class="cta-ico" aria-hidden="true">🎥</span>
-          <span class="cta-t">OBS · оверлей</span>
-          <span class="cta-d">Глобальна сітка або джерело для сцени</span>
+          <span class="cta-t">{{ $t('join.ctaObs') }}</span>
+          <span class="cta-d">{{ $t('join.ctaObsSub') }}</span>
         </button>
       </div>
     </section>
 
     <section class="obs-hint anim-slide-up" style="animation-delay: 0.12s" aria-labelledby="obs-hint-title">
-      <h2 id="obs-hint-title" class="obs-hint__title">OBS · швидкий старт</h2>
+      <h2 id="obs-hint-title" class="obs-hint__title">{{ $t('join.obsTitle') }}</h2>
       <ol class="obs-hint__list">
-        <li>Джерело: <strong>Browser</strong> (або Browser Source).</li>
-        <li>Встав URL з кнопки «OBS оверлей» у своєму слоті або глобальний — залежно від сцени.</li>
-        <li>Розмір: на весь кадр джерела; у властивостях увімкни прозорість фону, якщо є.</li>
-        <li>Оновлення: за потреби ввімкни «Refresh browser when scene becomes active».</li>
+        <li>{{ $t('join.obs1') }}</li>
+        <li>{{ $t('join.obs2') }}</li>
+        <li>{{ $t('join.obs3') }}</li>
+        <li>{{ $t('join.obs4') }}</li>
       </ol>
       <p class="obs-hint__url">
-        <span class="obs-hint__url-label">Приклад глобального URL</span>
+        <span class="obs-hint__url-label">{{ $t('join.obsUrlLabel') }}</span>
         <code class="obs-hint__code">{{ globalOverlayUrl }}</code>
       </p>
     </section>
 
     <section id="player-slots" class="cards-wrap anim-slide-up" style="animation-delay: 0.16s" aria-labelledby="slots-title">
-      <h2 id="slots-title" class="sec-title">Обери свій слот</h2>
+      <h2 id="slots-title" class="sec-title">{{ $t('join.slotsTitle') }}</h2>
       <p class="sec-sub sec-sub--emph">
-        Натисни <strong>свій</strong> номер (як оголосив ведучий). «Моя панель» — тільки твої карти; не заходь у чужий
-        слот.
+        {{ $t('join.slotsSub') }}
       </p>
       <div class="cards">
         <div
@@ -215,24 +213,26 @@ function handUpJoin(pid) {
           class="pcard anim-scale-in"
           :class="{ elim: p.eliminated === true, 'pcard--empty': !(p.name && String(p.name).trim()) }"
         >
-          <span class="num">Слот {{ slotNum(p.id) }}</span>
-          <span class="nm">{{ (p.name && String(p.name).trim()) || 'Ще без імені в кімнаті' }}</span>
-          <span v-if="p.eliminated" class="badge">вибув</span>
+          <span class="num">{{ $t('join.slot', { n: slotNum(p.id) }) }}</span>
+          <span class="nm">{{ (p.name && String(p.name).trim()) || $t('join.noName') }}</span>
+          <span v-if="p.eliminated" class="badge">{{ $t('join.eliminated') }}</span>
           <div class="pcard-status-row">
             <span
               class="pcard-ov"
               :class="{ 'pcard-ov--open': slotOverlayOpen(p) }"
-              :title="slotOverlayOpen(p) ? 'Є відкриті дані на оверлеї' : 'Дані для глядачів закриті'"
+              :title="slotOverlayOpen(p) ? $t('join.overlayOpenTitle') : $t('join.overlayClosedTitle')"
             >
-              {{ slotOverlayOpen(p) ? 'Оверлей: відкрито' : 'Оверлей: закрито' }}
+              {{ slotOverlayOpen(p) ? $t('join.overlayOpen') : $t('join.overlayClosed') }}
             </span>
-            <span v-if="handUpJoin(p.id)" class="pcard-hand" title="Піднята рука">✋</span>
+            <span v-if="handUpJoin(p.id)" class="pcard-hand" :title="$t('join.handUp')">✋</span>
           </div>
           <div class="pcard-actions">
             <button type="button" class="pcard-btn pcard-btn--primary" @click="openPlayerControl(p.id)">
-              Моя панель
+              {{ $t('join.myPanel') }}
             </button>
-            <button type="button" class="pcard-btn" @click="openPersonalOverlay(p.id)">OBS оверлей</button>
+            <button type="button" class="pcard-btn" @click="openPersonalOverlay(p.id)">
+              {{ $t('join.obsOverlayBtn') }}
+            </button>
           </div>
         </div>
       </div>
