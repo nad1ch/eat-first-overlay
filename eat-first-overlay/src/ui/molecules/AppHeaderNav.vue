@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { getPersistedGameId } from '../../utils/persistedGameId.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -12,8 +13,10 @@ const showBack = computed(() => route.name !== 'join')
 
 function gameQueryFromRoute() {
   const g = route.query?.game
-  if (g == null || !String(g).trim()) return {}
-  return { query: { game: String(g).trim() } }
+  if (g != null && String(g).trim()) return { query: { game: String(g).trim() } }
+  const p = getPersistedGameId()
+  if (p) return { query: { game: p } }
+  return {}
 }
 
 function goHome() {

@@ -76,18 +76,20 @@ function statDisplay(player, fieldKey) {
   return { mode: 'value', text: v.length ? v : '—' }
 }
 
-function identityRevealed(player) {
+/** Вік/стать на оверлеї; ім’я окремо завжди */
+function demographicsRevealed(player) {
+  if (player.demographicsRevealed === true) return true
+  if (player.demographicsRevealed === false) return false
   return player.identityRevealed === true
 }
 
 function displayNameLine(player) {
-  if (!identityRevealed(player)) return { hidden: true, text: '' }
   const n = String(player.name ?? '').trim()
   return { hidden: false, text: n.length ? n : '—' }
 }
 
 function displayAgeGenderLine(player) {
-  if (!identityRevealed(player)) return { hidden: true, text: '' }
+  if (!demographicsRevealed(player)) return { hidden: true, text: '' }
   const a = String(player.age ?? '').trim()
   const g = String(player.gender ?? '').trim()
   const left = a.length ? a : '—'
@@ -95,18 +97,13 @@ function displayAgeGenderLine(player) {
   return { hidden: false, text: `${left} · ${right}` }
 }
 
-function identityRevealedForOverlay(player) {
-  if (props.audienceMode && (String(player.name ?? '').trim() || String(player.age ?? '').trim()))
-    return true
-  return identityRevealed(player)
-}
-
-function displayNameLineOverlay(player) {
+function demographicsRevealedForOverlay(player) {
   if (props.audienceMode) {
-    const n = String(player.name ?? '').trim()
-    if (n) return { hidden: false, text: n }
+    const a = String(player.age ?? '').trim()
+    const g = String(player.gender ?? '').trim()
+    if (a || g) return true
   }
-  return displayNameLine(player)
+  return demographicsRevealed(player)
 }
 
 function displayAgeGenderLineOverlay(player) {
@@ -467,11 +464,10 @@ async function submitVote(choice) {
           <p v-if="nominatorsUi" class="nominee-nom-who">{{ nominatorsUi }}</p>
         </template>
         <h2 class="card-grid-name">
-          <span v-if="!identityRevealedForOverlay(player)" class="placeholder">•••</span>
-          <span v-else>{{ displayNameLineOverlay(player).text }}</span>
+          {{ displayNameLine(player).text }}
         </h2>
         <p class="card-grid-meta">
-          <span v-if="!identityRevealedForOverlay(player)" class="placeholder">••• · •••</span>
+          <span v-if="!demographicsRevealedForOverlay(player)" class="placeholder">••• · •••</span>
           <span v-else>{{ displayAgeGenderLineOverlay(player).text }}</span>
         </p>
         <ul class="stats">
@@ -586,12 +582,11 @@ async function submitVote(choice) {
       <div class="hud-zones">
       <div class="hud-block hud-tl">
         <p class="hud-line hud-line--name">
-          <span v-if="!identityRevealed(player)" class="hud-ph">•••</span>
-          <span v-else>{{ displayNameLine(player).text }}</span>
+          {{ displayNameLine(player).text }}
         </p>
         <p class="hud-line hud-line--sub">
-          <span v-if="!identityRevealed(player)" class="hud-ph">••• · •••</span>
-          <span v-else>{{ displayAgeGenderLine(player).text }}</span>
+          <span v-if="!demographicsRevealedForOverlay(player)" class="hud-ph">••• · •••</span>
+          <span v-else>{{ displayAgeGenderLineOverlay(player).text }}</span>
         </p>
       </div>
 
@@ -643,14 +638,14 @@ async function submitVote(choice) {
               :key="valueRevealKey(player, key)"
               class="hud-stat-inner"
               :class="{
-                'hud-stat-inner--label': !chunkFor(player, key).revealed,
-                'hud-stat-inner--open': chunkFor(player, key).revealed,
-                'hud-stat-inner--wave': chunkFor(player, key).revealed,
-                'value--revealed': chunkFor(player, key).revealed,
-                'hud-stat-inner--drama': drama && chunkFor(player, key).revealed,
+                'hud-stat-inner--label': !chunkForDisplay(player, key).revealed,
+                'hud-stat-inner--open': chunkForDisplay(player, key).revealed,
+                'hud-stat-inner--wave': chunkForDisplay(player, key).revealed,
+                'value--revealed': chunkForDisplay(player, key).revealed,
+                'hud-stat-inner--drama': drama && chunkForDisplay(player, key).revealed,
               }"
             >
-              <template v-if="!chunkFor(player, key).revealed">{{ fieldLabelUi(key) }}</template>
+              <template v-if="!chunkForDisplay(player, key).revealed">{{ fieldLabelUi(key) }}</template>
               <template v-else>{{ statDisplay(player, key).text }}</template>
             </span>
           </Transition>
@@ -664,14 +659,14 @@ async function submitVote(choice) {
               :key="valueRevealKey(player, key)"
               class="hud-stat-inner"
               :class="{
-                'hud-stat-inner--label': !chunkFor(player, key).revealed,
-                'hud-stat-inner--open': chunkFor(player, key).revealed,
-                'hud-stat-inner--wave': chunkFor(player, key).revealed,
-                'value--revealed': chunkFor(player, key).revealed,
-                'hud-stat-inner--drama': drama && chunkFor(player, key).revealed,
+                'hud-stat-inner--label': !chunkForDisplay(player, key).revealed,
+                'hud-stat-inner--open': chunkForDisplay(player, key).revealed,
+                'hud-stat-inner--wave': chunkForDisplay(player, key).revealed,
+                'value--revealed': chunkForDisplay(player, key).revealed,
+                'hud-stat-inner--drama': drama && chunkForDisplay(player, key).revealed,
               }"
             >
-              <template v-if="!chunkFor(player, key).revealed">{{ fieldLabelUi(key) }}</template>
+              <template v-if="!chunkForDisplay(player, key).revealed">{{ fieldLabelUi(key) }}</template>
               <template v-else>{{ statDisplay(player, key).text }}</template>
             </span>
           </Transition>
@@ -736,7 +731,7 @@ async function submitVote(choice) {
   --cg-stat-pad-x: clamp(0.696rem, min(3.12vw, 3.6vh), 1.44rem);
   --cg-stat-fs: clamp(1.08rem, min(3.36vw, 3.84vh), 1.464rem);
   --cg-id-fs: clamp(0.816rem, min(2.4vw, 2.64vh), 1.056rem);
-  --cg-name-fs: clamp(1.05rem, min(2.8vw, 3.4vh), 1.42rem);
+  --cg-name-fs: clamp(1.26rem, min(3.36vw, 4.08vh), 1.704rem);
   --cg-meta-fs: clamp(0.88rem, min(2.2vw, 2.8vh), 1.12rem);
   --cg-timer: clamp(3.9rem, min(12vw, 13.2vh), 6.6rem);
   --cg-timer-num: clamp(0.816rem, min(2.4vw, 2.88vh), 1.08rem);
@@ -1567,7 +1562,7 @@ async function submitVote(choice) {
   --hud-stat-pad-y: clamp(0.816rem, min(3.36vw, 3.84vh), 1.62rem);
   --hud-stat-pad-x: clamp(0.9rem, min(3.84vw, 4.32vh), 1.86rem);
   --hud-stat-font: clamp(1.176rem, min(3.96vw, 4.32vh), 1.86rem);
-  --hud-name: clamp(1.2rem, min(3.8vw, 4.2vh), 1.95rem);
+  --hud-name: clamp(1.44rem, min(4.56vw, 5.04vh), 2.34rem);
   --hud-sub: clamp(1.02rem, min(2.9vw, 3.4vh), 1.38rem);
   --hud-slot: clamp(2.7rem, min(9vw, 10.2vh), 5.1rem);
   --hud-timer-ring: clamp(6.18rem, min(16.8vw, 18vh), 9.6rem);
@@ -1657,13 +1652,14 @@ async function submitVote(choice) {
 
 .hud-root--solo.hud-root--nominee-breathe:not(.hud-root--eliminated) {
   position: relative;
+  isolation: isolate;
 }
 
 .hud-root--solo.hud-root--nominee-breathe:not(.hud-root--eliminated)::before {
   content: '';
   position: fixed;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   pointer-events: none;
   background: radial-gradient(
     ellipse 85% 70% at 50% 45%,
@@ -1685,11 +1681,15 @@ async function submitVote(choice) {
   }
 }
 
+.hud-root--solo.hud-root--vote-target-ambient:not(.hud-root--eliminated) {
+  isolation: isolate;
+}
+
 .hud-root--solo.hud-root--vote-target-ambient:not(.hud-root--eliminated)::after {
   content: '';
   position: fixed;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   pointer-events: none;
   background: radial-gradient(ellipse at 50% 35%, rgba(220, 38, 38, 0.45) 0%, transparent 55%);
   opacity: 0.05;

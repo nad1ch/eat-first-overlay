@@ -1,8 +1,9 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ADMIN_KEY } from '../config/access.js'
+import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId.js'
 
 const { t } = useI18n()
 
@@ -14,7 +15,20 @@ const err = ref('')
 
 const gameId = computed(() => {
   const g = String(route.query.game ?? '').trim()
-  return g || 'test1'
+  if (g) return g
+  const p = getPersistedGameId()
+  if (p) return p
+  return 'test1'
+})
+
+watch(gameId, (g) => setPersistedGameId(g))
+
+onMounted(() => {
+  if (typeof window === 'undefined') return
+  const g = route.query.game
+  if (g != null && String(g).trim()) return
+  const p = getPersistedGameId()
+  if (p) router.replace({ path: '/admin', query: { game: p } })
 })
 
 watch(

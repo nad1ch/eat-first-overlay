@@ -120,6 +120,7 @@
     "voteTarget": "🗳️ Cel głosowania",
     "spotlight": "⭐ Spotlight",
     "spotlightOff": "⭐ Zdejmij spotlight",
+    "deletePlayer": "🗑 Usuń gracza",
     "reset": "❌ Reset",
     "pickSlot": "Wybierz slot po lewej",
     "nomBadge": "NOM.",
@@ -196,7 +197,10 @@
     "activeCardSlotUpdated": "Zaktualizowano aktywną kartę dla {slot}",
     "noEffectId": "Brak identyfikatora efektu na karcie",
     "requestCancelled": "Prośba anulowana",
-    "noAlivePlayers": "Brak aktywnych graczy"
+    "noAlivePlayers": "Brak aktywnych graczy",
+    "rosterSeeded": "Pokój gotowy: utworzono brakujących graczy p1–p10 z profilami",
+    "playerAdded": "Gracz {slot} jest w pokoju",
+    "playerDeleted": "Usunięto gracza {slot}"
   },
   "status": {
     "eliminated": "ODPADŁ",
@@ -249,10 +253,13 @@
     "youVotedAlready": "Już głosowałeś w tej rundzie.",
     "voteFor": "👍 Za",
     "voteAgainstBtn": "👎 Przeciw",
+    "deletePlayerTitle": "Usuń gracza",
+    "deletePlayerConfirm": "Na pewno usunąć {slot} z pokoju? Dokument postaci zostanie skasowany.",
     "panelLoadingAria": "Ładowanie",
     "editorTitle": "Edytor: {id}",
     "yourChar": "Twoja postać",
     "profileOverlay": "Profil (nakładka)",
+    "demographicsOnOverlay": "Wiek i płeć na nakładce",
     "profile": "Profil",
     "reroll": "Przelosuj",
     "rerollField": "Przelosuj pole",

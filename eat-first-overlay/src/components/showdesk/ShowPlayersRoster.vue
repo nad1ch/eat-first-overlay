@@ -249,6 +249,9 @@ const aliveSlotsForNom = computed(() => {
             </button>
           </template>
 
+          <button type="button" class="act-btn act-btn--danger" @click="cmd('delete-player')">
+            {{ t('roster.deletePlayer') }}
+          </button>
           <button type="button" class="act-btn act-btn--danger" @click="cmd('reset')">{{ t('roster.reset') }}</button>
         </template>
         <p v-else class="act-empty">{{ t('roster.pickSlot') }}</p>

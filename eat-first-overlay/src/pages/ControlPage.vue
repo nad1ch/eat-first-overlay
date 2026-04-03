@@ -41,6 +41,11 @@ import {
   setRoomRound,
   clearAllHands,
   saveVote,
+  ensureGameRoomExists,
+  seedMissingStandardPlayers,
+  ensurePlayerCharacterExists,
+  removePlayerFromGameRoomState,
+  deletePlayerDocument,
 } from '../services/gameService'
 import { millisFromFirestore } from '../utils/firestoreTime.js'
 import ShowDeskHeader from '../components/showdesk/ShowDeskHeader.vue'
@@ -49,6 +54,7 @@ import { playRevealFlipSound, playVoteSubmitSound } from '../utils/voteUiSound.j
 import { syncHostControlChrome, clearHostControlChrome } from '../composables/hostControlChrome.js'
 import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
 import { normalizePlayerSlotId } from '../utils/playerSlot.js'
+import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId.js'
 import { formatGenderDisplay } from '../utils/genderDisplay.js'
 import AppPageLoader from '../ui/molecules/AppPageLoader.vue'
 import ConfirmDialog from '../ui/molecules/ConfirmDialog.vue'
@@ -64,7 +70,13 @@ const adminKeyOk = computed(() => urlKey.value === ADMIN_KEY)
 const isAdmin = computed(() => wantsAdmin.value && adminKeyOk.value)
 const adminAccessDenied = computed(() => wantsAdmin.value && !adminKeyOk.value)
 
-const gameId = computed(() => String(route.query.game ?? 'test1'))
+const gameId = computed(() => {
+  const q = route.query.game
+  if (q != null && String(q).trim()) return String(q).trim()
+  const p = getPersistedGameId()
+  if (p) return p
+  return 'test1'
+})
 const playerId = computed(() => normalizePlayerSlotId(route.query.player))
 
 const modeLabel = computed(() => {
@@ -94,6 +106,7 @@ watch(
   gameId,
   (g) => {
     draftGameId.value = g
+    setPersistedGameId(g)
   },
   { immediate: true },
 )
@@ -236,6 +249,16 @@ watch(
   },
   { immediate: true },
 )
+
+const suggestedNextPlayerId = computed(() => {
+  const ids = new Set(allPlayers.value.map((p) => String(p.id)))
+  for (const s of PLAYER_SLOTS) {
+    if (!ids.has(s)) return s
+  }
+  let n = 11
+  while (ids.has(`p${n}`)) n++
+  return `p${n}`
+})
 
 const aliveCount = computed(
   () => allPlayers.value.filter((p) => p.eliminated !== true).length,
@@ -557,8 +580,9 @@ async function submitPlayerVote(choice) {
   }
 }
 
-function revealIdentity(open) {
+function revealDemographics(open) {
   if (open) playRevealFlipSound(0.09)
+  characterState.demographicsRevealed = open
   characterState.identityRevealed = open
 }
 
@@ -617,9 +641,37 @@ async function onRosterHostCommand({ type, playerId: pid }) {
       case 'reset':
         await hostResetPlayerRoles(p)
         break
+      case 'delete-player':
+        openHostGenConfirm(
+          t('control.deletePlayerTitle'),
+          t('control.deletePlayerConfirm', { slot: p }),
+          () => hostExecuteDeletePlayer(p),
+        )
+        break
       default:
         break
     }
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function hostExecuteDeletePlayer(pid) {
+  if (!isAdmin.value) return
+  const p = normalizePlayerSlotId(pid)
+  if (!p) return
+  try {
+    loadError.value = null
+    await removePlayerFromGameRoomState(gameId.value, p)
+    await deletePlayerDocument(gameId.value, p)
+    if (String(selectedDeskPlayerId.value) === p) {
+      selectedDeskPlayerId.value = ''
+    }
+    if (playerId.value === p) {
+      const fallback = PLAYER_SLOTS.find((slot) => slot !== p) || 'p1'
+      navigateQuery({ player: fallback })
+    }
+    showToast(t('toast.playerDeleted', { slot: p }))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -813,6 +865,7 @@ function rerollIdentity() {
   characterState.name = pickNameForGender(g)
   characterState.age = ages[Math.floor(Math.random() * ages.length)]
   characterState.identityRevealed = false
+  characterState.demographicsRevealed = false
 }
 
 function generateRandomCharacter() {
@@ -996,6 +1049,9 @@ let saveTimer = null
 
 function controlQuery(overrides) {
   const base = { ...route.query, ...overrides }
+  const gRaw = base.game
+  if (gRaw == null || !String(gRaw).trim()) base.game = gameId.value
+  else base.game = String(gRaw).trim()
   if (isAdmin.value) {
     base.role = 'admin'
     base.key = urlKey.value
@@ -1013,6 +1069,18 @@ function navigateQuery(overrides) {
   })
 }
 
+/** Підставляє `game` у URL з пам’яті, щоб F5 не скидав кімнату. */
+watch(
+  () => [route.path, String(route.query.game ?? ''), adminAccessDenied.value],
+  () => {
+    if (route.path !== '/control') return
+    if (adminAccessDenied.value) return
+    if (String(route.query.game ?? '').trim()) return
+    router.replace({ path: '/control', query: controlQuery({}) })
+  },
+  { immediate: true, flush: 'post' },
+)
+
 function goToPlayer(id) {
   if (!isAdmin.value) return
   navigateQuery({ player: String(id).trim() || 'p1' })
@@ -1028,18 +1096,37 @@ watch(
   },
 )
 
-function applyNewGame() {
+async function applyNewGame() {
   if (!isAdmin.value) return
   const g = String(draftGameId.value).trim() || 'test1'
   navigateQuery({ game: g })
+  try {
+    loadError.value = null
+    await ensureGameRoomExists(g)
+    await saveGameRoom(g, { activeScenario: selectedScenario.value })
+    await seedMissingStandardPlayers(g, selectedScenario.value)
+    showToast(t('toast.rosterSeeded'))
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
 }
 
-function createAndGoToPlayer() {
+async function createAndGoToPlayer() {
   if (!isAdmin.value) return
-  const id = newPlayerId.value.trim()
-  if (!id) return
+  const raw = String(newPlayerId.value ?? '').trim() || suggestedNextPlayerId.value
+  if (!raw) return
+  const id = normalizePlayerSlotId(raw)
   newPlayerId.value = ''
-  navigateQuery({ player: id })
+  try {
+    loadError.value = null
+    await ensureGameRoomExists(gameId.value)
+    await ensurePlayerCharacterExists(gameId.value, id, selectedScenario.value)
+    selectedDeskPlayerId.value = id
+    navigateQuery({ player: id })
+    showToast(t('toast.playerAdded', { slot: id }))
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
 }
 
 function scheduleSave() {
@@ -1230,7 +1317,7 @@ function rerollActiveCardOnly() {
               v-model="newPlayerId"
               type="text"
               class="input"
-              placeholder="p11"
+              :placeholder="suggestedNextPlayerId"
               autocomplete="off"
             />
             <button type="button" class="btn-soft btn-lift" @click="createAndGoToPlayer">+</button>
@@ -1371,10 +1458,11 @@ function rerollActiveCardOnly() {
             <button
               type="button"
               class="reveal-toggle"
-              :class="{ 'reveal-toggle--open': characterState.identityRevealed }"
-              @click="revealIdentity(!characterState.identityRevealed)"
+              :title="t('control.demographicsOnOverlay')"
+              :class="{ 'reveal-toggle--open': characterState.demographicsRevealed }"
+              @click="revealDemographics(!characterState.demographicsRevealed)"
             >
-              {{ characterState.identityRevealed ? t('control.open') : t('control.closed') }}
+              {{ characterState.demographicsRevealed ? t('control.open') : t('control.closed') }}
             </button>
           </div>
         </div>
@@ -1409,22 +1497,25 @@ function rerollActiveCardOnly() {
               v-if="!playerRevealLocked"
               type="button"
               class="reveal-toggle reveal-toggle--player"
-              :class="{ 'reveal-toggle--open': characterState.identityRevealed }"
-              @click="revealIdentity(!characterState.identityRevealed)"
+              :title="t('control.demographicsOnOverlay')"
+              :class="{ 'reveal-toggle--open': characterState.demographicsRevealed }"
+              @click="revealDemographics(!characterState.demographicsRevealed)"
             >
-              {{ characterState.identityRevealed ? t('control.open') : t('control.closed') }}
+              {{ characterState.demographicsRevealed ? t('control.open') : t('control.closed') }}
             </button>
           </div>
-          <Transition name="stat-reveal" mode="out-in">
-            <div v-if="characterState.identityRevealed" key="id-on" class="identity-reveal-block">
-              <p class="pv-line"><span class="mk">{{ t('control.name') }}</span> {{ characterState.name || '—' }}</p>
-              <p class="pv-line">
-                <span class="mk">{{ t('control.ageGender') }}</span> {{ characterState.age || '—' }} ·
-                {{ formatGenderDisplay(characterState.gender) }}
-              </p>
-            </div>
-            <p v-else key="id-off" class="pv-hidden">••••••</p>
-          </Transition>
+          <div class="identity-reveal-block">
+            <p class="pv-line"><span class="mk">{{ t('control.name') }}</span> {{ characterState.name || '—' }}</p>
+            <Transition name="stat-reveal" mode="out-in">
+              <div v-if="characterState.demographicsRevealed" key="dem-on">
+                <p class="pv-line">
+                  <span class="mk">{{ t('control.ageGender') }}</span> {{ characterState.age || '—' }} ·
+                  {{ formatGenderDisplay(characterState.gender) }}
+                </p>
+              </div>
+              <p v-else key="dem-off" class="pv-hidden">••••••</p>
+            </Transition>
+          </div>
         </div>
 
         <div class="player-char-grid__traits player-traits-cols">

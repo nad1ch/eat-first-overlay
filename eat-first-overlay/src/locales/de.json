@@ -120,6 +120,7 @@
     "voteTarget": "🗳️ Abstimmungsziel",
     "spotlight": "⭐ Spotlight",
     "spotlightOff": "⭐ Spotlight aus",
+    "deletePlayer": "🗑 Spieler löschen",
     "reset": "❌ Reset",
     "pickSlot": "Links einen Slot wählen",
     "nomBadge": "NOM.",
@@ -196,7 +197,10 @@
     "activeCardSlotUpdated": "Aktivkarte für {slot} aktualisiert",
     "noEffectId": "Keine effectId auf der Karte",
     "requestCancelled": "Anfrage zurückgezogen",
-    "noAlivePlayers": "Keine aktiven Spieler"
+    "noAlivePlayers": "Keine aktiven Spieler",
+    "rosterSeeded": "Raum bereit: fehlende Spieler p1–p10 mit Profilen angelegt",
+    "playerAdded": "Spieler {slot} ist im Raum",
+    "playerDeleted": "Spieler {slot} entfernt"
   },
   "status": {
     "eliminated": "RAUS",
@@ -249,10 +253,13 @@
     "youVotedAlready": "Du hast in dieser Runde schon gewählt.",
     "voteFor": "👍 Dafür",
     "voteAgainstBtn": "👎 Dagegen",
+    "deletePlayerTitle": "Spieler löschen",
+    "deletePlayerConfirm": "{slot} endgültig aus dem Raum entfernen? Der Charakter wird gelöscht.",
     "panelLoadingAria": "Wird geladen",
     "editorTitle": "Editor: {id}",
     "yourChar": "Dein Charakter",
     "profileOverlay": "Profil (Overlay)",
+    "demographicsOnOverlay": "Alter und Geschlecht im Overlay",
     "profile": "Profil",
     "reroll": "Neu würfeln",
     "rerollField": "Feld neu würfeln",

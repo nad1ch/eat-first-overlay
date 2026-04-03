@@ -20,8 +20,10 @@ export function defaultActiveCard() {
 
 export const characterState = reactive({
   eliminated: false,
-  /** Профіль (ім’я / вік / гендер) на оверлеї до відкриття ведучим */
+  /** Legacy: синхронізується з demographicsRevealed при збереженні */
   identityRevealed: false,
+  /** Вік і стать на оверлеї; ім’я завжди видно окремо */
+  demographicsRevealed: false,
   name: '',
   age: '',
   gender: '',
@@ -47,6 +49,7 @@ export const fieldConfig = [
 export function resetCharacterState(target = characterState) {
   target.eliminated = false
   target.identityRevealed = false
+  target.demographicsRevealed = false
   target.name = ''
   target.age = ''
   target.gender = ''
@@ -78,7 +81,12 @@ export function applyRemoteCharacterData(target, data) {
     return
   }
   target.eliminated = Boolean(data.eliminated)
-  target.identityRevealed = Boolean(data.identityRevealed)
+  const legacyId = Boolean(data.identityRevealed)
+  const dem =
+    data.demographicsRevealed === true ||
+    (data.demographicsRevealed === undefined && legacyId)
+  target.demographicsRevealed = dem
+  target.identityRevealed = dem
   if (typeof data.name === 'string') target.name = data.name
   else target.name = ''
   if (typeof data.age === 'string') target.age = data.age
@@ -100,9 +108,11 @@ export function applyRemoteCharacterData(target, data) {
 }
 
 export function snapshotCharacter(target = characterState) {
+  const dem = Boolean(target.demographicsRevealed)
   const out = {
     eliminated: Boolean(target.eliminated),
-    identityRevealed: Boolean(target.identityRevealed),
+    demographicsRevealed: dem,
+    identityRevealed: dem,
     name: target.name,
     age: target.age,
     gender: normalizeGenderForStorage(target.gender),

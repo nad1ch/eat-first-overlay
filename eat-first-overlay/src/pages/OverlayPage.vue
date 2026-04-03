@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import OverlayPlayerCard from '../components/OverlayPlayerCard.vue'
 import {
@@ -14,14 +14,22 @@ import {
 import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
 import { millisFromFirestore } from '../utils/firestoreTime.js'
 import AppPageLoader from '../ui/molecules/AppPageLoader.vue'
+import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId.js'
 
 const route = useRoute()
+const router = useRouter()
 const { t, te } = useI18n()
 
 const gotGameRoomOv = ref(false)
 const gotPrimaryOv = ref(false)
 
-const gameId = computed(() => String(route.query.game ?? 'test1'))
+const gameId = computed(() => {
+  const q = route.query.game
+  if (q != null && String(q).trim()) return String(q).trim()
+  const p = getPersistedGameId()
+  if (p) return p
+  return 'test1'
+})
 
 const personalPlayerId = computed(() => {
   const p = route.query.player
@@ -51,6 +59,16 @@ onMounted(() => {
     tick.value = Date.now()
   }, 250)
 })
+
+watch(
+  () => [route.path, String(route.query.game ?? '')],
+  () => {
+    if (route.path !== '/overlay') return
+    if (String(route.query.game ?? '').trim()) return
+    router.replace({ path: '/overlay', query: { ...route.query, game: gameId.value } })
+  },
+  { immediate: true, flush: 'post' },
+)
 
 function cleanupPlayerSub() {
   if (unsubscribe) {
@@ -96,6 +114,7 @@ function setupVotesSub(gid) {
 watch(
   gameId,
   (gid) => {
+    setPersistedGameId(gid)
     setupGameRoom(gid)
     setupVotesSub(gid)
   },
@@ -483,6 +502,7 @@ onUnmounted(() => {
         :hand-raised="isHandRaised(singlePlayer)"
         :idle-waiting="showIdleWaitingCue"
         v-bind="cardTimerProps(singlePlayer)"
+        audience-mode
         solo
       />
     </div>

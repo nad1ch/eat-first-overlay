@@ -120,6 +120,7 @@
     "voteTarget": "🗳️ Vote target",
     "spotlight": "⭐ Spotlight",
     "spotlightOff": "⭐ Clear spotlight",
+    "deletePlayer": "🗑 Delete player",
     "reset": "❌ Reset",
     "pickSlot": "Select a slot on the left",
     "nomBadge": "NOM.",
@@ -196,7 +197,10 @@
     "activeCardSlotUpdated": "Active card updated for {slot}",
     "noEffectId": "No effectId on card",
     "requestCancelled": "Request cancelled",
-    "noAlivePlayers": "No active players"
+    "noAlivePlayers": "No active players",
+    "rosterSeeded": "Room ready: missing players p1–p10 created with profiles",
+    "playerAdded": "Player {slot} is in the room",
+    "playerDeleted": "Player {slot} removed"
   },
   "status": {
     "eliminated": "OUT",
@@ -249,10 +253,13 @@
     "youVotedAlready": "You already voted this round.",
     "voteFor": "👍 For",
     "voteAgainstBtn": "👎 Against",
+    "deletePlayerTitle": "Delete player",
+    "deletePlayerConfirm": "Permanently remove {slot} from the room? Their character document will be deleted.",
     "panelLoadingAria": "Loading",
     "editorTitle": "Editor: {id}",
     "yourChar": "Your character",
     "profileOverlay": "Profile (overlay)",
+    "demographicsOnOverlay": "Age and gender on overlay",
     "profile": "Profile",
     "reroll": "Reroll",
     "rerollField": "Reroll field",

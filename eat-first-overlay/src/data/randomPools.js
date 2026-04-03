@@ -103,6 +103,7 @@ export function rollRandomIntoCharacter(target, options = {}) {
   target.name = pickNameForGender(target.gender)
   target.age = pick(ages)
   target.identityRevealed = false
+  target.demographicsRevealed = false
   for (const key of keys) {
     const slot = target[key]
     if (!slot || typeof slot !== 'object') continue
@@ -137,6 +138,7 @@ export function buildRandomPlayerDocument(scenarioId = 'classic_crash') {
   const out = {
     eliminated: false,
     identityRevealed: false,
+    demographicsRevealed: false,
     name: pickNameForGender(gender),
     age: pick(ages),
     gender,

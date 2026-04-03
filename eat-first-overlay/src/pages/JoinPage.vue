@@ -1,9 +1,10 @@
 <script setup>
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { subscribeToGameRoom, subscribeToPlayers } from '../services/gameService'
 import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
 import AppPageLoader from '../ui/molecules/AppPageLoader.vue'
+import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -13,10 +14,22 @@ const gameInput = ref('test1')
 watch(
   () => route.query.game,
   (g) => {
-    if (g != null && String(g).trim()) gameInput.value = String(g).trim()
+    if (g != null && String(g).trim()) {
+      gameInput.value = String(g).trim()
+      return
+    }
+    gameInput.value = getPersistedGameId() ?? 'test1'
   },
   { immediate: true },
 )
+
+onMounted(() => {
+  if (typeof window === 'undefined') return
+  const g = route.query.game
+  if (g != null && String(g).trim()) return
+  const p = getPersistedGameId()
+  if (p) router.replace({ path: '/join', query: { game: p } })
+})
 
 const gameId = computed(() => {
   const g = String(gameInput.value ?? '').trim()
@@ -53,6 +66,7 @@ function armJoinLoaderFallback() {
 watch(
   gameId,
   (gid) => {
+    setPersistedGameId(gid)
     joinGotPlayers.value = false
     joinGotRoom.value = false
     joinLobbyReady.value = false
@@ -145,7 +159,8 @@ const TRAIT_KEYS = ['profession', 'health', 'phobia', 'luggage', 'fact', 'quirk'
 
 function slotOverlayOpen(p) {
   if (!p || p.eliminated === true) return false
-  if (p.identityRevealed === true) return true
+  if (p.demographicsRevealed === true) return true
+  if (p.demographicsRevealed === undefined && p.identityRevealed === true) return true
   return TRAIT_KEYS.some((k) => {
     const c = p[k]
     return c && typeof c === 'object' && c.revealed === true

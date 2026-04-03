@@ -120,6 +120,7 @@
     "voteTarget": "🗳️ Ціль голосування",
     "spotlight": "⭐ У фокусі",
     "spotlightOff": "⭐ Зняти з фокусу",
+    "deletePlayer": "🗑 Видалити гравця",
     "reset": "❌ Скинути",
     "pickSlot": "Оберіть слот зліва",
     "nomBadge": "НОМІН.",
@@ -181,7 +182,10 @@
     "activeCardSlotUpdated": "Активну карту оновлено для {slot}",
     "noEffectId": "У карти немає ідентифікатора ефекту",
     "requestCancelled": "Запит знято",
-    "noAlivePlayers": "Немає активних гравців"
+    "noAlivePlayers": "Немає активних гравців",
+    "rosterSeeded": "Кімната готова: додано відсутніх гравців p1–p10 з профілями",
+    "playerAdded": "Гравець {slot} у кімнаті",
+    "playerDeleted": "Гравця {slot} видалено"
   },
   "status": {
     "eliminated": "ВИБУВ",
@@ -234,10 +238,13 @@
     "youVotedAlready": "Ти вже проголосував у цьому раунді.",
     "voteFor": "👍 За",
     "voteAgainstBtn": "👎 Проти",
+    "deletePlayerTitle": "Видалити гравця",
+    "deletePlayerConfirm": "Остаточно видалити {slot} з кімнати? Документ персонажа зникне з Firestore.",
     "panelLoadingAria": "Завантаження",
     "editorTitle": "Редактор: {id}",
     "yourChar": "Твій персонаж",
     "profileOverlay": "Профіль (оверлей)",
+    "demographicsOnOverlay": "Вік і стать на оверлеї",
     "profile": "Профіль",
     "reroll": "Перегенерувати",
     "rerollField": "Перегенерувати поле",

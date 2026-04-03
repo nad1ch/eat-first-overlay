@@ -324,7 +324,9 @@ export async function setGameHandRaised(gameId, playerId, raised) {
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(ref)
     if (!snap.exists()) {
-      throw new Error('Документ кімнати не знайдено. Відкрий гру на пульті ведучого.')
+      if (!raised) return
+      tx.set(ref, { hands: { [pid]: true } })
+      return
     }
     const next = { ...collectRaisedHandsMapFromGameData(snap.data()) }
     if (raised) next[pid] = true
@@ -357,6 +359,114 @@ export async function saveVote(gameId, voterPlayerId, targetPlayer, choice, roun
     at: Timestamp.now(),
   })
   return { ok: true }
+}
+
+const STANDARD_PLAYER_SLOTS = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10']
+
+/** Мінімальний документ кімнати (для транзакцій рук тощо), якщо гри ще немає. */
+export async function ensureGameRoomExists(gameId) {
+  const ref = gameDocRef(gameId)
+  const snap = await getDoc(ref)
+  if (snap.exists()) return
+  await setDoc(
+    ref,
+    {
+      key: ADMIN_KEY,
+      round: 1,
+      gamePhase: 'intro',
+      hands: {},
+      activePlayer: '',
+      currentSpeaker: '',
+      speakingTimer: 0,
+      timerPaused: false,
+    },
+    { merge: true },
+  )
+}
+
+/**
+ * Для кожного слоту p1…p10, якщо документа гравця немає — створює з випадковим профілем.
+ * Не перезаписує вже існуючих гравців.
+ */
+export async function seedMissingStandardPlayers(gameId, scenarioId) {
+  const colRef = collection(db, 'games', gameId, 'players')
+  const snapshot = await getDocs(colRef)
+  const have = new Set(snapshot.docs.map((d) => d.id))
+  const sid = String(scenarioId || 'classic_crash')
+  for (const slot of STANDARD_PLAYER_SLOTS) {
+    if (have.has(slot)) continue
+    const payload = buildRandomPlayerDocument(sid)
+    await setDoc(playerDocRef(gameId, slot), { ...payload, key: ADMIN_KEY }, { merge: true })
+  }
+}
+
+/**
+ * Якщо документа гравця ще немає — створює випадкового персонажа.
+ * @returns {Promise<boolean>} true якщо був створений новий документ
+ */
+export async function ensurePlayerCharacterExists(gameId, playerId, scenarioId) {
+  const pid = normalizePlayerSlotId(playerId)
+  const existing = await fetchCharacter(gameId, pid)
+  if (existing) return false
+  const sid = String(scenarioId || 'classic_crash')
+  const payload = buildRandomPlayerDocument(sid)
+  await saveCharacter(gameId, pid, payload)
+  return true
+}
+
+/** Прибрати гравця зі стану кімнати (руки, номінації, спікер, голосування, spotlight). */
+export async function removePlayerFromGameRoomState(gameId, playerId) {
+  const pid = normalizePlayerSlotId(playerId)
+  const snap = await getDoc(gameDocRef(gameId))
+  if (!snap.exists()) return
+  const d = snap.data()
+  const hands = { ...collectRaisedHandsMapFromGameData(d) }
+  delete hands[pid]
+
+  const list = nominationsFromRoom(d)
+  const next = list.filter((x) => x.target !== pid && x.by !== pid)
+
+  const patch = {
+    hands,
+    key: ADMIN_KEY,
+  }
+
+  const speaker = String(d.currentSpeaker ?? '').trim()
+  if (speaker === pid) {
+    patch.currentSpeaker = ''
+    patch.speakingTimer = 0
+    patch.timerStartedAt = deleteField()
+    patch.timerPaused = false
+    patch.timerRemainingFrozen = deleteField()
+  }
+
+  if (String(d.activePlayer ?? '').trim() === pid) {
+    patch.activePlayer = ''
+  }
+
+  const vt = String(d.voting?.targetPlayer ?? '').trim()
+  if (vt === pid) {
+    patch.voting = { active: false, targetPlayer: '' }
+  }
+
+  if (next.length > 0) {
+    patch.nominations = next
+    patch.nominatedPlayer = deleteField()
+    patch.nominatedBy = deleteField()
+  } else {
+    patch.nominations = deleteField()
+    patch.nominatedPlayer = deleteField()
+    patch.nominatedBy = deleteField()
+  }
+
+  await setDoc(gameDocRef(gameId), patch, { merge: true })
+  await deleteVoteDoc(gameId, pid)
+}
+
+/** Видалити документ гравця (після removePlayerFromGameRoomState). */
+export async function deletePlayerDocument(gameId, playerId) {
+  const pid = normalizePlayerSlotId(playerId)
+  await deleteDoc(playerDocRef(gameId, pid))
 }
 
 export async function regenerateAllPlayersRandom(gameId, scenarioId) {
