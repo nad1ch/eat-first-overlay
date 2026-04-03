@@ -49,7 +49,7 @@ import { syncHostControlChrome, clearHostControlChrome } from '../composables/ho
 import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
 import { normalizePlayerSlotId } from '../utils/playerSlot.js'
 import { formatGenderDisplay } from '../utils/genderDisplay.js'
-import AppPageLoader from '../components/ui/AppPageLoader.vue'
+import AppPageLoader from '../ui/molecules/AppPageLoader.vue'
 import UiMenuSelect from '../ui/molecules/UiMenuSelect.vue'
 
 const route = useRoute()

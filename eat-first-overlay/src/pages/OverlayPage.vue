@@ -13,7 +13,7 @@ import {
 } from '../services/gameService'
 import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
 import { millisFromFirestore } from '../utils/firestoreTime.js'
-import AppPageLoader from '../components/ui/AppPageLoader.vue'
+import AppPageLoader from '../ui/molecules/AppPageLoader.vue'
 
 const route = useRoute()
 const { t } = useI18n()

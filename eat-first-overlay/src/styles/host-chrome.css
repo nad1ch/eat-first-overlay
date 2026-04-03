@@ -1,0 +1,442 @@
+/**
+ * Пульт ведучого (Host chrome): спільні стилі для organisms/hostChrome/*.
+ * Сітка: 3 рівні колонки — керування шоу · голосування · таймер.
+ */
+
+.hcc {
+  width: 100%;
+  padding: 0.25rem 0 0;
+  border-top: none;
+  transition:
+    box-shadow 0.25s ease,
+    border-color 0.25s ease;
+}
+
+.hcc--vote-on {
+  box-shadow: none;
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+.hcc-split {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+@media (max-width: 960px) {
+  .hcc-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hcc-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding: 0.65rem 0.75rem 0.75rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-muted);
+  box-shadow: 0 2px 12px var(--shadow-elevated);
+}
+
+.hcc-panel-title {
+  margin: 0 0 0.4rem;
+  font-size: 0.52rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+}
+
+.hcc-hands-row {
+  margin: 0 0 0.5rem;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.hcc-hands-row strong {
+  color: var(--text-highlight);
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 800;
+}
+
+.hcc-summary {
+  margin: 0 0 0.55rem;
+  padding: 0.28rem 0.45rem;
+  border-radius: 8px;
+  background: var(--bg-muted-strong);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.54rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.35;
+  color: var(--text-body);
+  font-family: 'Orbitron', sans-serif;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.hcc-left-lab {
+  margin: 0 0 0.2rem;
+  font-size: 0.48rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.hcc-left-lab--spaced {
+  margin-top: 0.62rem;
+}
+
+.hcc-left-round {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.hcc-round {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.hcc-step {
+  min-width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 7px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid var(--border-input);
+  background: var(--reveal-bg);
+  color: var(--text-body);
+}
+
+.hcc-step:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.hcc-round__mid {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: var(--text-title);
+  min-width: 2rem;
+  text-align: center;
+}
+
+.hcc-show-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+}
+
+.hcc-target-block__id {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.35rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: var(--text-highlight);
+}
+
+.hcc-btn-sm {
+  padding: 0.28rem 0.5rem;
+  border-radius: 7px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.hcc-btn-sm--go {
+  background: var(--accent-fill);
+  border-color: var(--border-strong);
+  color: var(--text-title);
+}
+
+.hcc-btn-sm--pause {
+  background: rgba(251, 191, 36, 0.15);
+  border-color: rgba(251, 191, 36, 0.35);
+  color: var(--text-highlight);
+}
+
+.hcc-btn-sm--reset {
+  background: var(--reveal-off-bg);
+  border-color: var(--reveal-off-border);
+  color: var(--reveal-off-text);
+}
+
+.hcc-phase-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.22rem;
+}
+
+.hcc-chip {
+  padding: 0.18rem 0.4rem;
+  border-radius: 6px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  font-family: 'Orbitron', sans-serif;
+  text-transform: lowercase;
+  border: 1px solid var(--border-input);
+  background: var(--bg-muted-strong);
+  color: var(--text-body);
+  cursor: pointer;
+}
+
+.hcc-chip.on {
+  border-color: var(--border-strong);
+  background: var(--accent-fill-soft);
+  color: var(--text-title);
+}
+
+.hcc-chip--phase.on {
+  border-color: var(--border-cyan-strong);
+  background: var(--glow-vote-inner);
+}
+
+.hcc-clear-hands {
+  margin-top: auto;
+  padding-top: 0.55rem;
+  width: 100%;
+  padding-bottom: 0.32rem;
+  padding-left: 0.45rem;
+  padding-right: 0.45rem;
+  border-radius: 8px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid var(--border-input);
+  background: var(--bg-muted-strong);
+  color: var(--text-body);
+}
+
+.hcc-clear-hands:hover {
+  border-color: rgba(251, 191, 36, 0.45);
+  color: var(--text-highlight);
+}
+
+.hcc-target-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.45rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-card-solid);
+}
+
+.hcc-target-block__lbl {
+  font-size: 0.48rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+
+.hcc-vote-big {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
+.hcc-btn-xl {
+  flex: 1 1 auto;
+  min-width: 5.5rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 11px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+
+.hcc-btn-xl:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.hcc-btn-xl--go {
+  border-color: var(--reveal-on-border);
+  background: var(--reveal-on-bg);
+  color: var(--reveal-on-text);
+}
+
+.hcc-btn-xl--stop {
+  border-color: var(--reveal-off-border);
+  background: var(--reveal-off-bg);
+  color: var(--reveal-off-text);
+}
+
+.hcc-btn-xl--primary {
+  border-color: var(--border-strong);
+  background: var(--accent-fill);
+  color: var(--text-title);
+}
+
+.hcc-btn-xl--ghost {
+  flex: 0 0 auto;
+  min-width: 2.75rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  border-color: var(--border-input);
+  background: var(--bg-card-solid);
+  color: var(--text-body);
+  font-size: 0.95rem;
+}
+
+.hcc-btn-xl--next {
+  border-color: var(--reveal-on-border);
+  background: var(--reveal-on-bg);
+  color: var(--reveal-on-text);
+  font-size: 0.72rem;
+}
+
+.hcc-timer-dur {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
+}
+
+.hcc-chip-xl {
+  min-width: 3.2rem;
+  padding: 0.42rem 0.55rem;
+  border-radius: 10px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  font-family: 'Orbitron', sans-serif;
+  border: 2px solid var(--border-input);
+  background: var(--bg-card-solid);
+  color: var(--text-body);
+  cursor: pointer;
+}
+
+.hcc-chip-xl.on {
+  border-color: var(--border-strong);
+  background: var(--accent-fill-soft);
+  color: var(--text-title);
+}
+
+.hcc-timer-big {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.hcc-timer-big .hcc-btn-xl--primary {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.hcc-pause-note {
+  margin: 0.4rem 0 0;
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: var(--text-highlight);
+}
+
+.hcc-live {
+  border: 1px solid var(--border-cyan);
+  border-radius: 10px;
+  padding: 0.25rem 0.4rem 0.4rem;
+  background: var(--bg-obs-hint);
+}
+
+.hcc-live__sum {
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--text-cyan);
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.hcc-live__sum::-webkit-details-marker {
+  display: none;
+}
+
+.hcc-live__sc {
+  font-family: 'Orbitron', sans-serif;
+  color: var(--text-body);
+}
+
+.hcc-live__empty {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.hcc-all {
+  margin: 0.2rem 0 0;
+  font-size: 0.5rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: var(--reveal-on-text);
+}
+
+.hcc-hint {
+  margin: 0.2rem 0 0;
+  font-size: 0.52rem;
+  color: var(--text-highlight);
+  font-weight: 600;
+}
+
+.hcc-list {
+  list-style: none;
+  margin: 0.2rem 0 0;
+  padding: 0;
+  max-height: 5rem;
+  overflow-y: auto;
+}
+
+.hcc-li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.55rem;
+  font-family: 'Orbitron', sans-serif;
+  color: var(--text-body);
+  padding: 0.1rem 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.hcc-rm {
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 5px;
+  border: 1px solid var(--reveal-off-border);
+  background: var(--reveal-off-bg);
+  color: var(--reveal-off-text);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.hcc-no-v {
+  margin: 0.15rem 0 0;
+  font-size: 0.52rem;
+  color: var(--text-muted);
+}

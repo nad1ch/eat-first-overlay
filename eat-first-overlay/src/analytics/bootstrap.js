@@ -45,3 +45,13 @@ export function trackPageView(path) {
     window.gtag('event', 'page_view', { page_path: path })
   }
 }
+
+/** Технічні події (відвал слухача Firestore тощо). */
+export function trackTechnicalEvent(name, props = {}) {
+  if (window.plausible) {
+    window.plausible(name, { props })
+  }
+  if (window.gtag) {
+    window.gtag('event', name, { ...props, event_category: 'technical' })
+  }
+}

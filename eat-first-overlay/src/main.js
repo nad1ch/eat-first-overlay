@@ -5,11 +5,21 @@ import './style.css'
 import App from './App.vue'
 import { router } from './router'
 import { i18n } from './i18n'
-import { initAnalytics } from './analytics/bootstrap.js'
+import { initAnalytics, trackTechnicalEvent } from './analytics/bootstrap.js'
 import { ensureMetaDescription } from './constants/seo.js'
 
 ensureMetaDescription()
 initAnalytics()
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('eat-first:listener-error', (ev) => {
+    const d = ev.detail || {}
+    trackTechnicalEvent('FirestoreListenerError', {
+      scope: String(d.scope ?? ''),
+      code: String(d.code ?? ''),
+    })
+  })
+}
 
 const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('theme') : null
 /** За замовчуванням dark. Опційно: без ключа можна підхопити ОС — розкоментуй наступний рядок і прибери 'dark'. */

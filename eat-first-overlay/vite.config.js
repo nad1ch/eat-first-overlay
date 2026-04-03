@@ -16,7 +16,10 @@ export default defineConfig(({ mode }) => {
           if (canonicalOrigin) {
             const canonical = `${canonicalOrigin}/`
             if (!out.includes('rel="canonical"')) {
-              out = out.replace('</head>', `    <link rel="canonical" href="${canonical}" />\n</head>`)
+              out = out.replace(
+                '</head>',
+                `    <link rel="canonical" href="${canonical}" />\n    <meta property="og:url" content="${canonical}" />\n</head>`,
+              )
             }
           }
           return out

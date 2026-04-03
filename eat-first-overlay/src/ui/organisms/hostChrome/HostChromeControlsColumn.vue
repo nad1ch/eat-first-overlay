@@ -1,0 +1,100 @@
+<script setup>
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { hostControlChromeStore as store } from '../../../composables/hostControlChrome.js'
+import { useHostChromeAct } from '../../../composables/useHostChromeAct.js'
+
+const { t } = useI18n()
+const act = useHostChromeAct()
+
+function slotNum(slot) {
+  const s = String(slot ?? '')
+  const m = s.match(/^p(\d+)$/i)
+  if (m) return m[1]
+  return s.replace(/^p/i, '') || s
+}
+
+const roundNow = computed(() =>
+  Math.min(8, Math.max(1, Math.floor(Number(store.gameRoom?.round) || 1))),
+)
+const canDec = computed(() => roundNow.value > 1)
+const canInc = computed(() => roundNow.value < 8)
+
+const phaseLabel = computed(() => String(store.gameRoom?.gamePhase || 'intro'))
+
+const raisedHandSlots = computed(() => {
+  const h = store.gameRoom?.hands
+  if (!h || typeof h !== 'object') return []
+  return Object.keys(h)
+    .filter((k) => h[k] === true)
+    .sort((a, b) =>
+      String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' }),
+    )
+})
+</script>
+
+<template>
+  <section class="hcc-panel hcc-panel--controls" :aria-label="t('hostChrome.show')">
+    <p class="hcc-summary" role="status" :title="store.summaryLine">{{ store.summaryLine }}</p>
+    <p v-if="raisedHandSlots.length" class="hcc-hands-row" role="status">
+      ✋ {{ t('hostChrome.handsUp') }}
+      <strong>{{ raisedHandSlots.map(slotNum).join(', ') }}</strong>
+    </p>
+
+    <div class="hcc-left-round">
+      <span class="hcc-left-lab">{{ t('hostChrome.round') }}</span>
+      <div class="hcc-round">
+        <button
+          type="button"
+          class="hcc-step"
+          :disabled="!canDec"
+          :aria-label="t('hostChrome.roundMinus')"
+          @click="act('roundDelta', -1)"
+        >
+          −
+        </button>
+        <span class="hcc-round__mid">R{{ roundNow }}</span>
+        <button
+          type="button"
+          class="hcc-step"
+          :disabled="!canInc"
+          :aria-label="t('hostChrome.roundPlus')"
+          @click="act('roundDelta', 1)"
+        >
+          +
+        </button>
+      </div>
+    </div>
+
+    <p class="hcc-left-lab hcc-left-lab--spaced">{{ t('hostChrome.show') }}</p>
+    <div class="hcc-show-btns">
+      <button type="button" class="hcc-btn-sm hcc-btn-sm--go" @click="act('startRound')">
+        {{ t('hostChrome.showStart') }}
+      </button>
+      <button type="button" class="hcc-btn-sm hcc-btn-sm--pause" @click="act('pauseShow')">
+        {{ t('hostChrome.showPause') }}
+      </button>
+      <button type="button" class="hcc-btn-sm hcc-btn-sm--reset" @click="act('resetRoom')">
+        {{ t('hostChrome.showReset') }}
+      </button>
+    </div>
+
+    <p class="hcc-left-lab hcc-left-lab--spaced">{{ t('hostChrome.phase') }}</p>
+    <div class="hcc-phase-chips">
+      <button
+        v-for="ph in store.phaseOptions"
+        :key="ph"
+        type="button"
+        class="hcc-chip hcc-chip--phase"
+        :class="{ on: phaseLabel === ph }"
+        @click="act('setPhase', ph)"
+      >
+        {{ ph }}
+      </button>
+    </div>
+
+    <button type="button" class="hcc-clear-hands" @click="act('clearHands')">
+      {{ t('hostChrome.clearHands') }}
+    </button>
+  </section>
+</template>

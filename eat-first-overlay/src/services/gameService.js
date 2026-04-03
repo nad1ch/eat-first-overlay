@@ -16,6 +16,7 @@ import { pickRandomActiveCardTemplate } from '../data/activeCards.js'
 import { buildRandomPlayerDocument } from '../data/randomPools.js'
 import { normalizePlayerSlotId } from '../utils/playerSlot.js'
 import { db } from '../firebase.js'
+import { logListenerDetach } from '../utils/appLogger.js'
 
 function gameDocRef(gameId) {
   return doc(db, 'games', gameId)
@@ -55,7 +56,7 @@ export function subscribeToGameRoom(gameId, callback) {
       callback(snapshot.exists() ? snapshot.data() : {})
     },
     (err) => {
-      console.error('[subscribeToGameRoom]', err)
+      logListenerDetach('subscribeToGameRoom', err, { gameId })
       callback({})
     },
   )
@@ -188,7 +189,7 @@ export function subscribeToVotes(gameId, callback) {
       callback(list)
     },
     (err) => {
-      console.error('[subscribeToVotes]', err)
+      logListenerDetach('subscribeToVotes', err, { gameId })
       callback([])
     },
   )
@@ -443,7 +444,7 @@ export function subscribeToCharacter(gameId, playerId, callback) {
       callback(snapshot.data())
     },
     (err) => {
-      console.error('[subscribeToCharacter]', err)
+      logListenerDetach('subscribeToCharacter', err, { gameId, playerId })
       callback(null)
     },
   )
@@ -474,7 +475,7 @@ export function subscribeToPlayers(gameId, callback) {
       callback(list)
     },
     (err) => {
-      console.error('[subscribeToPlayers]', err)
+      logListenerDetach('subscribeToPlayers', err, { gameId })
       callback([])
     },
   )

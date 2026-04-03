@@ -3,7 +3,7 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { subscribeToGameRoom, subscribeToPlayers } from '../services/gameService'
 import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
-import AppPageLoader from '../components/ui/AppPageLoader.vue'
+import AppPageLoader from '../ui/molecules/AppPageLoader.vue'
 
 const route = useRoute()
 const router = useRouter()
