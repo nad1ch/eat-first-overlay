@@ -775,8 +775,22 @@ body::-webkit-scrollbar-thumb:hover {
   align-items: stretch;
 }
 
+.app-shell-main__viewport {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  align-items: stretch;
+}
+
+/* Мінімальна висота зони сторінки до підвантаження lazy-route — менший стрибок футера (CLS). */
+.app-shell-main__viewport--chrome {
+  min-height: min(62vh, 640px);
+}
+
 /* Маршрутні сторінки тягнуться на всю ширину під шапкою (інакше flex може стискати до контенту). */
-.app-shell-main > * {
+.app-shell-main__viewport > * {
   width: 100%;
   min-width: 0;
   flex: 1 1 auto;
@@ -789,6 +803,10 @@ body::-webkit-scrollbar-thumb:hover {
   padding: 0.85rem 1.25rem 1.1rem;
   border-top: 1px solid var(--border-subtle);
   background: var(--bg-card-soft);
+  /* Стабільна висота блоку: менший CLS при підвантаженні шрифтів / переносі рядків. */
+  min-height: 5.75rem;
+  box-sizing: border-box;
+  contain: layout style;
 }
 
 .app-site-footer__inner {
@@ -867,7 +885,8 @@ body::-webkit-scrollbar-thumb:hover {
   text-transform: uppercase;
   color: var(--text-heading);
   line-height: 1.2;
-  min-height: 1.2em;
+  /* px замість em: після swap шрифту висота рядка не «стрибає» так само. */
+  min-height: 18px;
 }
 
 .app-site-footer__copy {
@@ -877,6 +896,7 @@ body::-webkit-scrollbar-thumb:hover {
   color: var(--text-muted);
   max-width: 36rem;
   text-align: center;
+  min-height: calc(0.68rem * 1.45 * 2);
 }
 
 [data-theme='light'] .app-site-footer__logo-wrap {

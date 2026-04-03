@@ -82,6 +82,17 @@
   transform: translateY(-10px) scale(0.99);
 }
 
+.route-none-enter-active,
+.route-none-leave-active {
+  transition: none;
+}
+
+.route-none-enter-from,
+.route-none-leave-to {
+  opacity: 1;
+  transform: none;
+}
+
 .route-fade-enter-active,
 .route-fade-leave-active {
   transition: opacity 0.28s var(--motion-ease);

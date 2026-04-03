@@ -5,6 +5,24 @@ import './style.css'
 import App from './App.vue'
 import { router } from './router'
 import { i18n } from './i18n'
+
+/** Паралельне підвантаження chunk поточного шляху під час ініціалізації — швидший LCP на lazy-маршрутах. */
+if (typeof window !== 'undefined') {
+  const path = (window.location.pathname || '/').replace(/\/+$/, '') || '/'
+  const prefetchers = {
+    '/join': () => import('./pages/JoinPage.vue'),
+    '/admin': () => import('./pages/AdminGatePage.vue'),
+    '/control': () => import('./pages/ControlPage.vue'),
+    '/overlay': () => import('./pages/OverlayPage.vue'),
+  }
+  const run = prefetchers[path]
+  if (run) {
+    const schedule = window.requestIdleCallback ?? ((cb) => setTimeout(cb, 1))
+    schedule(() => {
+      void run()
+    })
+  }
+}
 import { initAnalytics, trackTechnicalEvent } from './analytics/bootstrap.js'
 import { ensureMetaDescription } from './constants/seo.js'
 

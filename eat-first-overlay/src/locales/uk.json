@@ -77,7 +77,8 @@
     "scenario": "Сценарій:",
     "copyStreamer": "Оверлей стрімера",
     "copyAll": "Оверлей усіх гравців",
-    "copyBtn": "Копіювати"
+    "copyBtn": "Копіювати",
+    "overlayLinksToggle": "Посилання для OBS (overlay)"
   },
   "hostChrome": {
     "handsUp": "Підняті:",

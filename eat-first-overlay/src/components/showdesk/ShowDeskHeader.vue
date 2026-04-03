@@ -36,18 +36,21 @@ const emit = defineEmits(['copy-personal', 'copy-global'])
         <span v-if="scenarioLabel" class="pill dim">{{ t('desk.scenario') }} {{ scenarioLabel }}</span>
       </div>
     </div>
-    <div class="desk-copy-row">
-      <div class="copy-block">
-        <span class="copy-label">{{ t('desk.copyStreamer') }}</span>
-        <p class="copy-url">{{ personalUrl }}</p>
-        <button type="button" class="btn-copy" @click="emit('copy-personal')">{{ t('desk.copyBtn') }}</button>
+    <details class="desk-overlay-links">
+      <summary class="desk-overlay-links__summary">{{ t('desk.overlayLinksToggle') }}</summary>
+      <div class="desk-copy-row">
+        <div class="copy-block">
+          <span class="copy-label">{{ t('desk.copyStreamer') }}</span>
+          <p class="copy-url">{{ personalUrl }}</p>
+          <button type="button" class="btn-copy" @click="emit('copy-personal')">{{ t('desk.copyBtn') }}</button>
+        </div>
+        <div class="copy-block">
+          <span class="copy-label">{{ t('desk.copyAll') }}</span>
+          <p class="copy-url">{{ globalUrl }}</p>
+          <button type="button" class="btn-copy" @click="emit('copy-global')">{{ t('desk.copyBtn') }}</button>
+        </div>
       </div>
-      <div class="copy-block">
-        <span class="copy-label">{{ t('desk.copyAll') }}</span>
-        <p class="copy-url">{{ globalUrl }}</p>
-        <button type="button" class="btn-copy" @click="emit('copy-global')">{{ t('desk.copyBtn') }}</button>
-      </div>
-    </div>
+    </details>
   </header>
 </template>
 
@@ -67,7 +70,46 @@ const emit = defineEmits(['copy-personal', 'copy-global'])
   justify-content: space-between;
   gap: 1rem;
   align-items: flex-start;
-  margin-bottom: 1.35rem;
+  margin-bottom: 0.85rem;
+}
+
+.desk-overlay-links {
+  margin: 0;
+  border-radius: 14px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-muted) 55%, transparent);
+}
+
+.desk-overlay-links__summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.55rem 0.85rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.desk-overlay-links__summary::-webkit-details-marker {
+  display: none;
+}
+
+.desk-overlay-links__summary::after {
+  content: '▸';
+  display: inline-block;
+  margin-left: 0.45rem;
+  transition: transform 0.15s ease;
+  opacity: 0.75;
+}
+
+.desk-overlay-links[open] .desk-overlay-links__summary::after {
+  transform: rotate(90deg);
+}
+
+.desk-overlay-links .desk-copy-row {
+  padding: 0 0.65rem 0.75rem;
 }
 
 .desk-title {

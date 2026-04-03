@@ -77,7 +77,8 @@
     "scenario": "Szenario:",
     "copyStreamer": "Streamer-Overlay",
     "copyAll": "Alle Overlay",
-    "copyBtn": "Kopieren"
+    "copyBtn": "Kopieren",
+    "overlayLinksToggle": "Overlay-Links (OBS)"
   },
   "hostChrome": {
     "handsUp": "Oben:",

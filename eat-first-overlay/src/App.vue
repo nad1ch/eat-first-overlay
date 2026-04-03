@@ -10,6 +10,7 @@ import AppHeaderToolbar from './ui/organisms/AppHeaderToolbar.vue'
 import AppSiteFooter from './ui/organisms/AppSiteFooter.vue'
 import { persistLocale, LOCALE_OPTIONS } from './i18n'
 import { useSeoCanonical } from './composables/useSeoCanonical.js'
+import { adminControlTransitionInstant } from './router.js'
 
 const localeMenuOptions = LOCALE_OPTIONS.map((o) => ({ value: o.code, label: o.label }))
 
@@ -19,10 +20,11 @@ const route = useRoute()
 const { t, locale } = useI18n()
 const { theme, toggleTheme } = useTheme()
 
+/** Не включаємо `player` у ключ: інакше кожна зміна слота в URL повністю перемонтовує ControlPage (блимання, скидання вибору в ростері). */
 const routeViewKey = computed(() => {
   if (route.path === '/control') {
     const q = route.query
-    return ['control', String(q.game ?? ''), String(q.role ?? ''), String(q.key ?? '')].join('|')
+    return ['control', String(q.game ?? ''), String(q.host ?? '')].join('|')
   }
   return route.fullPath
 })
@@ -30,7 +32,11 @@ const routeViewKey = computed(() => {
 const showChrome = computed(() => route.path !== '/overlay')
 const hostChromeOn = computed(() => hostControlChromeStore.active === true)
 const votingGlow = computed(() => Boolean(hostControlChromeStore.gameRoom?.voting?.active))
-const routeTransition = computed(() => (route.path === '/overlay' ? 'route-fade' : 'route-slide'))
+const routeTransition = computed(() => {
+  if (route.path === '/overlay') return 'route-fade'
+  if (adminControlTransitionInstant.value) return 'route-none'
+  return 'route-slide'
+})
 const themeIcon = computed(() => (theme.value === 'dark' ? '☀️' : '🌙'))
 const themeLabel = computed(() => (theme.value === 'dark' ? t('app.themeLight') : t('app.themeDark')))
 const footerYear = new Date().getFullYear()
@@ -72,11 +78,16 @@ const footerYear = new Date().getFullYear()
       </div>
     </header>
     <main class="app-shell-main" :class="{ 'app-shell-main--full': !showChrome }">
-      <RouterView v-slot="{ Component }">
-        <Transition :name="routeTransition">
-          <component :is="Component" :key="routeViewKey" />
-        </Transition>
-      </RouterView>
+      <div
+        class="app-shell-main__viewport"
+        :class="{ 'app-shell-main__viewport--chrome': showChrome }"
+      >
+        <RouterView v-slot="{ Component }">
+          <Transition :name="routeTransition">
+            <component :is="Component" :key="routeViewKey" />
+          </Transition>
+        </RouterView>
+      </div>
     </main>
 
     <AppSiteFooter v-if="showChrome" :year="footerYear" />

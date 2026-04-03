@@ -2,13 +2,9 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ADMIN_KEY } from '../config/access.js'
+import { ADMIN_KEY, HOST_PANEL_QUERY_KEY, HOST_PANEL_QUERY_VALUE } from '../config/access.js'
 import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId.js'
-import {
-  saveHostAccessSession,
-  getValidatedPersistedHostKey,
-  clearHostAccessSession,
-} from '../utils/persistedHostSession.js'
+import { saveHostAccessSession, clearHostAccessSession } from '../utils/persistedHostSession.js'
 
 const { t } = useI18n()
 
@@ -30,10 +26,6 @@ watch(gameId, (g) => setPersistedGameId(g))
 
 onMounted(() => {
   if (typeof window === 'undefined') return
-  if (getValidatedPersistedHostKey(ADMIN_KEY)) {
-    router.replace({ path: '/control', query: { game: gameId.value, role: 'admin' } })
-    return
-  }
   const g = route.query.game
   if (g != null && String(g).trim()) return
   const p = getPersistedGameId()
@@ -56,7 +48,7 @@ function submit() {
   saveHostAccessSession(ADMIN_KEY)
   router.replace({
     path: '/control',
-    query: { game: gameId.value, role: 'admin' },
+    query: { game: gameId.value, [HOST_PANEL_QUERY_KEY]: HOST_PANEL_QUERY_VALUE },
   })
 }
 

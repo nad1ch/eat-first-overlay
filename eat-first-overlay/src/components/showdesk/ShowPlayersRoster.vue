@@ -123,8 +123,8 @@ const speakerOnSelected = computed(
 
 function onCardClick(p) {
   if (props.useHostPanel) {
-    const id = String(p.id)
-    emit('update:selectedPlayerId', props.selectedPlayerId === id ? '' : id)
+    // Без toggle в «порожнечу»: один клік = вибір слота; зняти вибір можна лише обравши іншого гравця.
+    emit('update:selectedPlayerId', String(p.id))
     return
   }
   emit('open-editor', p.id)

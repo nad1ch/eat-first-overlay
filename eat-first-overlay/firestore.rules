@@ -26,12 +26,16 @@ service cloud.firestore {
           && request.resource.data.round is int
           && request.resource.data.round >= 1
           && request.resource.data.round <= 8;
+        // Видалення голосів при прибиранні гравця з кімнати (deleteVoteDoc) — request.resource немає.
+        allow delete: if true;
       }
     }
 
     match /games/{gameId}/players/{playerId} {
       allow read: if true;
-      allow write: if request.resource.data.key == "123456";
+      allow create, update: if request.resource.data.key == "123456";
+      // delete: у request.resource немає даних — перевіряємо існуючий документ.
+      allow delete: if resource.data.key == "123456";
     }
   }
 }

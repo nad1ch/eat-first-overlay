@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ADMIN_KEY } from '../config/access.js'
+import { ADMIN_KEY, HOST_PANEL_QUERY_KEY, HOST_PANEL_QUERY_VALUE } from '../config/access.js'
 import { rollFieldValue, rollRandomIntoCharacter, ages, genders, pickNameForGender } from '../data/randomPools.js'
 import { scenarioIds } from '../data/scenarios.js'
 import {
@@ -55,7 +55,11 @@ import { syncHostControlChrome, clearHostControlChrome } from '../composables/ho
 import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
 import { normalizePlayerSlotId } from '../utils/playerSlot.js'
 import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId.js'
-import { getValidatedPersistedHostKey, clearHostAccessSession } from '../utils/persistedHostSession.js'
+import {
+  saveHostAccessSession,
+  getValidatedPersistedHostKey,
+  clearHostAccessSession,
+} from '../utils/persistedHostSession.js'
 import {
   saveLastPlayerSlot,
   getValidatedLastPlayerSlot,
@@ -70,19 +74,24 @@ const route = useRoute()
 const router = useRouter()
 const { t, te } = useI18n()
 
-const wantsAdmin = computed(() => String(route.query.role ?? '').toLowerCase() === 'admin')
+/** Пульт ведучого: ?host=1 або застарілі закладки ?role=admin (без key у нових посиланнях). */
+const hostModeRequested = computed(
+  () =>
+    String(route.query[HOST_PANEL_QUERY_KEY] ?? '').trim() === HOST_PANEL_QUERY_VALUE ||
+    String(route.query.role ?? '').toLowerCase() === 'admin',
+)
 const urlKey = computed(() => {
   const q = String(route.query.key ?? '').trim()
   if (q !== '') return q
-  if (wantsAdmin.value) {
+  if (hostModeRequested.value) {
     const p = getValidatedPersistedHostKey(ADMIN_KEY)
     return p ?? ''
   }
   return ''
 })
 const adminKeyOk = computed(() => urlKey.value === ADMIN_KEY)
-const isAdmin = computed(() => wantsAdmin.value && adminKeyOk.value)
-const adminAccessDenied = computed(() => wantsAdmin.value && !adminKeyOk.value)
+const isAdmin = computed(() => hostModeRequested.value && adminKeyOk.value)
+const adminAccessDenied = computed(() => hostModeRequested.value && !adminKeyOk.value)
 
 const gameId = computed(() => {
   const q = route.query.game
@@ -177,7 +186,7 @@ onMounted(() => {
     tick.value = Date.now()
   }, 250)
   nextTick(() => {
-    if (route.path !== '/control' || wantsAdmin.value) return
+    if (route.path !== '/control' || hostModeRequested.value) return
     const q = route.query
     if (routeHasExplicitPlayerSlot(q)) {
       saveLastPlayerSlot(gameId.value, playerId.value)
@@ -324,6 +333,19 @@ const selectedDeskPlayerId = ref('')
 watch(gameId, () => {
   selectedDeskPlayerId.value = ''
 })
+
+/** Після зміни гри / URL слоту підтягуємо вибір ростера (без повного remount сторінки). */
+watch(
+  [isAdmin, playerId, gameId],
+  () => {
+    if (!isAdmin.value) return
+    const pid = playerId.value
+    if (selectedDeskPlayerId.value !== pid) {
+      selectedDeskPlayerId.value = pid
+    }
+  },
+  { immediate: true, flush: 'post' },
+)
 
 /** Документ гравця для редактора: у ведучого — вибраний слот у ростері, інакше з URL. */
 const editorPlayerId = computed(() => {
@@ -1085,15 +1107,15 @@ let saveTimer = null
 
 function controlQuery(overrides) {
   const base = { ...route.query, ...overrides }
+  delete base.key
+  delete base.role
   const gRaw = base.game
   if (gRaw == null || !String(gRaw).trim()) base.game = gameId.value
   else base.game = String(gRaw).trim()
   if (isAdmin.value) {
-    base.role = 'admin'
-    base.key = urlKey.value
+    base[HOST_PANEL_QUERY_KEY] = HOST_PANEL_QUERY_VALUE
   } else {
-    delete base.role
-    delete base.key
+    delete base[HOST_PANEL_QUERY_KEY]
   }
   return base
 }
@@ -1104,6 +1126,20 @@ function navigateQuery(overrides) {
     query: controlQuery(overrides),
   })
 }
+
+/** Прибираємо `key` / `role=admin` з адресного рядка; залишаємо лише `host=1`. */
+watch(
+  () => [route.path, isAdmin.value, route.query.key, route.query.role],
+  () => {
+    if (route.path !== '/control' || !isAdmin.value) return
+    const legacyKey = String(route.query.key ?? '').trim()
+    const legacyRole = String(route.query.role ?? '').toLowerCase() === 'admin'
+    if (!legacyKey && !legacyRole) return
+    if (legacyKey === ADMIN_KEY) saveHostAccessSession(ADMIN_KEY)
+    router.replace({ path: '/control', query: controlQuery({}) })
+  },
+  { flush: 'post' },
+)
 
 /** Підставляє `game` у URL з пам’яті, щоб F5 не скидав кімнату. */
 watch(
