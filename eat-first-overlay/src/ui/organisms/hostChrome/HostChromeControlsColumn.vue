@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { hostControlChromeStore as store } from '../../../composables/hostControlChrome.js'
 import { useHostChromeAct } from '../../../composables/useHostChromeAct.js'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const act = useHostChromeAct()
 
 function slotNum(slot) {
@@ -12,6 +12,11 @@ function slotNum(slot) {
   const m = s.match(/^p(\d+)$/i)
   if (m) return m[1]
   return s.replace(/^p/i, '') || s
+}
+
+function phaseChipLabel(ph) {
+  const key = `gamePhase.${ph}`
+  return te(key) ? t(key) : String(ph)
 }
 
 const roundNow = computed(() =>
@@ -101,7 +106,7 @@ const raisedHandSlots = computed(() => {
             :class="{ on: phaseLabel === ph }"
             @click="act('setPhase', ph)"
           >
-            {{ ph }}
+            {{ phaseChipLabel(ph) }}
           </button>
         </div>
       </div>

@@ -2,6 +2,12 @@
   "game": {
     "title": "Who do we eat first"
   },
+  "gamePhase": {
+    "intro": "Intro",
+    "discussion": "Discussion",
+    "voting": "Voting",
+    "final": "Final"
+  },
   "app": {
     "brandHost": "Host · desk",
     "themeLight": "Light theme",
@@ -281,7 +287,7 @@
     "voting": "VOTING",
     "voteAgainst": "Against player {n}",
     "youAreTarget": "YOU ARE THE TARGET",
-    "voteInPanel": "Vote in the player panel (control)",
+    "voteInPanel": "Vote in the player panel",
     "roundN": "ROUND {n}",
     "revealCard": "REVEALING A CARD",
     "phaseBanner": "Phase: {phase} · Round {round} · In room: {n}"

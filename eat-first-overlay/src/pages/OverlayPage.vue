@@ -16,7 +16,7 @@ import { millisFromFirestore } from '../utils/firestoreTime.js'
 import AppPageLoader from '../ui/molecules/AppPageLoader.vue'
 
 const route = useRoute()
-const { t } = useI18n()
+const { t, te } = useI18n()
 
 const gotGameRoomOv = ref(false)
 const gotPrimaryOv = ref(false)
@@ -211,7 +211,9 @@ const dramaMode = computed(() => {
 const dramaPersonal = computed(() => isPersonal.value && aliveForCinema.value === 3)
 
 const globalStatusLine = computed(() => {
-  const ph = String(gameRoom.value?.gamePhase || 'intro')
+  const phRaw = String(gameRoom.value?.gamePhase || 'intro')
+  const pk = `gamePhase.${phRaw}`
+  const ph = te(pk) ? t(pk) : phRaw
   const r = Math.min(8, Math.max(1, Math.floor(Number(gameRoom.value?.round) || 1)))
   const n = players.value.length
   return t('overlayPage.phaseBanner', { phase: ph, round: r, n })

@@ -56,7 +56,7 @@ import UiMenuSelect from '../ui/molecules/UiMenuSelect.vue'
 
 const route = useRoute()
 const router = useRouter()
-const { t } = useI18n()
+const { t, te } = useI18n()
 
 const wantsAdmin = computed(() => String(route.query.role ?? '').toLowerCase() === 'admin')
 const urlKey = computed(() => String(route.query.key ?? '').trim())
@@ -278,9 +278,17 @@ const raisedHandsCount = computed(() => {
   return Object.keys(h).filter((k) => h[k] === true).length
 })
 
+const playerPhaseDisplay = computed(() => {
+  const p = String(gameRoom.value?.gamePhase || 'intro')
+  const pk = `gamePhase.${p}`
+  return te(pk) ? t(pk) : p
+})
+
 /** Sticky рядок: фаза, раунд, спікер, ціль, голосування, руки */
 const hostSummaryLine = computed(() => {
-  const ph = String(gameRoom.value?.gamePhase || 'intro').toUpperCase()
+  const phRaw = String(gameRoom.value?.gamePhase || 'intro')
+  const pk = `gamePhase.${phRaw}`
+  const ph = (te(pk) ? t(pk) : phRaw).toUpperCase()
   const r = roomRoundLive.value
   const sp = String(gameRoom.value?.currentSpeaker ?? '').trim() || '—'
   const tg = String(gameRoom.value?.voting?.targetPlayer ?? '').trim()
@@ -1299,7 +1307,7 @@ function rerollActiveCardOnly() {
 
     <div v-else class="player-hero">
       <h1 class="player-title">{{ t('game.title') }}</h1>
-      <p class="player-phase">{{ t('control.playerPhase', { phase: String(gameRoom.gamePhase || 'intro') }) }}</p>
+      <p class="player-phase">{{ t('control.playerPhase', { phase: playerPhaseDisplay }) }}</p>
       <div class="hand-toggle" role="group" :aria-label="t('control.handGroup')">
         <button
           type="button"

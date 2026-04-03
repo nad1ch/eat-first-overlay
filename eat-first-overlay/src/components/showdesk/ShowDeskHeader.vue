@@ -1,9 +1,10 @@
 <script setup>
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 
-defineProps({
+const props = defineProps({
   gameTitle: { type: String, required: true },
   gameId: { type: String, required: true },
   gamePhase: { type: String, default: 'intro' },
@@ -11,6 +12,12 @@ defineProps({
   aliveCount: { type: Number, default: 0 },
   personalUrl: { type: String, default: '' },
   globalUrl: { type: String, default: '' },
+})
+
+const phaseLabel = computed(() => {
+  const p = String(props.gamePhase || 'intro')
+  const key = `gamePhase.${p}`
+  return te(key) ? t(key) : p
 })
 
 const emit = defineEmits(['copy-personal', 'copy-global'])
@@ -25,7 +32,7 @@ const emit = defineEmits(['copy-personal', 'copy-global'])
       </div>
       <div class="desk-stats">
         <span class="pill">{{ t('desk.alive') }} <strong>{{ aliveCount }}</strong></span>
-        <span class="pill">{{ t('desk.phase') }} <strong>{{ gamePhase }}</strong></span>
+        <span class="pill">{{ t('desk.phase') }} <strong>{{ phaseLabel }}</strong></span>
         <span v-if="scenarioLabel" class="pill dim">{{ t('desk.scenario') }} {{ scenarioLabel }}</span>
       </div>
     </div>
