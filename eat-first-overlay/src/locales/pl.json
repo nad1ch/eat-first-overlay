@@ -8,6 +8,9 @@
     "themeDark": "Ciemny motyw",
     "langAria": "Język interfejsu",
     "twitchAria": "Kanał nad1ch na Twitchu (otwiera się w nowej karcie)",
+    "navAria": "Nawigacja",
+    "navHome": "Strona główna (lobby)",
+    "navBack": "Wstecz",
     "footerLine": "© {year} nad1ch. Wszelkie prawa zastrzeżone. „Kogo zjemy pierwszego” — oryginalny interfejs show."
   },
   "join": {

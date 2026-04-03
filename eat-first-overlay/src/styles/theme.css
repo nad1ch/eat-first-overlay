@@ -557,6 +557,21 @@ body::-webkit-scrollbar-thumb:hover {
   width: 100%;
 }
 
+.app-shell-header__start {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.app-shell-header__start .app-shell-brand {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .app-shell-header__end {
   display: flex;
   align-items: center;

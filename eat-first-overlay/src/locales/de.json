@@ -8,6 +8,9 @@
     "themeDark": "Dunkles Design",
     "langAria": "Sprache der Oberfläche",
     "twitchAria": "Kanal nad1ch auf Twitch (öffnet in neuem Tab)",
+    "navAria": "Navigation",
+    "navHome": "Start (Lobby)",
+    "navBack": "Zurück",
     "footerLine": "© {year} nad1ch. Alle Rechte vorbehalten. „Wen essen wir zuerst“ — originale Show-Oberfläche."
   },
   "join": {

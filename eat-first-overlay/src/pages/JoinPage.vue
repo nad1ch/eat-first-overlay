@@ -32,12 +32,32 @@ const joinGotPlayers = ref(false)
 const joinGotRoom = ref(false)
 const joinLobbyReady = ref(false)
 
+const JOIN_LOADER_FALLBACK_MS = 12000
+let joinLoaderFallbackTimer = null
+
+function clearJoinLoaderFallback() {
+  if (joinLoaderFallbackTimer != null) {
+    clearTimeout(joinLoaderFallbackTimer)
+    joinLoaderFallbackTimer = null
+  }
+}
+
+function armJoinLoaderFallback() {
+  clearJoinLoaderFallback()
+  joinLoaderFallbackTimer = setTimeout(() => {
+    joinLoaderFallbackTimer = null
+    if (!joinLobbyReady.value) joinLobbyReady.value = true
+  }, JOIN_LOADER_FALLBACK_MS)
+}
+
 watch(
   gameId,
   (gid) => {
     joinGotPlayers.value = false
     joinGotRoom.value = false
     joinLobbyReady.value = false
+    clearJoinLoaderFallback()
+    armJoinLoaderFallback()
     if (unsub) {
       unsub()
       unsub = null
@@ -61,12 +81,16 @@ watch(
 watch(
   [joinGotPlayers, joinGotRoom],
   () => {
-    if (joinGotPlayers.value && joinGotRoom.value) joinLobbyReady.value = true
+    if (joinGotPlayers.value && joinGotRoom.value) {
+      joinLobbyReady.value = true
+      clearJoinLoaderFallback()
+    }
   },
   { flush: 'post' },
 )
 
 onUnmounted(() => {
+  clearJoinLoaderFallback()
   if (unsub) unsub()
   if (unsubRoom) unsubRoom()
 })

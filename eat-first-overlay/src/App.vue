@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useTheme } from './composables/useTheme.js'
 import { hostControlChromeStore } from './composables/hostControlChrome.js'
 import HostControlChromeBar from './components/showdesk/HostControlChromeBar.vue'
+import AppHeaderNav from './ui/molecules/AppHeaderNav.vue'
 import AppHeaderToolbar from './ui/organisms/AppHeaderToolbar.vue'
 import AppSiteFooter from './ui/organisms/AppSiteFooter.vue'
 import { persistLocale, LOCALE_OPTIONS } from './i18n'
@@ -40,9 +41,12 @@ const footerYear = new Date().getFullYear()
       :class="{ 'app-shell-header--host': hostChromeOn, 'app-shell-header--vote-on': votingGlow }"
     >
       <div class="app-shell-header__top">
-        <span class="app-shell-brand">{{
-          hostChromeOn ? t('app.brandHost') : t('game.title')
-        }}</span>
+        <div class="app-shell-header__start">
+          <AppHeaderNav />
+          <span class="app-shell-brand">{{
+            hostChromeOn ? t('app.brandHost') : t('game.title')
+          }}</span>
+        </div>
         <AppHeaderToolbar
           :locale-menu-options="localeMenuOptions"
           :model-locale="locale"
@@ -66,7 +70,7 @@ const footerYear = new Date().getFullYear()
     </header>
     <main class="app-shell-main" :class="{ 'app-shell-main--full': !showChrome }">
       <RouterView v-slot="{ Component }">
-        <Transition :name="routeTransition" mode="out-in">
+        <Transition :name="routeTransition">
           <component :is="Component" :key="routeViewKey" />
         </Transition>
       </RouterView>

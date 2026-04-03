@@ -8,6 +8,9 @@
     "themeDark": "Dark theme",
     "langAria": "Interface language",
     "twitchAria": "nad1ch Twitch channel (opens in a new tab)",
+    "navAria": "App navigation",
+    "navHome": "Home (lobby)",
+    "navBack": "Back",
     "footerLine": "© {year} nad1ch. All rights reserved. “Who do we eat first” — original show UI."
   },
   "join": {
