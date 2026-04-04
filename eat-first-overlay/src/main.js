@@ -20,6 +20,7 @@ if (typeof window !== 'undefined') {
 }
 import { initAnalytics, trackTechnicalEvent } from './analytics/bootstrap.js'
 import { ensureMetaDescription } from './constants/seo.js'
+import { ensureAnonymousAuth } from './services/authBootstrap.js'
 
 ensureMetaDescription()
 initAnalytics()
@@ -46,4 +47,8 @@ app.use(router)
 if (typeof document !== 'undefined') {
   document.documentElement.setAttribute('lang', i18n.global.locale.value)
 }
-app.mount('#app')
+
+;(async () => {
+  await ensureAnonymousAuth().catch((e) => console.warn('[auth bootstrap]', e))
+  app.mount('#app')
+})()

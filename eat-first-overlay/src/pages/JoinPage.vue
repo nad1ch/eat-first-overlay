@@ -8,6 +8,9 @@ import { useI18n } from 'vue-i18n'
 import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
 import AppPageLoader from '../ui/molecules/AppPageLoader.vue'
 import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId.js'
+import { callableApiEnabled } from '../services/callableApi.js'
+import { ensureAnonymousAuth } from '../services/authBootstrap.js'
+import { callLinkPlayerSlot } from '../services/callableClient.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -213,6 +216,15 @@ async function runClaimSlot(id, displayName) {
       return
     }
     setJoinSessionToken(gameId.value, id, res.token)
+    if (callableApiEnabled()) {
+      try {
+        await ensureAnonymousAuth()
+        await callLinkPlayerSlot(gameId.value, id, res.token)
+      } catch (e) {
+        showJoinToast(e instanceof Error ? e.message : String(e))
+        return
+      }
+    }
     router.push({
       path: '/control',
       query: { game: gameId.value, player: id, token: res.token },

@@ -204,6 +204,7 @@
     "voteRecorded": "Głos zapisany",
     "alreadyVoted": "Już głosowałeś w tej rundzie",
     "voteSendFail": "Nie udało się wysłać głosu",
+    "voteNotLinked": "Wejdź ponownie z lobby (konto nie jest powiązane ze slotem)",
     "nomRemoved": "Nominacja usunięta",
     "nomAdded": "Nominacja",
     "speakerSet": "{slot}",

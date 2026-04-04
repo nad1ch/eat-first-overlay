@@ -5,6 +5,10 @@ import { useI18n } from 'vue-i18n'
 import { ADMIN_KEY, HOST_PANEL_QUERY_KEY, HOST_PANEL_QUERY_VALUE } from '../config/access.js'
 import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId.js'
 import { saveHostAccessSession, clearHostAccessSession } from '../utils/persistedHostSession.js'
+import { callableApiEnabled } from '../services/callableApi.js'
+import { ensureAnonymousAuth } from '../services/authBootstrap.js'
+import { callPromoteToHost } from '../services/callableClient.js'
+import { auth } from '../firebase.js'
 
 const { t } = useI18n()
 
@@ -39,9 +43,27 @@ watch(
   },
 )
 
-function submit() {
+async function submit() {
   err.value = ''
-  if (String(keyInput.value).trim() !== ADMIN_KEY) {
+  const key = String(keyInput.value).trim()
+
+  if (callableApiEnabled()) {
+    try {
+      await ensureAnonymousAuth()
+      await callPromoteToHost(key)
+      await auth.currentUser?.getIdToken(true)
+      saveHostAccessSession(key)
+      router.replace({
+        path: '/control',
+        query: { game: gameId.value, [HOST_PANEL_QUERY_KEY]: HOST_PANEL_QUERY_VALUE },
+      })
+    } catch {
+      err.value = t('admin.wrongKey')
+    }
+    return
+  }
+
+  if (key !== ADMIN_KEY) {
     err.value = t('admin.wrongKey')
     return
   }

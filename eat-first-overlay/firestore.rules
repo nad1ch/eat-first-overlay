@@ -25,17 +25,10 @@ service cloud.firestore {
         );
       allow delete: if false;
 
-      // Публічне голосування з персонального оверлею (без admin key)
+      // Голоси лише через Cloud Functions (submitVote / hostClearVotes / hostDeleteVote).
       match /votes/{voterId} {
         allow read: if true;
-        allow create, update: if request.resource.data.choice in ['for', 'against']
-          && request.resource.data.targetPlayer is string
-          && request.resource.data.targetPlayer.size() > 0
-          && request.resource.data.round is int
-          && request.resource.data.round >= 1
-          && request.resource.data.round <= 8;
-        // Видалення голосів при прибиранні гравця з кімнати (deleteVoteDoc) — request.resource немає.
-        allow delete: if true;
+        allow create, update, delete: if false;
       }
     }
 

@@ -1,4 +1,5 @@
 import { initializeApp } from 'firebase/app'
+import { getAuth } from 'firebase/auth'
 import {
   initializeFirestore,
   persistentLocalCache,
@@ -14,7 +15,10 @@ export const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 }
 
-const app = initializeApp(firebaseConfig)
+export const app = initializeApp(firebaseConfig)
+
+/** Потрібно для Callable + linkPlayerSlot / submitVote (anonymous за замовчуванням). */
+export const auth = getAuth(app)
 
 /**
  * IndexedDB-кеш із синхронізацією між вкладками — інакше друга вкладка з тим самим origin

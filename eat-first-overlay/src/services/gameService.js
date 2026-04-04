@@ -12,6 +12,13 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { ADMIN_KEY } from '../config/access.js'
+import { callableApiEnabled } from './callableApi.js'
+import {
+  callSubmitVote,
+  callHostClearVotes,
+  callHostDeleteVote,
+  callHostSetGamePhase,
+} from './callableClient.js'
 import { pickRandomActiveCardTemplateAvoiding } from '../data/activeCards.js'
 import {
   buildRandomPlayerDocument,
@@ -188,6 +195,10 @@ export async function resumeSpeakingTimer(gameId) {
 export async function setGamePhase(gameId, phase) {
   const p = String(phase || 'intro')
   const next = GAME_PHASES.has(p) ? p : 'intro'
+  if (callableApiEnabled()) {
+    await callHostSetGamePhase(String(gameId ?? '').trim(), next)
+    return
+  }
   await saveGameRoom(gameId, { gamePhase: next })
 }
 
@@ -241,6 +252,10 @@ export function subscribeToVotes(gameId, callback) {
 
 /** Видалити всі документи в votes/ (батчами). */
 export async function clearAllVotes(gameId) {
+  if (callableApiEnabled()) {
+    await callHostClearVotes(String(gameId ?? '').trim())
+    return
+  }
   const snap = await getDocs(votesColRef(gameId))
   let batch = writeBatch(db)
   let n = 0
@@ -257,8 +272,13 @@ export async function clearAllVotes(gameId) {
 }
 
 export async function deleteVoteDoc(gameId, voterId) {
-  const v = String(voterId ?? '').trim()
-  if (!v) return
+  const raw = String(voterId ?? '').trim()
+  if (!raw) return
+  const v = normalizePlayerSlotId(raw)
+  if (callableApiEnabled()) {
+    await callHostDeleteVote(String(gameId ?? '').trim(), v)
+    return
+  }
   await deleteDoc(doc(db, 'games', gameId, 'votes', v))
 }
 
@@ -463,16 +483,23 @@ export async function claimPlayerSlot(gameId, playerId, options = {}) {
 }
 
 /**
- * Голос з персонального оверлею: games/{gameId}/votes/{voterPlayerId}
- * Один голос на раунд: якщо вже є запис з тим самим round — не писати.
+ * Голос: через Callable (submitVote), якщо задано VITE_FUNCTIONS_REGION, інакше — прямий запис (лише dev/легасі).
+ * voterPlayerId / round у режимі Callable ігноруються: слот визначається з linkedAuthUid, раунд — з games/{gameId}.
  * @returns {{ ok: true } | { ok: false, reason: string }}
  */
 export async function saveVote(gameId, voterPlayerId, targetPlayer, choice, round) {
-  const voter = String(voterPlayerId ?? '').trim()
   const target = String(targetPlayer ?? '').trim()
+  const c = choice === 'against' ? 'against' : 'for'
+  const gid = String(gameId ?? '').trim()
+
+  if (callableApiEnabled()) {
+    if (!gid || !target) return { ok: false, reason: 'invalid' }
+    return callSubmitVote(gid, target, c)
+  }
+
+  const voter = String(voterPlayerId ?? '').trim()
   const r = Math.floor(Number(round) || 0)
   if (!voter || !target || r < MIN_ROUND) return { ok: false, reason: 'invalid' }
-  const c = choice === 'against' ? 'against' : 'for'
   const voteRef = doc(db, 'games', gameId, 'votes', voter)
   const existing = await getDoc(voteRef)
   if (existing.exists()) {

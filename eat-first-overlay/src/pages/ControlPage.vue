@@ -88,6 +88,9 @@ import {
 import AppPageLoader from '../ui/molecules/AppPageLoader.vue'
 import ConfirmDialog from '../ui/molecules/ConfirmDialog.vue'
 import UiMenuSelect from '../ui/molecules/UiMenuSelect.vue'
+import { callableApiEnabled } from '../services/callableApi.js'
+import { ensureAnonymousAuth } from '../services/authBootstrap.js'
+import { callLinkPlayerSlot } from '../services/callableClient.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -141,6 +144,30 @@ const playerSlotAccessBlocked = computed(() => {
   const sess = getJoinSessionToken(gameId.value, playerId.value)
   return urlT !== st && sess !== st
 })
+
+/** Після deploy Callable: зв’язати anonymous uid зі слотом за joinToken (з URL або session). */
+watch(
+  () => ({
+    gid: gameId.value,
+    pid: playerId.value,
+    adm: isAdmin.value,
+    denied: adminAccessDenied.value,
+    tokenQ: String(route.query.token ?? '').trim(),
+    useFn: callableApiEnabled(),
+  }),
+  async ({ gid, pid, adm, denied, tokenQ, useFn }) => {
+    if (!useFn || denied || adm || !gid || !pid) return
+    const tok = tokenQ || getJoinSessionToken(gid, pid)
+    if (!tok) return
+    try {
+      await ensureAnonymousAuth()
+      await callLinkPlayerSlot(gid, pid, tok)
+    } catch (e) {
+      console.warn('[control] linkPlayerSlot', e)
+    }
+  },
+  { immediate: true, flush: 'post' },
+)
 
 const overlayHrefGlobal = computed(() => ({
   path: '/overlay',
@@ -810,6 +837,8 @@ async function submitPlayerVote(choice) {
       showToast(t('toast.voteRecorded'))
     } else if (res.reason === 'already-voted') {
       showToast(t('toast.alreadyVoted'))
+    } else if (res.reason === 'not-linked') {
+      showToast(t('toast.voteNotLinked'))
     } else {
       showToast(t('toast.voteSendFail'))
     }
