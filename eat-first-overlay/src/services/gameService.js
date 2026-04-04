@@ -523,7 +523,7 @@ export async function ensureGameRoomExists(gameId) {
 export async function seedMissingStandardPlayers(gameId, scenarioId) {
   const colRef = collection(db, 'games', gameId, 'players')
   const snapshot = await getDocs(colRef)
-  const have = new Set(snapshot.docs.map((d) => d.id))
+  const have = new Set(snapshot.docs.map((d) => normalizePlayerSlotId(d.id)))
   const sid = String(scenarioId || 'classic_crash')
   const usedState = createEmptyUsedState()
   for (const d of snapshot.docs) {

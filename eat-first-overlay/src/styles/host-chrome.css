@@ -60,6 +60,20 @@
   color: var(--text-muted);
 }
 
+.hcc-timer-remain {
+  margin: 0 0 var(--ui-space-5);
+  padding: var(--ui-space-4) var(--ui-space-5);
+  border-radius: var(--ui-radius-md);
+  border: 1px solid var(--border-cyan);
+  background: var(--bg-obs-hint);
+  font-family: var(--font-display);
+  font-size: var(--ui-control-next-font);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--text-cyan-strong);
+  text-align: center;
+}
+
 .hcc-hands-bar {
   display: flex;
   align-items: center;

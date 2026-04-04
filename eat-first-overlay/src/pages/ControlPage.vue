@@ -463,6 +463,13 @@ const editorPlayerId = computed(() => {
   return sel ? normalizePlayerSlotId(sel) : playerId.value
 })
 
+/** Є документ у Firestore для обраного слота (кубик і автосейв мають сенс лише тоді). */
+const editorPlayerInRoster = computed(() =>
+  allPlayers.value.some(
+    (p) => normalizePlayerSlotId(p.id) === normalizePlayerSlotId(editorPlayerId.value),
+  ),
+)
+
 const raisedHandsCount = computed(() => {
   const h = gameRoom.value?.hands || {}
   return Object.keys(h).filter((k) => h[k] === true).length
@@ -1020,11 +1027,19 @@ async function hostExecuteDeletePlayer(pid) {
   pendingPlayerDeletes.value = [...new Set([...pendingPlayerDeletes.value, p])]
   applyPlayerListFromFirestore(lastPlayersFirestoreList.value)
   try {
+    clearTimeout(saveTimer)
+    saveTimer = null
     loadError.value = null
     debugDelete('hostExecuteDeletePlayer:await removePlayerFromGameRoomState')
     await removePlayerFromGameRoomState(gameId.value, p)
     debugDelete('hostExecuteDeletePlayer:await deletePlayerDocument')
     await deletePlayerDocument(gameId.value, p)
+    const editorWasOnDeletedSlot =
+      normalizePlayerSlotId(editorPlayerId.value) === p ||
+      String(selectedDeskPlayerId.value || '').trim() === p
+    if (editorWasOnDeletedSlot) {
+      slotsToSkipPersistOnSwitch.add(p)
+    }
     antiGhostPlayerUntil.value = {
       ...antiGhostPlayerUntil.value,
       [p]: Date.now() + ANTI_GHOST_PLAYER_MS,
@@ -1348,8 +1363,28 @@ function buildUsedStateExcludingEditorSlot() {
   return us
 }
 
-function rerollSingleTrait(fieldKey) {
+async function ensureEditorSlotHasPlayerDoc() {
   if (!isAdmin.value) return
+  const gid = gameId.value
+  const pid = editorPlayerId.value
+  if (!gid || !pid) return
+  if (editorPlayerInRoster.value) return
+  await ensureGameRoomExists(gid)
+  const created = await ensurePlayerCharacterExists(gid, pid, selectedScenario.value)
+  const data = await fetchCharacter(gid, pid)
+  if (data) applyFromFirestoreSnapshot(data)
+  if (created) showToast(t('toast.playerAdded', { slot: pid }))
+}
+
+async function rerollSingleTrait(fieldKey) {
+  if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    await ensureEditorSlotHasPlayerDoc()
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+    return
+  }
   characterState[fieldKey].value = rollFieldValue(
     fieldKey,
     scenarioForRolls.value,
@@ -1357,8 +1392,15 @@ function rerollSingleTrait(fieldKey) {
   )
 }
 
-function rerollIdentity() {
+async function rerollIdentity() {
   if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    await ensureEditorSlotHasPlayerDoc()
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+    return
+  }
   const g = genders[Math.floor(Math.random() * genders.length)]
   characterState.gender = g
   characterState.name = pickNameForGender(g)
@@ -1548,6 +1590,8 @@ async function requestCardFromHost() {
 }
 
 let saveTimer = null
+/** Не зберігати попередній слот при перемиканні редактора — інакше після deleteDoc merge знову створює документ у Firestore. */
+const slotsToSkipPersistOnSwitch = new Set()
 
 function controlQuery(overrides) {
   const base = { ...route.query, ...overrides }
@@ -1718,10 +1762,15 @@ watch(
     if (oldTuple && !oldTuple[2]) {
       const [og, op] = oldTuple
       if (op && (og !== gid || op !== pid)) {
-        try {
-          await saveCharacter(og, op, snapshotCharacter(characterState))
-        } catch (e) {
-          console.warn('[control] save before switching editor slot', e)
+        const prevSlot = normalizePlayerSlotId(op)
+        if (slotsToSkipPersistOnSwitch.has(prevSlot)) {
+          slotsToSkipPersistOnSwitch.delete(prevSlot)
+        } else {
+          try {
+            await saveCharacter(og, op, snapshotCharacter(characterState))
+          } catch (e) {
+            console.warn('[control] save before switching editor slot', e)
+          }
         }
       }
     }
