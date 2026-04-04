@@ -221,6 +221,14 @@ function onBulkCheckboxChange(p, ev) {
   emit('toggle-bulk', { id: p.id, checked: ev.target.checked })
 }
 
+function onElimCardClick(p) {
+  if (!props.useHostPanel) return
+  emit('host-command', {
+    type: p.eliminated === true ? 'revive-player' : 'eliminate-player',
+    playerId: String(p.id),
+  })
+}
+
 const aliveSlotsForNom = computed(() => {
   const dead = new Set(props.players.filter((p) => p.eliminated === true).map((p) => String(p.id)))
   return props.playerSlots.filter((s) => !dead.has(String(s)))
@@ -325,6 +333,15 @@ const aliveSlotsForNom = computed(() => {
           <span class="st" :class="{ 'st--name': cardSubtitleIsName(p) }">{{ cardSubtitle(p) }}</span>
           <span v-if="cardActive(p)" class="card-ico" :title="t('roster.activeCardTitle')">🃏</span>
           </button>
+          <button
+            v-if="useHostPanel"
+            type="button"
+            class="pcard-elim-btn"
+            :class="{ 'pcard-elim-btn--revive': p.eliminated === true }"
+            @click.stop="onElimCardClick(p)"
+          >
+            {{ p.eliminated === true ? t('roster.reviveShort') : t('roster.eliminateShort') }}
+          </button>
         </div>
       </div>
 
@@ -345,17 +362,9 @@ const aliveSlotsForNom = computed(() => {
         <template v-if="selectedPlayer">
           <p class="act-panel__id">{{ selectedPlayerId }}</p>
 
-          <template v-if="selectedEliminated">
-            <p class="act-elim-note">{{ t('roster.eliminated') }}</p>
-            <button type="button" class="act-btn act-btn--revive" @click="cmd('revive-player')">
-              {{ t('roster.returnToGame') }}
-            </button>
-            <button type="button" class="act-btn act-btn--soft" @click="openEditorSelected">{{ t('roster.editor') }}</button>
-          </template>
+          <button type="button" class="act-btn act-btn--soft" @click="openEditorSelected">{{ t('roster.editor') }}</button>
 
-          <template v-else>
-            <button type="button" class="act-btn act-btn--soft" @click="openEditorSelected">{{ t('roster.editor') }}</button>
-
+          <template v-if="!selectedEliminated">
             <button v-if="!speakerOnSelected" type="button" class="act-btn" @click="cmd('speaker')">
               {{ t('roster.speaker') }}
             </button>
@@ -535,17 +544,55 @@ const aliveSlotsForNom = computed(() => {
 .roster-grid--host-panel .pcard-shell {
   min-width: min(100%, 9.75rem);
   border-radius: 12px;
-  overflow: hidden;
+  overflow: visible;
   isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
 }
 
 .roster-grid--host-panel .pcard {
-  height: 8.2rem;
-  min-height: 8.2rem;
-  max-height: 8.2rem;
+  height: 7.05rem;
+  min-height: 7.05rem;
+  max-height: 7.05rem;
   padding: 0.52rem 0.44rem 0.52rem;
   gap: 0.26rem;
   justify-content: flex-start;
+}
+
+.pcard-elim-btn {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0.26rem 0.35rem;
+  border-radius: 10px;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  font-size: 0.5rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  background: rgba(127, 29, 29, 0.65);
+  color: #fecaca;
+  line-height: 1.2;
+  transition:
+    transform 0.12s ease,
+    border-color 0.15s;
+}
+
+.pcard-elim-btn:hover {
+  transform: scale(1.02);
+  border-color: rgba(252, 165, 165, 0.65);
+}
+
+.pcard-elim-btn--revive {
+  border-color: rgba(74, 222, 128, 0.45);
+  background: rgba(22, 101, 52, 0.45);
+  color: #bbf7d0;
+}
+
+.pcard-elim-btn--revive:hover {
+  border-color: rgba(52, 211, 153, 0.65);
 }
 
 .pcard-host-top {
@@ -1018,27 +1065,6 @@ const aliveSlotsForNom = computed(() => {
 
 .act-btn--danger {
   border-color: rgba(248, 113, 113, 0.35);
-  color: #fecaca;
-}
-
-.act-btn--revive {
-  border-color: rgba(52, 211, 153, 0.45);
-  background: color-mix(in srgb, rgba(16, 185, 129, 0.22) 50%, var(--bg-card-soft));
-  color: #a7f3d0;
-  font-weight: 800;
-}
-
-.act-btn--revive:hover {
-  border-color: rgba(52, 211, 153, 0.65);
-  color: #ecfdf5;
-}
-
-.act-elim-note {
-  margin: 0 0 0.45rem;
-  font-size: 0.68rem;
-  font-weight: 900;
-  letter-spacing: 0.12em;
-  text-align: center;
   color: #fecaca;
 }
 

@@ -46,7 +46,14 @@ export function mergePlayerDataIntoUsedState(data, usedState) {
   if (tid) usedState.usedTemplateIds.add(tid)
 }
 
-export const ages = ['20', '22', '24', '26', '28', '30', '32', '35', '38', '41', '45']
+export const PLAYER_AGE_MIN = 18
+export const PLAYER_AGE_MAX = 100
+
+/** Випадковий вік гравця (roków), рядок для поля `age`. */
+export function randomPlayerAgeString() {
+  const n = Math.floor(Math.random() * (PLAYER_AGE_MAX - PLAYER_AGE_MIN + 1)) + PLAYER_AGE_MIN
+  return String(n)
+}
 
 export const genders = ['Чоловік', 'Жінка', 'Non-binary', 'Не вказано']
 
@@ -140,7 +147,7 @@ export function rollRandomIntoCharacter(target, options = {}) {
 
   target.gender = pick(genders)
   target.name = pickNameForGender(target.gender)
-  target.age = pick(ages)
+  target.age = randomPlayerAgeString()
   target.identityRevealed = false
   target.demographicsRevealed = false
   target.revealLedger = { round: 0, count: 0, maxForRound: 0 }
@@ -227,7 +234,7 @@ export function buildRandomPlayerDocument(scenarioId = 'classic_crash', usedStat
     identityRevealed: false,
     demographicsRevealed: false,
     name: pickNameForGender(gender),
-    age: pick(ages),
+    age: randomPlayerAgeString(),
     gender,
     activeCardRequest: false,
   }

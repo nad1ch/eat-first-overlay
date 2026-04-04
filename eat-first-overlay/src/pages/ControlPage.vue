@@ -6,7 +6,7 @@ import { ADMIN_KEY, HOST_PANEL_QUERY_KEY, HOST_PANEL_QUERY_VALUE } from '../conf
 import {
   rollFieldValue,
   rollRandomIntoCharacter,
-  ages,
+  randomPlayerAgeString,
   genders,
   pickNameForGender,
   createEmptyUsedState,
@@ -1251,6 +1251,19 @@ async function onRosterHostCommand({ type, playerId: pid }) {
           () => hostExecuteDeletePlayer(p),
         )
         break
+      case 'eliminate-player': {
+        const slot = normalizePlayerSlotId(p)
+        const pl = allPlayers.value.find((x) => normalizePlayerSlotId(String(x.id)) === slot)
+        if (!pl || pl.eliminated === true) break
+        const existing = await fetchCharacter(gameId.value, slot)
+        await saveCharacter(gameId.value, slot, {
+          ...(existing && typeof existing === 'object' ? existing : {}),
+          eliminated: true,
+        })
+        await setGameHandRaised(gameId.value, slot, false)
+        showToast(t('toast.playerEliminatedFromCard', { slot }))
+        break
+      }
       case 'revive-player': {
         const slot = normalizePlayerSlotId(p)
         const pl = allPlayers.value.find((x) => normalizePlayerSlotId(String(x.id)) === slot)
@@ -2021,7 +2034,7 @@ async function rerollIdentity() {
   const g = genders[Math.floor(Math.random() * genders.length)]
   characterState.gender = g
   characterState.name = pickNameForGender(g)
-  characterState.age = ages[Math.floor(Math.random() * ages.length)]
+  characterState.age = randomPlayerAgeString()
   characterState.identityRevealed = false
   characterState.demographicsRevealed = false
 }
@@ -2574,11 +2587,6 @@ const activeCardPanelKey = computed(
   () =>
     `${characterState.activeCard.used ? 'u' : 'a'}-${characterState.activeCardRequest ? 'r' : 'n'}-${String(characterState.activeCard.title ?? '').slice(0, 24)}`,
 )
-
-function toggleEliminated() {
-  if (!isAdmin.value) return
-  characterState.eliminated = !characterState.eliminated
-}
 
 function rerollActiveCardOnly() {
   if (!isAdmin.value) return
@@ -3284,16 +3292,6 @@ function rerollActiveCardOnly() {
         </Transition>
       </div>
 
-      <div v-if="isAdmin" class="elim-row">
-        <button
-          type="button"
-          class="btn-elim"
-          :class="{ on: characterState.eliminated }"
-          @click="toggleEliminated"
-        >
-          {{ characterState.eliminated ? 'Повернути в гру' : 'Вибув' }}
-        </button>
-      </div>
           </div>
         </div>
       </div>
@@ -5002,26 +5000,6 @@ html[data-theme='light'] .host-forget-btn:hover {
 .btn-request:disabled {
   opacity: 0.55;
   cursor: default;
-}
-
-.elim-row {
-  margin-top: 0.5rem;
-}
-
-.btn-elim {
-  padding: 0.45rem 1rem;
-  border-radius: 12px;
-  border: 1px solid var(--btn-elim-out-border);
-  background: var(--btn-elim-out-bg);
-  color: var(--btn-elim-out-text);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.btn-elim.on {
-  border-color: var(--btn-elim-on-border);
-  background: var(--btn-elim-on-bg);
-  color: var(--btn-elim-on-text);
 }
 
 .reveal-hint {
