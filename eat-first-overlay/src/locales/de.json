@@ -36,20 +36,24 @@
         "title": "Lobby — Schnellstart",
         "steps": [
           {
-            "title": "Was hier passiert",
-            "text": "Game-ID aus dem Stream eingeben. Das Slot-Raster sind die Plätze. Jeder Streamer bindet sein Overlay in OBS ein; das globale Raster ist nur Hilfe."
+            "title": "Game-ID",
+            "text": "ID aus dem Stream eingeben und OK — Slots und Raumdaten laden nach.",
+            "target": "join-game-bar"
           },
           {
-            "title": "Du bist Spieler",
-            "text": "Freien Slot wählen. Am Slot: „Overlay“ (OBS-URL) und „Mein Panel“ (Karten & Aktionen). Ohne Slot gibt es kein Panel."
+            "title": "Rolle",
+            "text": "Spieler wählen unten einen Slot; Host nutzt ein separates Pult (Shortcut hier). OBS-URL kommt vom eigenen Slot.",
+            "target": "join-roles"
           },
           {
-            "title": "Du bist Host",
-            "text": "Das Pult öffnet sich separat (Key oder Host-Modus aus der Lobby). Spieler kommen weiter über die Lobby; die Pult-URL brauchen sie nicht."
+            "title": "Slots",
+            "text": "„Mein Panel“ oder Slot beanspruchen, dann „Overlay“ kopiert die Browserquellen-URL für OBS.",
+            "target": "join-slots"
           },
           {
-            "title": "OBS",
-            "text": "Browserquelle mit der URL aus der Slot-Karte. Transparenten Hintergrund aktivieren. Größe und Ausschnitt an dein Layout anpassen."
+            "title": "OBS-Hinweise",
+            "text": "Kurz-Checkliste: transparenter Hintergrund, Szenengröße, Refresh — Details in diesem Block.",
+            "target": "join-obs"
           }
         ]
       },
@@ -57,20 +61,27 @@
         "title": "Host-Pult — Kurzüberblick",
         "steps": [
           {
-            "title": "Überblick",
-            "text": "Hier laufen Show-Phasen und der Raum live. Blöcke kannst du einklappen, damit es im Stream ruhiger wirkt."
+            "title": "Modus & Blöcke",
+            "text": "Oben: Pult-Modus, alles einklappen oder gespeicherten Key vergessen. Blöcke bei Bedarf aufklappen.",
+            "target": "control-host-strip"
           },
           {
-            "title": "Spieler & Slots",
-            "text": "Slot im Roster wählen — rechts erscheinen Aktionen: Karten, Ausscheiden, Helfer. Änderungen sieht man sofort auf den Overlays."
+            "title": "Live & Phasen",
+            "text": "Live-Raum: Show-Phase, Links, Timer. In der Abstimmung: Umfrage nach euren Regeln; Spieler voten im Panel.",
+            "target": "control-host-live",
+            "expandHost": "live"
           },
           {
-            "title": "Figuren & Karten",
-            "text": "Namen und Bild für den Spieler im Raum bearbeiten, speichern. Karten am Slot anlegen, wenn du den Gag fährst."
+            "title": "Slot-Roster",
+            "text": "Slot wählen — rechts Aktionen: Karte, Rauswurf, Noms, Masse. Änderungen sofort auf den Overlays.",
+            "target": "control-host-roster",
+            "expandHost": "players"
           },
           {
-            "title": "Abstimmung",
-            "text": "Ist die Abstimmungsphase aktiv, führst du Umfrage und Finale nach deinen Show-Regeln; Spieler voten in ihren Panels."
+            "title": "Generierung",
+            "text": "Szenario, Zufallsmerkmale, globale Rolls für alle — die „Tisch“-Tools.",
+            "target": "control-host-gen",
+            "expandHost": "gen"
           }
         ]
       },
@@ -78,16 +89,19 @@
         "title": "Spieler-Panel — Kurzüberblick",
         "steps": [
           {
-            "title": "Wofür das Panel ist",
-            "text": "Du steuerst Karten und On-Air-Status. Phasen setzt der Host — manche Aktionen sind gesperrt, bis die Phase es erlaubt."
+            "title": "Hand & Ready",
+            "text": "Schnellaktionen: Hand hoch für den Host und Bereitschaft. Abhängig von Phase und Regeln.",
+            "target": "control-player-actions"
           },
           {
-            "title": "Karten & Sendung",
-            "text": "Geben und Aufdecken aktualisiert dein OBS-Overlay — Zuschauer sehen, was du im Panel tust. Bei Abstimmung: Hinweise im Raum befolgen."
+            "title": "Profil & Traits",
+            "text": "Felder für Zuschauer im Overlay ein- oder ausblenden. Phasen setzt der Host.",
+            "target": "control-player-card"
           },
           {
-            "title": "Nochmal anzeigen",
-            "text": "„Kurzanleitung“ im Header öffnet diese Tour jederzeit wieder."
+            "title": "Aktive Karte",
+            "text": "Szenario-Karte: vom Host anfordern oder warten. Tour wieder über „Kurzanleitung“ in der Kopfzeile.",
+            "target": "control-player-active-card"
           }
         ]
       },
@@ -95,12 +109,14 @@
         "title": "Overlay für OBS",
         "steps": [
           {
-            "title": "Wozu diese Seite",
-            "text": "Beim Spiel nicht anklicken — nur als Browserquelle über die Szene legen (OBS o. ä.)."
+            "title": "Zuschauer-Szene",
+            "text": "Beim Spiel nicht klicken — als Browserquelle über’s Video. Alles unten sehen die Zuschauer.",
+            "target": "overlay-body"
           },
           {
-            "title": "Einbinden",
-            "text": "Browserquelle anlegen, dieselbe URL wie „Overlay“ in der Lobby einfügen. Transparenten Hintergrund an; Größe/Position für die Kamera."
+            "title": "Karte einrahmen",
+            "text": "Quelle auf Webcam skalieren; transparenten Hintergrund in OBS. Gleiche URL wie „Overlay“ in der Lobby.",
+            "target": "overlay-content"
           }
         ]
       }
