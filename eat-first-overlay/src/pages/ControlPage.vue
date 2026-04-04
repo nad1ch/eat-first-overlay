@@ -3080,11 +3080,10 @@ function rerollActiveCardOnly() {
         <span class="panel-hydrate-label">{{ t('loader.panelCard') }}</span>
       </div>
       <div class="editor-panel__head">
-        <h2 class="panel-kicker">{{ isAdmin ? t('control.editorTitle', { id: editorPlayerId }) : t('control.yourChar') }}</h2>
         <button
           v-if="isAdmin"
           type="button"
-          class="host-block-fold host-block-fold--panel"
+          class="host-block-fold host-block-fold--editor"
           :aria-expanded="hostBlocksOpen.editor"
           :aria-label="hostBlocksOpen.editor ? t('control.hostSectionCollapse') : t('control.hostSectionExpand')"
           @click="hostBlocksOpen.editor = !hostBlocksOpen.editor"
@@ -3094,7 +3093,9 @@ function rerollActiveCardOnly() {
             :class="{ 'host-block-fold__chev--open': hostBlocksOpen.editor }"
             aria-hidden="true"
           >▶</span>
+          <h2 class="panel-kicker host-block-fold__label">{{ t('control.editorTitle', { id: editorPlayerId }) }}</h2>
         </button>
+        <h2 v-else class="panel-kicker">{{ t('control.yourChar') }}</h2>
       </div>
 
       <div
@@ -3415,9 +3416,9 @@ function rerollActiveCardOnly() {
   align-items: center;
   gap: 0.45rem;
   width: 100%;
-  margin: 0 0 0.5rem;
-  padding: 0.5rem 0.35rem;
-  min-height: 2.65rem;
+  margin: 0;
+  padding: 0.38rem 0.35rem;
+  min-height: 0;
   border: none;
   background: transparent;
   cursor: pointer;
@@ -3450,6 +3451,8 @@ function rerollActiveCardOnly() {
   transform: rotate(0deg);
   transform-origin: center center;
   transition: transform 0.45s cubic-bezier(0.32, 0.72, 0, 1);
+  /* вирівнювання гліфа ▶ відносно шрифтового центру */
+  margin-top: 0.06em;
 }
 
 .host-block-fold__chev--open {
@@ -3477,11 +3480,14 @@ function rerollActiveCardOnly() {
 .host-fold-anim {
   display: grid;
   grid-template-rows: 0fr;
+  margin-top: 0;
   transition: grid-template-rows 0.58s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 .host-fold-anim--open {
   grid-template-rows: 1fr;
+  /* лише для відкритого: відступ від смуги згортання; у закритому — margin-top: 0 на .host-fold-anim */
+  margin-top: 0.5rem;
 }
 
 .host-fold-anim__inner {
@@ -3516,25 +3522,26 @@ function rerollActiveCardOnly() {
   }
 }
 
-.host-block-fold--panel {
+/* як інші згортання: уся смуга клікабельна */
+.host-block-fold--editor {
+  color: var(--editor-trait-label, var(--text-muted-soft));
+}
+
+.host-block-fold--editor:hover {
+  color: var(--text-heading);
+}
+
+.editor-panel--calm .host-block-fold--editor .panel-kicker {
   margin: 0;
-  padding: 0.28rem 0.4rem;
-  width: auto;
-  flex-shrink: 0;
-  min-height: 0;
-  align-self: center;
+  color: inherit;
 }
 
 .editor-panel__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0;
 }
 
-.editor-panel__head .panel-kicker {
-  margin-bottom: 0;
+.editor-panel__head > .panel-kicker {
+  margin: 0;
 }
 
 .editor-panel__collapsible {
@@ -3635,6 +3642,11 @@ function rerollActiveCardOnly() {
   text-transform: uppercase;
   color: var(--text-muted-soft);
   font-family: 'Orbitron', sans-serif;
+}
+
+/* .zone-kicker нижче перебивав margin: 0 у --fold (лішнє місце знизу в смузі згортання) */
+.zone-kicker.zone-kicker--fold {
+  margin: 0;
 }
 
 .admin-zone--players > .zone-kicker {
