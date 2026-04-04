@@ -790,7 +790,8 @@ const aliveSlotsForNom = computed(() => {
   pointer-events: none;
 }
 
-.pcard.elim > * {
+/* Не робимо relative абсолютні кутки / бейдж — інакше «ВИБУВ» потрапляє в потік і зсуває .num */
+.pcard.elim > *:not(.elim-badge):not(.card-ico):not(.pcard-hand-corner):not(.pcard-ready-corner) {
   position: relative;
   z-index: 1;
 }
