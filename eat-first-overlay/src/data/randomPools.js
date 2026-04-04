@@ -49,7 +49,7 @@ export function mergePlayerDataIntoUsedState(data, usedState) {
 export const PLAYER_AGE_MIN = 18
 export const PLAYER_AGE_MAX = 100
 
-/** Випадковий вік гравця (roków), рядок для поля `age`. */
+/** Випадковий вік гравця (ціле 18–100 років), рядок для поля `age`. */
 export function randomPlayerAgeString() {
   const n = Math.floor(Math.random() * (PLAYER_AGE_MAX - PLAYER_AGE_MIN + 1)) + PLAYER_AGE_MIN
   return String(n)
