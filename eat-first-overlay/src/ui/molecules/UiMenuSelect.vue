@@ -76,7 +76,7 @@ onUnmounted(() => {
     </button>
     <Transition name="ui-menu-select-pop">
       <ul
-        v-show="open"
+        v-if="open"
         class="ui-menu-select__list"
         role="listbox"
         :aria-label="ariaLabel"
@@ -103,6 +103,10 @@ onUnmounted(() => {
   display: inline-block;
   min-width: 0;
   vertical-align: middle;
+}
+
+.ui-menu-select--open {
+  z-index: var(--z-dropdown, 11950);
 }
 
 .ui-menu-select:not(.ui-menu-select--header) {
@@ -179,7 +183,7 @@ onUnmounted(() => {
 
 .ui-menu-select__list {
   position: absolute;
-  z-index: 300;
+  z-index: 2;
   top: calc(100% + 4px);
   left: 0;
   right: 0;
@@ -189,8 +193,11 @@ onUnmounted(() => {
   list-style: none;
   border-radius: 12px;
   border: 1px solid var(--border-strong);
-  background: var(--bg-card-solid);
-  box-shadow: 0 8px 28px var(--shadow-deep), 0 0 0 1px var(--border-subtle);
+  background: var(--bg-dropdown, var(--bg-card-solid));
+  box-shadow:
+    0 10px 32px var(--shadow-deep),
+    0 0 0 1px var(--border-subtle),
+    0 1px 0 rgba(255, 255, 255, 0.04);
   max-height: min(16rem, 50vh);
   overflow-y: auto;
 }

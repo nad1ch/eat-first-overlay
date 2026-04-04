@@ -207,9 +207,11 @@ export async function resetGameRoomControls(gameId) {
       nominatedPlayer: deleteField(),
       nominatedBy: deleteField(),
       nominations: deleteField(),
+      nominationOneTargetPerRound: deleteField(),
       hands: {},
       playersReady: {},
       voting: deleteField(),
+      voteTargetsThisRound: deleteField(),
       key: ADMIN_KEY,
     },
     { merge: true },
@@ -284,6 +286,22 @@ export function nominationsFromRoom(gr) {
   return []
 }
 
+/**
+ * Унікальні номіновані слоти в порядку першої появи в масиві номінацій (хронологія виставлення).
+ */
+export function nomineeTargetsInNominationOrder(nominations) {
+  const list = Array.isArray(nominations) ? normalizeNominations(nominations) : []
+  const seen = new Set()
+  const out = []
+  for (const x of list) {
+    const t = normalizePlayerSlotId(x.target)
+    if (!t || seen.has(t)) continue
+    seen.add(t)
+    out.push(t)
+  }
+  return out
+}
+
 /** Записати номінації; прибирає legacy-поля. */
 export async function setGameNominations(gameId, list) {
   const next = normalizeNominations(list)
@@ -318,7 +336,7 @@ const MAX_ROUND = 8
 
 export async function setRoomRound(gameId, nextRound, clearVotesToo = true) {
   const r = Math.min(MAX_ROUND, Math.max(MIN_ROUND, Math.floor(Number(nextRound) || 1)))
-  await saveGameRoom(gameId, { round: r })
+  await saveGameRoom(gameId, { round: r, voteTargetsThisRound: [] })
   if (clearVotesToo) await clearAllVotes(gameId)
 }
 
@@ -326,12 +344,12 @@ export async function nextRoomRound(gameId) {
   const snap = await getDoc(gameDocRef(gameId))
   const cur = Math.floor(Number(snap.exists() ? snap.data().round : 1) || 1)
   const next = Math.min(MAX_ROUND, cur + 1)
-  await saveGameRoom(gameId, { round: next })
+  await saveGameRoom(gameId, { round: next, voteTargetsThisRound: [] })
   await clearAllVotes(gameId)
 }
 
 export async function resetRoomRoundCounter(gameId) {
-  await saveGameRoom(gameId, { round: 1 })
+  await saveGameRoom(gameId, { round: 1, voteTargetsThisRound: [] })
   await clearAllVotes(gameId)
 }
 
@@ -363,14 +381,51 @@ export async function reviveAllEliminatedPlayers(gameId) {
   return n
 }
 
-/** Голосування на кімнаті: { active, targetPlayer }. */
-export async function setRoomVoting(gameId, active, targetPlayer) {
+/**
+ * Голосування на кімнаті: { active, targetPlayer, ballotQueue?, ballotIndex?, ballotRunId?,
+ *   slotDurationSec?, voteSlotStartedAt? }.
+ * @param {{ slotDurationSec?: number, clearBallot?: boolean }} [options]
+ */
+export async function setRoomVoting(gameId, active, targetPlayer, options = {}) {
   const tp = String(targetPlayer ?? '').trim()
+  const snap = await getDoc(gameDocRef(gameId))
+  const data = snap.exists() ? snap.data() : {}
+  const curV = data.voting && typeof data.voting === 'object' ? { ...data.voting } : {}
+
+  if (!active && !tp) {
+    const cleared = {
+      ...curV,
+      active: false,
+      targetPlayer: '',
+      voteSlotStartedAt: deleteField(),
+    }
+    if (options.clearBallot) {
+      cleared.ballotQueue = deleteField()
+      cleared.ballotIndex = deleteField()
+      cleared.ballotRunId = deleteField()
+      cleared.ballotRound = deleteField()
+      cleared.ballotSource = deleteField()
+    }
+    await saveGameRoom(gameId, { voting: cleared })
+    return
+  }
+
+  const next = { ...curV, active: Boolean(active), targetPlayer: tp }
+  if (active && tp) {
+    const sec = Math.max(
+      1,
+      Math.floor(
+        Number(options.slotDurationSec) || Number(curV.slotDurationSec) || 5,
+      ),
+    )
+    next.slotDurationSec = sec
+    next.voteSlotStartedAt = Timestamp.now()
+  } else {
+    next.voteSlotStartedAt = deleteField()
+  }
+
   await saveGameRoom(gameId, {
-    voting: {
-      active: Boolean(active),
-      targetPlayer: tp,
-    },
+    voting: next,
   })
 }
 
@@ -530,6 +585,30 @@ export async function seedMissingStandardPlayers(gameId, scenarioId) {
     mergePlayerDataIntoUsedState(d.data(), usedState)
   }
   for (const slot of STANDARD_PLAYER_SLOTS) {
+    if (have.has(slot)) continue
+    const payload = buildRandomPlayerDocument(sid, usedState)
+    await setDoc(playerDocRef(gameId, slot), { ...payload, key: ADMIN_KEY }, { merge: true })
+  }
+}
+
+/**
+ * Створює перших N слотів (p1…pN) з випадковими персонажами; існуючі слоти в діапазоні не перезаписує.
+ */
+export async function createFirstNRandomPlayers(gameId, scenarioId, rawCount) {
+  const n = Math.max(
+    1,
+    Math.min(STANDARD_PLAYER_SLOTS.length, Math.floor(Number(rawCount) || 1)),
+  )
+  const colRef = collection(db, 'games', gameId, 'players')
+  const snapshot = await getDocs(colRef)
+  const have = new Set(snapshot.docs.map((d) => normalizePlayerSlotId(d.id)))
+  const sid = String(scenarioId || 'classic_crash')
+  const usedState = createEmptyUsedState()
+  for (const d of snapshot.docs) {
+    mergePlayerDataIntoUsedState(d.data(), usedState)
+  }
+  const slots = STANDARD_PLAYER_SLOTS.slice(0, n)
+  for (const slot of slots) {
     if (have.has(slot)) continue
     const payload = buildRandomPlayerDocument(sid, usedState)
     await setDoc(playerDocRef(gameId, slot), { ...payload, key: ADMIN_KEY }, { merge: true })

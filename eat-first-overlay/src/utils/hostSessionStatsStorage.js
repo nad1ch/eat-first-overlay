@@ -40,11 +40,15 @@ function normalizeStats(o) {
           votes.push({ voter, choice })
         }
       }
+      const slotCount = Math.max(1, Math.floor(Number(s.slotCount) || 1))
       voteSessions.push({
         id,
         endedAt: Math.floor(Number(s.endedAt) || 0) || Date.now(),
         round: Math.min(8, Math.max(1, Math.floor(Number(s.round) || 1))),
         target: String(s.target ?? '').trim(),
+        ballotRunId: typeof s.ballotRunId === 'string' ? s.ballotRunId : '',
+        syntheticEmptyRun: s.syntheticEmptyRun === true,
+        slotCount,
         votes,
       })
     }

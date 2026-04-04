@@ -35,5 +35,10 @@ export function normalizeGameRoomPayload(raw) {
   if (Array.isArray(raw.nominations)) {
     out.nominations = raw.nominations.map((n) => (n && typeof n === 'object' ? { ...n } : n))
   }
+  if (Array.isArray(raw.voteTargetsThisRound)) {
+    out.voteTargetsThisRound = raw.voteTargetsThisRound
+      .map((id) => normalizePlayerSlotId(String(id ?? '')))
+      .filter(Boolean)
+  }
   return out
 }

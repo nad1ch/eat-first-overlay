@@ -65,6 +65,9 @@ watch(
       >
         <h2 :id="titleId" class="confirm-dialog__title">{{ title }}</h2>
         <p :id="descId" class="confirm-dialog__message">{{ message }}</p>
+        <div v-if="$slots.extra" class="confirm-dialog__extra">
+          <slot name="extra" />
+        </div>
         <div class="confirm-dialog__actions">
           <button type="button" class="confirm-dialog__btn confirm-dialog__btn--ghost" @click="close">
             {{ cancelLabel }}
@@ -126,6 +129,10 @@ watch(
   font-size: 0.8rem;
   line-height: 1.45;
   color: var(--text-secondary, rgba(255, 255, 255, 0.75));
+}
+
+.confirm-dialog__extra {
+  margin: 0 0 1rem;
 }
 
 .confirm-dialog__actions {
