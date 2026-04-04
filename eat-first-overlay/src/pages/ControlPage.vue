@@ -40,9 +40,11 @@ import {
   setGamePhase,
   regenerateAllPlayersRandom,
   regenerateAllPlayersActiveCards,
+  createFirstNRandomPlayers,
   regeneratePlayerActiveCard,
   setGameNominations,
   nominationsFromRoom,
+  nomineeTargetsInNominationOrder,
   setRoomVoting,
   setGameHandRaised,
   subscribeToVotes,
@@ -85,6 +87,7 @@ import {
   saveHostSessionStats,
   clearHostSessionStats,
 } from '../utils/hostSessionStatsStorage.js'
+import { deleteField } from 'firebase/firestore'
 import AppPageLoader from '../ui/molecules/AppPageLoader.vue'
 import ConfirmDialog from '../ui/molecules/ConfirmDialog.vue'
 import UiMenuSelect from '../ui/molecules/UiMenuSelect.vue'
@@ -464,10 +467,189 @@ const nominationsList = computed(() => nominationsFromRoom(gameRoom.value))
 
 const nominatedPlayerActive = computed(() => nominationsList.value.length > 0)
 
+/** Чекбокси ростера для масового видалення */
+const bulkSelectedSlots = ref([])
+
+function rosterSlotNum(id) {
+  const s = String(id ?? '')
+  const m = s.match(/^p(\d+)$/i)
+  if (m) return m[1]
+  return s.replace(/^p/i, '') || s
+}
+
+const rosterOrderHint = computed(() => {
+  const parts = []
+  const done = gameRoom.value?.voteTargetsThisRound
+  if (Array.isArray(done) && done.length) {
+    parts.push(
+      t('roster.voteTargetsDoneThisRound', {
+        list: done.map((id) => rosterSlotNum(id)).join(', '),
+      }),
+    )
+  }
+  const q = gameRoom.value?.voting?.ballotQueue
+  if (Array.isArray(q) && q.length) {
+    parts.push(
+      t('roster.ballotQueueLive', {
+        order: q.map((id) => rosterSlotNum(id)).join(' → '),
+      }),
+    )
+  }
+  const nom = nomineeTargetsInNominationOrder(nominationsList.value)
+  if (nom.length) {
+    const alive = new Set(
+      allPlayers.value.filter((p) => p.eliminated !== true).map((p) => normalizePlayerSlotId(p.id)),
+    )
+    const nums = nom.filter((id) => alive.has(normalizePlayerSlotId(id))).map((id) => rosterSlotNum(id))
+    if (nums.length) parts.push(t('roster.nominationOrderHint', { order: nums.join(' → ') }))
+  }
+  if (
+    Array.isArray(q) &&
+    q.length &&
+    String(gameRoom.value?.voting?.ballotSource || '') === 'manual' &&
+    nomineeTargetsInNominationOrder(nominationsList.value).length
+  ) {
+    parts.push(t('roster.manualBallotLastNomHint'))
+  }
+  return parts.filter(Boolean).join(' · ')
+})
+
+const votesLiveRoundVoterIds = computed(() => {
+  const rr = roomRoundLive.value
+  return votes.value.filter((v) => Number(v.round) === rr).map((v) => normalizePlayerSlotId(v.id))
+})
+
+const isLastNominationBallotSlot = computed(() => {
+  const v = gameRoom.value?.voting
+  if (!v?.active || !Array.isArray(v.ballotQueue) || !v.ballotQueue.length) return false
+  const alive = new Set(
+    allPlayers.value.filter((p) => p.eliminated !== true).map((p) => normalizePlayerSlotId(p.id)),
+  )
+  const nom = nomineeTargetsInNominationOrder(nominationsList.value).filter((id) =>
+    alive.has(normalizePlayerSlotId(id)),
+  )
+  const L = nom.length ? normalizePlayerSlotId(nom[nom.length - 1]) : ''
+  if (!L) return false
+  const q = v.ballotQueue.map(normalizePlayerSlotId)
+  if (q[q.length - 1] !== L) return false
+  const idx = Math.max(0, Math.min(q.length - 1, Number(v.ballotIndex) || 0))
+  const tp = normalizePlayerSlotId(String(v.targetPlayer || '').trim())
+  return idx === q.length - 1 && tp === L
+})
+
+function onToggleBulkSelection({ id, checked }) {
+  if (!isAdmin.value) return
+  const p = normalizePlayerSlotId(id)
+  const s = new Set(bulkSelectedSlots.value.map((x) => normalizePlayerSlotId(x)))
+  if (checked) s.add(p)
+  else s.delete(p)
+  bulkSelectedSlots.value = [...s].sort((a, b) =>
+    a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }),
+  )
+}
+
+function clearBulkSelection() {
+  bulkSelectedSlots.value = []
+}
+
+function askBulkDeletePlayers() {
+  const ids = [...bulkSelectedSlots.value]
+  if (!ids.length || !isAdmin.value) return
+  openHostGenConfirm(
+    t('control.bulkDeleteTitle'),
+    t('control.bulkDeleteConfirm', { slots: ids.join(', ') }),
+    () => hostExecuteBulkDeletePlayers(ids),
+  )
+}
+
+async function hostExecuteBulkDeletePlayers(idsRaw) {
+  if (!isAdmin.value) return
+  const ids = [...new Set(idsRaw.map((x) => normalizePlayerSlotId(x)).filter(Boolean))]
+  if (!ids.length) return
+  clearTimeout(saveTimer)
+  saveTimer = null
+  const idSet = new Set(ids)
+  try {
+    loadError.value = null
+    pendingPlayerDeletes.value = [...new Set([...pendingPlayerDeletes.value, ...ids])]
+    applyPlayerListFromFirestore(lastPlayersFirestoreList.value)
+    for (const p of ids) {
+      await removePlayerFromGameRoomState(gameId.value, p)
+      await deletePlayerDocument(gameId.value, p)
+      const editorWasOnDeletedSlot =
+        normalizePlayerSlotId(editorPlayerId.value) === p ||
+        String(selectedDeskPlayerId.value || '').trim() === p
+      if (editorWasOnDeletedSlot) slotsToSkipPersistOnSwitch.add(p)
+      antiGhostPlayerUntil.value = {
+        ...antiGhostPlayerUntil.value,
+        [p]: Date.now() + ANTI_GHOST_PLAYER_MS,
+      }
+      applyPlayerListFromFirestore(lastPlayersFirestoreList.value)
+    }
+    for (const p of ids) {
+      if (String(selectedDeskPlayerId.value) === p) selectedDeskPlayerId.value = ''
+    }
+    const curPid = normalizePlayerSlotId(playerId.value)
+    if (idSet.has(curPid)) {
+      const fallback = PLAYER_SLOTS.find((slot) => !idSet.has(slot)) || 'p1'
+      navigateQuery({ player: fallback })
+    }
+    bulkSelectedSlots.value = []
+    showToast(t('toast.playersBulkDeleted', { n: ids.length }))
+  } catch (e) {
+    pendingPlayerDeletes.value = pendingPlayerDeletes.value.filter((x) => !idSet.has(x))
+    applyPlayerListFromFirestore(lastPlayersFirestoreList.value)
+    const msg = e instanceof Error ? e.message : String(e)
+    loadError.value = msg
+    showToast(msg)
+  }
+}
+
+async function hostApplyBallotFromNominations() {
+  if (!isAdmin.value) return
+  const alive = new Set(
+    allPlayers.value.filter((p) => p.eliminated !== true).map((p) => normalizePlayerSlotId(p.id)),
+  )
+  const order = nomineeTargetsInNominationOrder(nominationsList.value).filter((t) =>
+    alive.has(normalizePlayerSlotId(t)),
+  )
+  if (!order.length) {
+    showToast(t('toast.noNomineesForBallot'))
+    return
+  }
+  try {
+    loadError.value = null
+    const curV =
+      gameRoom.value?.voting && typeof gameRoom.value.voting === 'object'
+        ? { ...gameRoom.value.voting }
+        : {}
+    const ballotRunId = `run-${Date.now()}`
+    const slotDur = Math.max(1, Math.floor(Number(curV.slotDurationSec) || 5))
+    await saveGameRoom(gameId.value, {
+      voting: {
+        ...curV,
+        active: false,
+        targetPlayer: order[0],
+        ballotQueue: order,
+        ballotIndex: 0,
+        ballotRunId,
+        ballotRound: roomRoundLive.value,
+        ballotSource: 'nominations',
+        slotDurationSec: slotDur,
+        voteSlotStartedAt: deleteField(),
+      },
+    })
+    showToast(t('toast.ballotOrderSet', { count: order.length }))
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
 const selectedDeskPlayerId = ref('')
 
 watch(gameId, () => {
   selectedDeskPlayerId.value = ''
+  bulkSelectedSlots.value = []
 })
 
 /** Після зміни гри / URL слоту підтягуємо вибір ростера (без повного remount сторінки). */
@@ -489,6 +671,13 @@ const editorPlayerId = computed(() => {
   const sel = String(selectedDeskPlayerId.value || '').trim()
   return sel ? normalizePlayerSlotId(sel) : playerId.value
 })
+
+/** Є документ у Firestore для обраного слота (кубик і автосейв мають сенс лише тоді). */
+const editorPlayerInRoster = computed(() =>
+  allPlayers.value.some(
+    (p) => normalizePlayerSlotId(p.id) === normalizePlayerSlotId(editorPlayerId.value),
+  ),
+)
 
 const raisedHandsCount = computed(() => {
   const h = gameRoom.value?.hands || {}
@@ -974,14 +1163,22 @@ function revealTrait(key, open) {
 
 async function hostToggleNomination({ target, by }) {
   if (!isAdmin.value) return
-  const t = String(target ?? '').trim()
-  const b = String(by ?? '').trim()
-  if (!t || !b) return
+  const targetSlot = String(target ?? '').trim()
+  const bySlot = String(by ?? '').trim()
+  if (!targetSlot || !bySlot) return
   try {
     loadError.value = null
-    const cur = nominationsFromRoom(gameRoom.value)
-    const exists = cur.some((x) => x.target === t && x.by === b)
-    const next = exists ? cur.filter((x) => !(x.target === t && x.by === b)) : [...cur, { target: t, by: b }]
+    const onePer = Boolean(gameRoom.value?.nominationOneTargetPerRound)
+    let cur = nominationsFromRoom(gameRoom.value)
+    const exists = cur.some((x) => x.target === targetSlot && x.by === bySlot)
+    let next
+    if (exists) {
+      next = cur.filter((x) => !(x.target === targetSlot && x.by === bySlot))
+    } else if (onePer) {
+      next = [...cur.filter((x) => x.by !== bySlot), { target: targetSlot, by: bySlot }]
+    } else {
+      next = [...cur, { target: targetSlot, by: bySlot }]
+    }
     await setGameNominations(gameId.value, next)
     showToast(exists ? t('toast.nomRemoved') : t('toast.nomAdded'))
   } catch (e) {
@@ -1010,8 +1207,62 @@ async function onRosterHostCommand({ type, playerId: pid }) {
         break
       }
       case 'vote-target': {
-        const active = Boolean(gameRoom.value?.voting?.active)
-        await setRoomVoting(gameId.value, active, p)
+        const pid = normalizePlayerSlotId(p)
+        const alive = new Set(
+          allPlayers.value
+            .filter((pl) => pl.eliminated !== true)
+            .map((pl) => normalizePlayerSlotId(pl.id)),
+        )
+        if (!alive.has(pid)) break
+        const rr = roomRoundLive.value
+        const curV =
+          gameRoom.value?.voting && typeof gameRoom.value.voting === 'object'
+            ? { ...gameRoom.value.voting }
+            : {}
+        const active = Boolean(curV.active)
+        const noms = nomineeTargetsInNominationOrder(nominationsList.value).filter((id) =>
+          alive.has(normalizePlayerSlotId(id)),
+        )
+        const nomTail = noms.length ? normalizePlayerSlotId(noms[noms.length - 1]) : ''
+        let runId = String(curV.ballotRunId || '').trim()
+        const prevRound = Number(curV.ballotRound) || 0
+        if (!runId || prevRound !== rr) {
+          runId = `run-${Date.now()}`
+        }
+        let q = Array.isArray(curV.ballotQueue)
+          ? curV.ballotQueue.map(normalizePlayerSlotId).filter(Boolean)
+          : []
+        if (nomTail && q.length && q[q.length - 1] === nomTail) {
+          q = q.slice(0, -1)
+        }
+        if (!q.includes(pid)) q.push(pid)
+        const seen = new Set()
+        q = q.filter((id) => {
+          if (seen.has(id)) return false
+          seen.add(id)
+          return true
+        })
+        if (nomTail) {
+          q = q.filter((id) => id !== nomTail)
+          q.push(nomTail)
+        }
+        const ballotIndex = Math.min(
+          Math.max(0, Number(curV.ballotIndex) || 0),
+          Math.max(0, q.length - 1),
+        )
+        const targetPlayer = q[ballotIndex] || q[0] || pid
+        await saveGameRoom(gameId.value, {
+          voting: {
+            ...curV,
+            active,
+            targetPlayer,
+            ballotQueue: q,
+            ballotIndex: q.length ? ballotIndex : 0,
+            ballotRunId: runId,
+            ballotRound: rr,
+            ballotSource: 'manual',
+          },
+        })
         showToast(t('toast.voteTargetSet'))
         break
       }
@@ -1029,6 +1280,14 @@ async function onRosterHostCommand({ type, playerId: pid }) {
           () => hostExecuteDeletePlayer(p),
         )
         break
+      case 'revive-player': {
+        const slot = normalizePlayerSlotId(p)
+        const pl = allPlayers.value.find((x) => normalizePlayerSlotId(String(x.id)) === slot)
+        if (!pl || pl.eliminated !== true) break
+        await saveCharacter(gameId.value, slot, { eliminated: false })
+        showToast(t('toast.playerRevived', { slot }))
+        break
+      }
       default:
         break
     }
@@ -1049,11 +1308,19 @@ async function hostExecuteDeletePlayer(pid) {
   pendingPlayerDeletes.value = [...new Set([...pendingPlayerDeletes.value, p])]
   applyPlayerListFromFirestore(lastPlayersFirestoreList.value)
   try {
+    clearTimeout(saveTimer)
+    saveTimer = null
     loadError.value = null
     debugDelete('hostExecuteDeletePlayer:await removePlayerFromGameRoomState')
     await removePlayerFromGameRoomState(gameId.value, p)
     debugDelete('hostExecuteDeletePlayer:await deletePlayerDocument')
     await deletePlayerDocument(gameId.value, p)
+    const editorWasOnDeletedSlot =
+      normalizePlayerSlotId(editorPlayerId.value) === p ||
+      String(selectedDeskPlayerId.value || '').trim() === p
+    if (editorWasOnDeletedSlot) {
+      slotsToSkipPersistOnSwitch.add(p)
+    }
     antiGhostPlayerUntil.value = {
       ...antiGhostPlayerUntil.value,
       [p]: Date.now() + ANTI_GHOST_PLAYER_MS,
@@ -1100,7 +1367,7 @@ async function hostResetPlayerRoles(pid) {
       await setGameNominations(gameId.value, next)
     }
     if (String(gr?.voting?.targetPlayer ?? '').trim() === p) {
-      await setRoomVoting(gameId.value, false, '')
+      await setRoomVoting(gameId.value, false, '', { clearBallot: true })
     }
     if (String(gr?.currentSpeaker ?? '').trim() === p) {
       await clearSpeakingTimer(gameId.value)
@@ -1116,14 +1383,31 @@ async function hostResetPlayerRoles(pid) {
 
 async function hostVotingStart() {
   if (!isAdmin.value) return
-  const tp = String(gameRoom.value?.voting?.targetPlayer ?? '').trim()
+  let v = gameRoom.value?.voting && typeof gameRoom.value.voting === 'object' ? { ...gameRoom.value.voting } : {}
+  const q = v.ballotQueue
+  let tp = String(v.targetPlayer ?? '').trim()
+  if (Array.isArray(q) && q.length > 0) {
+    const idx = Math.max(0, Math.min(q.length - 1, Number(v.ballotIndex) || 0))
+    const expected = normalizePlayerSlotId(q[idx])
+    if (tp !== expected) {
+      tp = expected
+      v = { ...v, targetPlayer: tp, ballotIndex: idx, ballotQueue: q }
+      try {
+        await saveGameRoom(gameId.value, { voting: v })
+      } catch (e) {
+        loadError.value = e instanceof Error ? e.message : String(e)
+        return
+      }
+    }
+  }
   if (!tp) {
     showToast(t('toast.pickVoteTarget'))
     return
   }
   try {
     loadError.value = null
-    await setRoomVoting(gameId.value, true, tp)
+    const slotSec = Math.max(1, Math.floor(Number(v.slotDurationSec || gameRoom.value?.voting?.slotDurationSec) || 5))
+    await setRoomVoting(gameId.value, true, tp, { slotDurationSec: slotSec })
     showToast(t('toast.votingOpened'))
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
@@ -1193,6 +1477,28 @@ const hostHandRaiseRows = computed(() => {
     .map((id) => ({ id, n: Math.max(0, Math.floor(Number(hr[id]) || 0)) }))
 })
 
+const elimSuggestHandLines = computed(() => {
+  const slot = normalizePlayerSlotId(String(elimSuggestSlot.value || '').trim())
+  if (!slot) return null
+  const hr = hostSessionStats.value.handRaises || {}
+  const alive = allPlayers.value.filter((p) => p.eliminated !== true)
+  let best = []
+  let max = -1
+  const ids = alive.map((p) => normalizePlayerSlotId(p.id))
+  for (const id of ids) {
+    const n = Math.floor(Number(hr[id]) || 0)
+    if (n > max) {
+      max = n
+      best = [id]
+    } else if (n === max && n > 0) {
+      best.push(id)
+    }
+  }
+  if (max <= 0) return null
+  if (best.length === 1 && best[0] === slot) return { key: 'agree' }
+  return { key: 'top', list: best.join(', ') }
+})
+
 function hostSessionVoteTally(sess) {
   const votes = sess?.votes || []
   let forC = 0
@@ -1217,35 +1523,347 @@ function hostClearSessionStatsOnly() {
   showToast(t('toast.sessionStatsCleared'))
 }
 
+function sessionVoteForCount(e) {
+  let forN = 0
+  for (const v of e.votes || []) {
+    if (v.choice !== 'against') forN += 1
+  }
+  return forN
+}
+
+function votesPayloadFingerprint(payload) {
+  if (!Array.isArray(payload)) return ''
+  return [...payload]
+    .map((v) => `${normalizePlayerSlotId(v.voter)}:${v.choice === 'against' ? 'a' : 'f'}`)
+    .sort()
+    .join('|')
+}
+
+function aggregateForVotesByTarget(entries) {
+  const m = {}
+  for (const e of entries) {
+    const tid = normalizePlayerSlotId(e.target)
+    if (!tid) continue
+    const mult = Math.max(1, Math.floor(Number(e.slotCount) || 1))
+    const forN = sessionVoteForCount(e)
+    m[tid] = (m[tid] || 0) + forN * mult
+  }
+  return m
+}
+
+/** Підсумок 👍 по серії слотів: однозначний лідер, нічия кількох, або немає голосів. */
+function analyzeVoteOutcome(tallies) {
+  const pairs = Object.entries(tallies).filter(([, n]) => n > 0)
+  if (pairs.length === 0) return { kind: 'none' }
+  pairs.sort((a, b) => b[1] - a[1])
+  const max = pairs[0][1]
+  const tops = pairs.filter(([, n]) => n === max).map(([id]) => normalizePlayerSlotId(id))
+  if (tops.length >= 2) return { kind: 'tie', slots: tops }
+  return { kind: 'winner', slot: tops[0] }
+}
+
+/** Порядок переголосування: спочатку як у номінаціях, далі — за номером слота на столі. */
+function orderTieSlotsByNominationOrder(slots, nominations, slotOrder) {
+  const norm = [...new Set(slots.map((s) => normalizePlayerSlotId(s)))]
+  const set = new Set(norm)
+  const fromNom = nomineeTargetsInNominationOrder(nominations).filter((s) => set.has(s))
+  const rest = norm.filter((s) => !fromNom.includes(s))
+  rest.sort((a, b) => {
+    const ia = slotOrder.indexOf(a)
+    const ib = slotOrder.indexOf(b)
+    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib)
+  })
+  return [...fromNom, ...rest]
+}
+
+const lastAutoFinishedVoteSlotMs = ref(null)
+const ballotSummaryOpen = ref(false)
+const ballotSummarySessions = ref([])
+const tieBreakOpen = ref(false)
+const tieBreakSlots = ref([])
+
+const elimSuggestOpen = ref(false)
+const elimSuggestSlot = ref('')
+const elimSuggestForVotes = ref(0)
+
 async function hostFinishVoting() {
   if (!isAdmin.value) return
   try {
     loadError.value = null
-    const target = String(gameRoom.value?.voting?.targetPlayer ?? '').trim()
+    const vRaw =
+      gameRoom.value?.voting && typeof gameRoom.value.voting === 'object' ? gameRoom.value.voting : {}
+    const target = String(vRaw.targetPlayer ?? '').trim()
+    const ballotQ = vRaw.ballotQueue
+    const ballotRunId = String(vRaw.ballotRunId || '')
+    const ballotIdx = Number(vRaw.ballotIndex) || 0
     const rr = roomRoundLive.value
     const list = [...votesLiveRound.value]
-    const votesPayload = list.map((v) => ({
+    const hadNoRealVotes = list.length === 0
+    let votesPayload = list.map((v) => ({
       voter: normalizePlayerSlotId(v.id),
       choice: v.choice === 'against' ? 'against' : 'for',
     }))
+    let statTarget = target
+    if (votesPayload.length === 0 && Array.isArray(ballotQ) && ballotQ.length > 0) {
+      const lastSlot = normalizePlayerSlotId(ballotQ[ballotQ.length - 1])
+      statTarget = lastSlot
+      const aliveIds = allPlayers.value
+        .filter((p) => p.eliminated !== true)
+        .map((p) => normalizePlayerSlotId(p.id))
+      votesPayload = aliveIds.map((voter) => ({ voter, choice: 'for' }))
+    }
     const entry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       endedAt: Date.now(),
       round: rr,
-      target: target || '',
+      target: statTarget || '',
+      ballotRunId,
       votes: votesPayload,
     }
-    const vs = [entry, ...(hostSessionStats.value.voteSessions || [])].slice(0, 50)
+    const existingSessions = hostSessionStats.value.voteSessions || []
+    const fp = votesPayloadFingerprint(votesPayload)
+    const isSyntheticEmptySlot =
+      hadNoRealVotes && Array.isArray(ballotQ) && ballotQ.length > 0 && votesPayload.length > 0
+
+    let vs
+    if (isSyntheticEmptySlot && ballotRunId) {
+      const prev = existingSessions[0]
+      const sameTarget = normalizePlayerSlotId(prev?.target) === normalizePlayerSlotId(statTarget)
+      const sameVotes =
+        prev && votesPayloadFingerprint(prev.votes || []) === fp
+      if (
+        prev &&
+        prev.syntheticEmptyRun === true &&
+        String(prev.ballotRunId || '') === ballotRunId &&
+        sameTarget &&
+        sameVotes
+      ) {
+        vs = [
+          {
+            ...prev,
+            slotCount: (prev.slotCount || 1) + 1,
+            endedAt: Date.now(),
+          },
+          ...existingSessions.slice(1),
+        ].slice(0, 50)
+      } else {
+        vs = [
+          {
+            ...entry,
+            syntheticEmptyRun: true,
+            slotCount: 1,
+          },
+          ...existingSessions,
+        ].slice(0, 50)
+      }
+    } else {
+      vs = [entry, ...existingSessions].slice(0, 50)
+    }
     hostSessionStats.value = {
       v: 1,
       voteSessions: vs,
       handRaises: hostSessionStats.value.handRaises || {},
     }
     persistHostStats()
+    await appendVoteTargetsThisRound(statTarget)
 
-    await setRoomVoting(gameId.value, false, '')
+    if (Array.isArray(ballotQ) && ballotIdx < ballotQ.length - 1) {
+      const nextIdx = ballotIdx + 1
+      const nextTarget = normalizePlayerSlotId(ballotQ[nextIdx])
+      const curVm = { ...vRaw }
+      await saveGameRoom(gameId.value, {
+        voting: {
+          ...curVm,
+          active: false,
+          targetPlayer: nextTarget,
+          ballotQueue: ballotQ,
+          ballotIndex: nextIdx,
+          voteSlotStartedAt: deleteField(),
+        },
+      })
+      await clearAllVotes(gameId.value)
+      showToast(t('toast.votingNextTarget', { slot: nextTarget }))
+      return
+    }
+
     await clearAllVotes(gameId.value)
+
+    const sessions = hostSessionStats.value.voteSessions || []
+    const runEntries =
+      ballotRunId && sessions.length
+        ? sessions.filter((s) => String(s.ballotRunId || '') === ballotRunId)
+        : [entry]
+    const tallies = aggregateForVotesByTarget(runEntries.length ? runEntries : [entry])
+    const outcome = analyzeVoteOutcome(tallies)
+
+    if (outcome.kind === 'tie' && outcome.slots.length >= 2) {
+      const ordered = orderTieSlotsByNominationOrder(
+        outcome.slots,
+        nominationsFromRoom(gameRoom.value),
+        PLAYER_SLOTS,
+      )
+      tieBreakSlots.value = ordered
+      tieBreakOpen.value = true
+      await setGameNominations(gameId.value, [])
+      const curVm = { ...vRaw }
+      const slotSec = Math.max(5, Math.min(60, Math.floor(Number(curVm.slotDurationSec) || 30)))
+      await saveGameRoom(gameId.value, {
+        voting: {
+          ...curVm,
+          active: false,
+          targetPlayer: ordered[0],
+          ballotQueue: ordered,
+          ballotIndex: 0,
+          ballotRunId: `tie-${Date.now()}`,
+          slotDurationSec: slotSec,
+          voteSlotStartedAt: deleteField(),
+        },
+      })
+      showToast(t('toast.votingTiePickDefense'))
+      return
+    }
+
+    await setRoomVoting(gameId.value, false, '', { clearBallot: true })
+    ballotSummarySessions.value = runEntries.length ? runEntries : [entry]
+    tieBreakOpen.value = false
+    tieBreakSlots.value = []
+
+    if (outcome.kind === 'winner') {
+      elimSuggestSlot.value = outcome.slot
+      elimSuggestForVotes.value = Math.floor(Number(tallies[outcome.slot]) || 0)
+      elimSuggestOpen.value = true
+    } else {
+      ballotSummaryOpen.value = true
+    }
     showToast(t('toast.votingClosed'))
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+watch(
+  () => [
+    isAdmin.value,
+    gameRoom.value?.voting?.active,
+    gameRoom.value?.voting?.voteSlotStartedAt,
+    gameRoom.value?.voting?.slotDurationSec,
+    tick.value,
+  ],
+  () => {
+    if (!isAdmin.value) return
+    const vot = gameRoom.value?.voting
+    if (!vot?.active) return
+    const start = millisFromFirestore(vot.voteSlotStartedAt)
+    if (start == null) return
+    const sec = Math.max(1, Number(vot.slotDurationSec) || 5)
+    const elapsed = (tick.value - start) / 1000
+    if (elapsed < sec) return
+    if (lastAutoFinishedVoteSlotMs.value === start) return
+    lastAutoFinishedVoteSlotMs.value = start
+    void hostFinishVoting()
+  },
+)
+
+async function hostSetVoteSlotDuration(sec) {
+  if (!isAdmin.value) return
+  const curV =
+    gameRoom.value?.voting && typeof gameRoom.value.voting === 'object'
+      ? { ...gameRoom.value.voting }
+      : {}
+  const n = Math.max(1, Math.floor(Number(sec) || 5))
+  try {
+    loadError.value = null
+    await saveGameRoom(gameId.value, { voting: { ...curV, slotDurationSec: n } })
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function hostTieDefenseDuration(sec) {
+  if (!isAdmin.value || !tieBreakOpen.value) return
+  const n = Math.max(5, Math.min(60, Math.floor(Number(sec) || 30)))
+  const curV =
+    gameRoom.value?.voting && typeof gameRoom.value.voting === 'object'
+      ? { ...gameRoom.value.voting }
+      : {}
+  try {
+    loadError.value = null
+    await saveGameRoom(gameId.value, { voting: { ...curV, slotDurationSec: n } })
+    tieBreakOpen.value = false
+    tieBreakSlots.value = []
+    showToast(t('toast.tieDefenseDurationSet', { sec: n }))
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function hostEliminateSuggestedPlayer() {
+  if (!isAdmin.value) return false
+  const slot = normalizePlayerSlotId(String(elimSuggestSlot.value || '').trim())
+  if (!slot) return false
+  try {
+    loadError.value = null
+    const existing = await fetchCharacter(gameId.value, slot)
+    await saveCharacter(gameId.value, slot, {
+      ...(existing && typeof existing === 'object' ? existing : {}),
+      eliminated: true,
+    })
+    await setGameNominations(gameId.value, [])
+    await setRoomVoting(gameId.value, false, '', { clearBallot: true })
+    await setGameHandRaised(gameId.value, slot, false)
+    showToast(t('toast.playerMarkedEliminated', { slot }))
+    return true
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+    return false
+  }
+}
+
+async function hostConfirmEliminateSuggested() {
+  if (!isAdmin.value) return
+  const ok = await hostEliminateSuggestedPlayer()
+  if (!ok) return
+  elimSuggestOpen.value = false
+  elimSuggestSlot.value = ''
+  ballotSummaryOpen.value = true
+}
+
+async function hostDismissEliminateSuggested() {
+  if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    await setGameNominations(gameId.value, [])
+    elimSuggestOpen.value = false
+    elimSuggestSlot.value = ''
+    ballotSummaryOpen.value = true
+    showToast(t('toast.nominationsClearedAfterVote'))
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function persistNominationOnePerRound(val) {
+  if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    await saveGameRoom(gameId.value, { nominationOneTargetPerRound: Boolean(val) })
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+/** Накопичення цілей голосування в поточному раунді (окремо від черги). */
+async function appendVoteTargetsThisRound(slotRaw) {
+  if (!isAdmin.value) return
+  const tid = normalizePlayerSlotId(String(slotRaw ?? '').trim())
+  if (!tid) return
+  const prev = Array.isArray(gameRoom.value?.voteTargetsThisRound)
+    ? gameRoom.value.voteTargetsThisRound.map(normalizePlayerSlotId)
+    : []
+  if (prev.includes(tid)) return
+  try {
+    loadError.value = null
+    await saveGameRoom(gameId.value, { voteTargetsThisRound: [...prev, tid] })
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -1332,6 +1950,8 @@ const hostChromeActions = {
   votingStart: hostVotingStart,
   votingFinish: hostFinishVoting,
   removeVote: hostRemoveVote,
+  setVoteSlotDuration: hostSetVoteSlotDuration,
+  tieDefenseDuration: hostTieDefenseDuration,
   clearHands: hostClearHands,
   reviveAllPlayers: hostReviveAllPlayers,
   setSpeakingDuration(n) {
@@ -1377,8 +1997,39 @@ function buildUsedStateExcludingEditorSlot() {
   return us
 }
 
-function rerollSingleTrait(fieldKey) {
+async function ensureEditorSlotHasPlayerDoc() {
   if (!isAdmin.value) return
+  const gid = gameId.value
+  const pid = editorPlayerId.value
+  if (!gid || !pid) return
+  if (editorPlayerInRoster.value) return
+  await ensureGameRoomExists(gid)
+  const created = await ensurePlayerCharacterExists(gid, pid, selectedScenario.value)
+  const data = await fetchCharacter(gid, pid)
+  if (data) applyFromFirestoreSnapshot(data)
+  if (created) showToast(t('toast.playerAdded', { slot: pid }))
+}
+
+/** Якщо в кімнаті ще нікого немає — фокусуємо слот p1, щоб кубик / «згенерувати» створювали першого гравця. */
+async function focusFirstSlotWhenRosterEmpty() {
+  if (!isAdmin.value) return
+  if (allPlayers.value.length > 0) return
+  const first = 'p1'
+  selectedDeskPlayerId.value = first
+  navigateQuery({ player: first })
+  await nextTick()
+}
+
+async function rerollSingleTrait(fieldKey) {
+  if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    await focusFirstSlotWhenRosterEmpty()
+    await ensureEditorSlotHasPlayerDoc()
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+    return
+  }
   characterState[fieldKey].value = rollFieldValue(
     fieldKey,
     scenarioForRolls.value,
@@ -1386,8 +2037,16 @@ function rerollSingleTrait(fieldKey) {
   )
 }
 
-function rerollIdentity() {
+async function rerollIdentity() {
   if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    await focusFirstSlotWhenRosterEmpty()
+    await ensureEditorSlotHasPlayerDoc()
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+    return
+  }
   const g = genders[Math.floor(Math.random() * genders.length)]
   characterState.gender = g
   characterState.name = pickNameForGender(g)
@@ -1461,17 +2120,22 @@ async function regenerateActiveCardForCurrentSlot() {
 const genDialogOpen = ref(false)
 const genDialogTitle = ref('')
 const genDialogMessage = ref('')
+const genDialogShowCountInput = ref(false)
+const genEmptyRosterCount = ref(6)
 let genDialogRunner = null
 
-function openHostGenConfirm(title, message, runner) {
+function openHostGenConfirm(title, message, runner, opts = {}) {
+  const { showEmptyRosterCount = false } = opts
   genDialogTitle.value = title
   genDialogMessage.value = message
   genDialogRunner = runner
+  genDialogShowCountInput.value = showEmptyRosterCount
   genDialogOpen.value = true
 }
 
 function onHostGenDialogClose() {
   genDialogRunner = null
+  genDialogShowCountInput.value = false
 }
 
 async function onHostGenDialogConfirm() {
@@ -1481,15 +2145,58 @@ async function onHostGenDialogConfirm() {
 }
 
 function askGenerateRandomCharacter() {
-  openHostGenConfirm(
-    t('control.genConfirmTitle'),
-    t('control.genConfirmPlayer', { slot: editorPlayerId.value }),
-    () => generateRandomCharacter(),
-  )
+  if (allPlayers.value.length === 0) {
+    openHostGenConfirm(
+      t('control.genConfirmTitle'),
+      t('control.genConfirmFirstPlayerBody'),
+      async () => {
+        try {
+          loadError.value = null
+          await focusFirstSlotWhenRosterEmpty()
+          await ensureEditorSlotHasPlayerDoc()
+          generateRandomCharacter()
+        } catch (e) {
+          loadError.value = e instanceof Error ? e.message : String(e)
+        }
+      },
+    )
+  } else {
+    openHostGenConfirm(
+      t('control.genConfirmTitle'),
+      t('control.genConfirmPlayer', { slot: editorPlayerId.value }),
+      () => generateRandomCharacter(),
+    )
+  }
+}
+
+async function runCreateNPlayersFromDialog() {
+  if (!isAdmin.value) return
+  try {
+    loadError.value = null
+    const raw = Number(genEmptyRosterCount.value)
+    const n = Math.max(1, Math.min(10, Math.floor(Number.isFinite(raw) ? raw : 6) || 1))
+    await ensureGameRoomExists(gameId.value)
+    await createFirstNRandomPlayers(gameId.value, selectedScenario.value, n)
+    showToast(t('toast.rosterCreatedN', { n }))
+    selectedDeskPlayerId.value = 'p1'
+    navigateQuery({ player: 'p1' })
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
 }
 
 function askRegenerateAllPlayers() {
-  openHostGenConfirm(t('control.genConfirmTitle'), t('control.genConfirmAll'), regenerateAllPlayers)
+  if (allPlayers.value.length === 0) {
+    genEmptyRosterCount.value = 6
+    openHostGenConfirm(
+      t('control.genConfirmTitle'),
+      t('control.genConfirmAllEmpty'),
+      runCreateNPlayersFromDialog,
+      { showEmptyRosterCount: true },
+    )
+  } else {
+    openHostGenConfirm(t('control.genConfirmTitle'), t('control.genConfirmAll'), regenerateAllPlayers)
+  }
 }
 
 function askRegenerateActiveCardsAll() {
@@ -1577,6 +2284,8 @@ async function requestCardFromHost() {
 }
 
 let saveTimer = null
+/** Не зберігати попередній слот при перемиканні редактора — інакше після deleteDoc merge знову створює документ у Firestore. */
+const slotsToSkipPersistOnSwitch = new Set()
 
 function controlQuery(overrides) {
   const base = { ...route.query, ...overrides }
@@ -1629,6 +2338,10 @@ watch(
 function goToPlayer(id) {
   if (!isAdmin.value) return
   navigateQuery({ player: String(id).trim() || 'p1' })
+  hostBlocksOpen.value.editor = true
+  nextTick(() => {
+    document.getElementById('host-editor-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
 }
 
 function hostForgetSavedAndLeave() {
@@ -1747,10 +2460,15 @@ watch(
     if (oldTuple && !oldTuple[2]) {
       const [og, op] = oldTuple
       if (op && (og !== gid || op !== pid)) {
-        try {
-          await saveCharacter(og, op, snapshotCharacter(characterState))
-        } catch (e) {
-          console.warn('[control] save before switching editor slot', e)
+        const prevSlot = normalizePlayerSlotId(op)
+        if (slotsToSkipPersistOnSwitch.has(prevSlot)) {
+          slotsToSkipPersistOnSwitch.delete(prevSlot)
+        } else {
+          try {
+            await saveCharacter(og, op, snapshotCharacter(characterState))
+          } catch (e) {
+            console.warn('[control] save before switching editor slot', e)
+          }
         }
       }
     }
@@ -1829,7 +2547,14 @@ const playerRevealLocked = computed(
 
 const HOST_BLOCKS_KEY = 'eat-first:host-blocks-v1'
 function defaultHostBlocksOpen() {
-  return { live: true, activeCard: true, players: true, gen: true, editor: true }
+  return {
+    live: true,
+    sessionStats: true,
+    activeCard: true,
+    players: true,
+    gen: true,
+    editor: true,
+  }
 }
 function readHostBlocksOpen() {
   if (typeof sessionStorage === 'undefined') return defaultHostBlocksOpen()
@@ -1858,6 +2583,7 @@ watch(
 function hostCollapseAllBlocks() {
   const o = hostBlocksOpen.value
   o.live = false
+  o.sessionStats = false
   o.activeCard = false
   o.players = false
   o.gen = false
@@ -1866,6 +2592,7 @@ function hostCollapseAllBlocks() {
 function hostExpandAllBlocks() {
   const o = hostBlocksOpen.value
   o.live = true
+  o.sessionStats = true
   o.activeCard = true
   o.players = true
   o.gen = true
@@ -1941,10 +2668,16 @@ function rerollActiveCardOnly() {
           :aria-expanded="hostBlocksOpen.live"
           @click="hostBlocksOpen.live = !hostBlocksOpen.live"
         >
-          <span class="host-block-fold__chev" aria-hidden="true">{{ hostBlocksOpen.live ? '▼' : '▶' }}</span>
+          <span
+            class="host-block-fold__chev"
+            :class="{ 'host-block-fold__chev--open': hostBlocksOpen.live }"
+            aria-hidden="true"
+          >▶</span>
           <span class="host-block-fold__label">{{ t('control.hostBlockLive') }}</span>
         </button>
-        <div v-show="hostBlocksOpen.live" class="host-block-fold__body">
+        <div class="host-fold-anim" :class="{ 'host-fold-anim--open': hostBlocksOpen.live }">
+          <div class="host-fold-anim__inner">
+            <div class="host-block-fold__body">
           <ShowDeskHeader
             class="admin-zone__header"
             :game-title="t('game.title')"
@@ -1957,54 +2690,84 @@ function rerollActiveCardOnly() {
             @copy-personal="copyPersonal"
             @copy-global="copyGlobal"
           />
-          <details v-if="isAdmin" class="host-session-stats">
-            <summary class="host-session-stats__sum">{{ t('control.hostSessionTitle') }}</summary>
-            <div class="host-session-stats__inner">
-              <section class="host-session-stats__block" :aria-label="t('control.hostSessionHands')">
-                <h4 class="host-session-stats__h">{{ t('control.hostSessionHands') }}</h4>
-                <p class="host-session-stats__hint">{{ t('control.hostSessionHandsHint') }}</p>
-                <ul class="host-session-hands">
-                  <li v-for="row in hostHandRaiseRows" :key="row.id" class="host-session-hands__li">
-                    <span class="host-session-hands__id">{{ row.id }}</span>
-                    <span class="host-session-hands__n">✋ × {{ row.n }}</span>
-                  </li>
-                </ul>
-              </section>
-              <section class="host-session-stats__block" :aria-label="t('control.hostSessionVotes')">
-                <h4 class="host-session-stats__h">{{ t('control.hostSessionVotes') }}</h4>
-                <p v-if="!(hostSessionStats.voteSessions && hostSessionStats.voteSessions.length)" class="host-session-muted">
-                  {{ t('control.hostSessionVotesEmpty') }}
-                </p>
-                <div
-                  v-for="sess in hostSessionStats.voteSessions"
-                  :key="sess.id"
-                  class="host-session-vote-card"
-                >
-                  <div class="host-session-vote-card__head">
-                    <span class="host-session-vote-card__meta"
-                      >R{{ sess.round }} · {{ t('control.hostSessionTarget') }} {{ sess.target || '—' }}</span
-                    >
-                    <span class="host-session-vote-card__tally"
-                      >👍 {{ hostSessionVoteTally(sess).forC }} · 👎 {{ hostSessionVoteTally(sess).ag }} ·
-                      {{ hostSessionEndedLabel(sess.endedAt) }}</span
-                    >
-                  </div>
-                  <ul v-if="sess.votes && sess.votes.length" class="host-session-vote-card__ul">
-                    <li v-for="(v, idx) in sess.votes" :key="sess.id + '-' + idx + '-' + v.voter" class="host-session-vote-card__li">
-                      <span class="host-session-vote-card__voter">{{ v.voter }}</span>
-                      <span class="host-session-vote-card__arrow">→</span>
-                      <span class="host-session-vote-card__tgt">{{ sess.target || '—' }}</span>
-                      <span class="host-session-vote-card__ch">{{ v.choice === 'against' ? '👎' : '👍' }}</span>
-                    </li>
-                  </ul>
-                  <p v-else class="host-session-muted host-session-muted--tight">{{ t('control.hostSessionNoBallots') }}</p>
-                </div>
-              </section>
-              <button type="button" class="btn-soft host-session-clear" @click="hostClearSessionStatsOnly">
-                {{ t('control.hostSessionClear') }}
-              </button>
             </div>
-          </details>
+          </div>
+        </div>
+      </section>
+
+      <section
+        v-if="isAdmin"
+        class="admin-zone admin-zone--host-session admin-card"
+        :aria-label="t('control.hostSessionTitle')"
+      >
+        <button
+          type="button"
+          class="host-block-fold"
+          :aria-expanded="hostBlocksOpen.sessionStats"
+          @click="hostBlocksOpen.sessionStats = !hostBlocksOpen.sessionStats"
+        >
+          <span
+            class="host-block-fold__chev"
+            :class="{ 'host-block-fold__chev--open': hostBlocksOpen.sessionStats }"
+            aria-hidden="true"
+          >▶</span>
+          <span class="host-block-fold__label zone-kicker zone-kicker--fold">{{ t('control.hostSessionTitle') }}</span>
+        </button>
+        <div class="host-fold-anim" :class="{ 'host-fold-anim--open': hostBlocksOpen.sessionStats }">
+          <div class="host-fold-anim__inner">
+            <div class="host-block-fold__body">
+              <div class="host-session-stats host-session-stats--standalone">
+                <div class="host-session-stats__inner">
+                  <section class="host-session-stats__block" :aria-label="t('control.hostSessionHands')">
+                    <h4 class="host-session-stats__h">{{ t('control.hostSessionHands') }}</h4>
+                    <p class="host-session-stats__hint">{{ t('control.hostSessionHandsHint') }}</p>
+                    <ul class="host-session-hands">
+                      <li v-for="row in hostHandRaiseRows" :key="row.id" class="host-session-hands__li">
+                        <span class="host-session-hands__id">{{ row.id }}</span>
+                        <span class="host-session-hands__n">✋ × {{ row.n }}</span>
+                      </li>
+                    </ul>
+                  </section>
+                  <section class="host-session-stats__block" :aria-label="t('control.hostSessionVotes')">
+                    <h4 class="host-session-stats__h">{{ t('control.hostSessionVotes') }}</h4>
+                    <p v-if="!(hostSessionStats.voteSessions && hostSessionStats.voteSessions.length)" class="host-session-muted">
+                      {{ t('control.hostSessionVotesEmpty') }}
+                    </p>
+                    <div
+                      v-for="sess in hostSessionStats.voteSessions"
+                      :key="sess.id"
+                      class="host-session-vote-card"
+                    >
+                      <div class="host-session-vote-card__head">
+                        <span class="host-session-vote-card__meta"
+                          >R{{ sess.round }} · {{ t('control.hostSessionTarget') }} {{ sess.target || '—' }}</span
+                        >
+                        <span class="host-session-vote-card__tally"
+                          >👍 {{ hostSessionVoteTally(sess).forC }} · 👎 {{ hostSessionVoteTally(sess).ag
+                          }}<template v-if="sess.syntheticEmptyRun && (sess.slotCount || 1) > 1">
+                            · {{ t('control.ballotSummaryMergedSlots', { n: sess.slotCount || 1 }) }}</template
+                          >
+                          · {{ hostSessionEndedLabel(sess.endedAt) }}</span
+                        >
+                      </div>
+                      <ul v-if="sess.votes && sess.votes.length" class="host-session-vote-card__ul">
+                        <li v-for="(v, idx) in sess.votes" :key="sess.id + '-' + idx + '-' + v.voter" class="host-session-vote-card__li">
+                          <span class="host-session-vote-card__voter">{{ v.voter }}</span>
+                          <span class="host-session-vote-card__arrow">→</span>
+                          <span class="host-session-vote-card__tgt">{{ sess.target || '—' }}</span>
+                          <span class="host-session-vote-card__ch">{{ v.choice === 'against' ? '👎' : '👍' }}</span>
+                        </li>
+                      </ul>
+                      <p v-else class="host-session-muted host-session-muted--tight">{{ t('control.hostSessionNoBallots') }}</p>
+                    </div>
+                  </section>
+                  <button type="button" class="btn-soft host-session-clear" @click="hostClearSessionStatsOnly">
+                    {{ t('control.hostSessionClear') }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -2019,10 +2782,16 @@ function rerollActiveCardOnly() {
           :aria-expanded="hostBlocksOpen.activeCard"
           @click="hostBlocksOpen.activeCard = !hostBlocksOpen.activeCard"
         >
-          <span class="host-block-fold__chev" aria-hidden="true">{{ hostBlocksOpen.activeCard ? '▼' : '▶' }}</span>
+          <span
+            class="host-block-fold__chev"
+            :class="{ 'host-block-fold__chev--open': hostBlocksOpen.activeCard }"
+            aria-hidden="true"
+          >▶</span>
           <span class="host-block-fold__label zone-kicker zone-kicker--fold">{{ t('control.activeCard') }} · {{ editorPlayerId }}</span>
         </button>
-        <div v-show="hostBlocksOpen.activeCard" class="host-block-fold__body">
+        <div class="host-fold-anim" :class="{ 'host-fold-anim--open': hostBlocksOpen.activeCard }">
+          <div class="host-fold-anim__inner">
+            <div class="host-block-fold__body">
         <div class="active-card-box active-card-box--host-standalone">
           <div v-if="characterState.activeCardRequest" class="card-request-host">
             <p class="card-request-host__text">{{ t('control.cardRequestHost') }}</p>
@@ -2075,6 +2844,8 @@ function rerollActiveCardOnly() {
             </button>
           </div>
         </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -2089,10 +2860,16 @@ function rerollActiveCardOnly() {
           :aria-expanded="hostBlocksOpen.players"
           @click="hostBlocksOpen.players = !hostBlocksOpen.players"
         >
-          <span class="host-block-fold__chev" aria-hidden="true">{{ hostBlocksOpen.players ? '▼' : '▶' }}</span>
+          <span
+            class="host-block-fold__chev"
+            :class="{ 'host-block-fold__chev--open': hostBlocksOpen.players }"
+            aria-hidden="true"
+          >▶</span>
           <span class="host-block-fold__label zone-kicker zone-kicker--fold">{{ t('control.zonePlayers') }}</span>
         </button>
-        <div v-show="hostBlocksOpen.players" class="host-block-fold__body">
+        <div class="host-fold-anim" :class="{ 'host-fold-anim--open': hostBlocksOpen.players }">
+          <div class="host-fold-anim__inner">
+            <div class="host-block-fold__body">
         <ShowPlayersRoster
           v-model:selected-player-id="selectedDeskPlayerId"
           :players="allPlayers"
@@ -2105,11 +2882,32 @@ function rerollActiveCardOnly() {
           :voting-active="Boolean(gameRoom.voting?.active)"
           :nominations="nominationsList"
           :player-slots="PLAYER_SLOTS"
+          :bulk-selected-ids="bulkSelectedSlots"
+          :order-hint="rosterOrderHint"
+          :voted-player-ids-this-round="votesLiveRoundVoterIds"
+          :prioritize-non-voter-hands="isLastNominationBallotSlot"
           :use-host-panel="true"
           @open-editor="goToPlayer"
           @host-command="onRosterHostCommand"
           @toggle-nomination="hostToggleNomination"
+          @toggle-bulk="onToggleBulkSelection"
+          @bulk-delete-request="askBulkDeletePlayers"
+          @bulk-clear="clearBulkSelection"
+          @apply-ballot-order="hostApplyBallotFromNominations"
         />
+        <div class="host-nom-rule-wrap">
+          <label class="host-nom-rule ui-checkbox ui-checkbox--text ui-checkbox--lg">
+            <span class="ui-checkbox__hit">
+              <input
+                type="checkbox"
+                :checked="Boolean(gameRoom.nominationOneTargetPerRound)"
+                @change="persistNominationOnePerRound($event.target.checked)"
+              />
+              <span class="ui-checkbox__box" aria-hidden="true" />
+            </span>
+            <span>{{ t('control.nominationOnePerRound') }}</span>
+          </label>
+        </div>
         <aside class="side-tools side-tools--inline">
           <label class="field-label" for="host-side-game-id">{{ t('control.gameId') }}</label>
           <div class="inline">
@@ -2132,6 +2930,8 @@ function rerollActiveCardOnly() {
             <button type="button" class="btn-soft btn-lift" @click="createAndGoToPlayer">+</button>
           </div>
         </aside>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -2142,12 +2942,18 @@ function rerollActiveCardOnly() {
           :aria-expanded="hostBlocksOpen.gen"
           @click="hostBlocksOpen.gen = !hostBlocksOpen.gen"
         >
-          <span class="host-block-fold__chev" aria-hidden="true">{{ hostBlocksOpen.gen ? '▼' : '▶' }}</span>
+          <span
+            class="host-block-fold__chev"
+            :class="{ 'host-block-fold__chev--open': hostBlocksOpen.gen }"
+            aria-hidden="true"
+          >▶</span>
           <span class="host-block-fold__label zone-kicker zone-kicker--soft zone-kicker--gen-title zone-kicker--fold">{{
             t('control.zoneGen')
           }}</span>
         </button>
-        <div v-show="hostBlocksOpen.gen" class="host-block-fold__body">
+        <div class="host-fold-anim" :class="{ 'host-fold-anim--open': hostBlocksOpen.gen }">
+          <div class="host-fold-anim__inner">
+            <div class="host-block-fold__body">
         <div class="gen-bar gen-bar--actions gen-bar--compact">
           <button type="button" class="btn-neon btn-neon--compact" @click="askGenerateRandomCharacter">
             {{ t('control.genPlayer') }}
@@ -2200,6 +3006,8 @@ function rerollActiveCardOnly() {
           />
           <button type="button" class="btn-primary btn-primary--compact" @click="askGlobalRollSelected">OK</button>
         </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -2211,7 +3019,20 @@ function rerollActiveCardOnly() {
         :cancel-label="t('control.genConfirmCancel')"
         @close="onHostGenDialogClose"
         @confirm="onHostGenDialogConfirm"
-      />
+      >
+        <template v-if="genDialogShowCountInput" #extra>
+          <label class="field-label" for="gen-empty-count">{{ t('control.genEmptyCountLabel') }}</label>
+          <input
+            id="gen-empty-count"
+            v-model.number="genEmptyRosterCount"
+            type="number"
+            min="1"
+            max="10"
+            class="input"
+            style="width: 100%; margin-top: 0.35rem"
+          />
+        </template>
+      </ConfirmDialog>
     </template>
 
     <div v-else class="player-hero">
@@ -2279,6 +3100,7 @@ function rerollActiveCardOnly() {
     </div>
 
     <section
+      id="host-editor-panel"
       class="panel editor-panel editor-panel--calm"
       :class="{ 'editor-panel--hydrating': panelHydrating }"
     >
@@ -2287,20 +3109,30 @@ function rerollActiveCardOnly() {
         <span class="panel-hydrate-label">{{ t('loader.panelCard') }}</span>
       </div>
       <div class="editor-panel__head">
-        <h2 class="panel-kicker">{{ isAdmin ? t('control.editorTitle', { id: editorPlayerId }) : t('control.yourChar') }}</h2>
         <button
           v-if="isAdmin"
           type="button"
-          class="host-block-fold host-block-fold--panel"
+          class="host-block-fold host-block-fold--editor"
           :aria-expanded="hostBlocksOpen.editor"
           :aria-label="hostBlocksOpen.editor ? t('control.hostSectionCollapse') : t('control.hostSectionExpand')"
           @click="hostBlocksOpen.editor = !hostBlocksOpen.editor"
         >
-          <span class="host-block-fold__chev" aria-hidden="true">{{ hostBlocksOpen.editor ? '▼' : '▶' }}</span>
+          <span
+            class="host-block-fold__chev"
+            :class="{ 'host-block-fold__chev--open': hostBlocksOpen.editor }"
+            aria-hidden="true"
+          >▶</span>
+          <h2 class="panel-kicker host-block-fold__label">{{ t('control.editorTitle', { id: editorPlayerId }) }}</h2>
         </button>
+        <h2 v-else class="panel-kicker">{{ t('control.yourChar') }}</h2>
       </div>
 
-      <div v-show="!isAdmin || hostBlocksOpen.editor" class="editor-panel__collapsible">
+      <div
+        class="host-fold-anim host-fold-anim--editor"
+        :class="{ 'host-fold-anim--open': !isAdmin || hostBlocksOpen.editor }"
+      >
+        <div class="host-fold-anim__inner">
+          <div class="editor-panel__collapsible">
       <div v-if="isAdmin" class="trait-block trait-block--identity">
         <div class="trait-toolbar">
           <span class="trait-label">{{ t('control.profileOverlay') }}</span>
@@ -2491,11 +3323,104 @@ function rerollActiveCardOnly() {
           {{ characterState.eliminated ? 'Повернути в гру' : 'Вибув' }}
         </button>
       </div>
+          </div>
+        </div>
       </div>
     </section>
 
     <Teleport to="body">
       <div v-if="toast" class="toast">{{ toast }}</div>
+    </Teleport>
+    <Teleport to="body">
+      <div
+        v-if="ballotSummaryOpen"
+        class="host-modal-backdrop"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="t('control.ballotSummaryTitle')"
+        @click.self="ballotSummaryOpen = false"
+      >
+        <div class="host-modal host-modal--wide">
+          <h3 class="host-modal__title">{{ t('control.ballotSummaryTitle') }}</h3>
+          <ul class="host-ballot-summary-list">
+            <li v-for="s in ballotSummarySessions" :key="s.id" class="host-ballot-summary-li">
+              <span class="host-ballot-summary-meta">
+                R{{ s.round }} · {{ t('hostChrome.target') }} {{ s.target || '—' }} · 👍
+                {{ hostSessionVoteTally(s).forC }} · 👎 {{ hostSessionVoteTally(s).ag
+                }}<template v-if="s.syntheticEmptyRun && (s.slotCount || 1) > 1">
+                  · {{ t('control.ballotSummaryMergedSlots', { n: s.slotCount || 1 }) }}</template
+                >
+              </span>
+            </li>
+          </ul>
+          <button type="button" class="btn-primary host-modal__ok" @click="ballotSummaryOpen = false">
+            OK
+          </button>
+        </div>
+      </div>
+    </Teleport>
+    <Teleport to="body">
+      <div
+        v-if="tieBreakOpen"
+        class="host-modal-backdrop"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="t('control.tieBreakTitle')"
+        @click.self="tieBreakOpen = false"
+      >
+        <div class="host-modal host-modal--wide">
+          <h3 class="host-modal__title">{{ t('control.tieBreakTitle') }}</h3>
+          <p class="host-modal__p">
+            {{ t('control.tieBreakBodyN', { list: (tieBreakSlots || []).join(', ') }) }}
+          </p>
+          <p class="host-modal__hint">{{ t('control.tieBreakHintN') }}</p>
+          <p class="host-modal__micro">{{ t('control.tieBreakDurPick') }}</p>
+          <div class="host-modal__chips">
+            <button
+              v-for="s in [5, 10, 15, 30, 60]"
+              :key="'tie-dur-' + s"
+              type="button"
+              class="host-tie-dur-chip"
+              @click="hostTieDefenseDuration(s)"
+            >
+              {{ s >= 60 ? `1 ${t('control.tieBreakMin')}` : `${s} s` }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+    <Teleport to="body">
+      <div
+        v-if="elimSuggestOpen"
+        class="host-modal-backdrop"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="t('control.elimSuggestTitle')"
+        @click.self="hostDismissEliminateSuggested"
+      >
+        <div class="host-modal host-modal--wide">
+          <h3 class="host-modal__title">{{ t('control.elimSuggestTitle') }}</h3>
+          <p class="host-modal__p">
+            {{
+              t('control.elimSuggestBody', { slot: elimSuggestSlot || '—', votes: elimSuggestForVotes })
+            }}
+          </p>
+          <p v-if="elimSuggestHandLines?.key === 'agree'" class="host-modal__hint">
+            {{ t('control.elimSuggestHandsAgree') }}
+          </p>
+          <p v-else-if="elimSuggestHandLines?.key === 'top'" class="host-modal__hint">
+            {{ t('control.elimSuggestHandsTop', { list: elimSuggestHandLines.list }) }}
+          </p>
+          <div class="host-modal__row host-modal__row--stack">
+            <button type="button" class="btn-primary" @click="hostConfirmEliminateSuggested">
+              {{ t('control.elimSuggestConfirm') }}
+            </button>
+            <button type="button" class="btn-soft" @click="hostDismissEliminateSuggested">
+              {{ t('control.elimSuggestSkip') }}
+            </button>
+          </div>
+        </div>
+      </div>
     </Teleport>
   </div>
 </template>
@@ -2520,8 +3445,9 @@ function rerollActiveCardOnly() {
   align-items: center;
   gap: 0.45rem;
   width: 100%;
-  margin: 0 0 0.5rem;
-  padding: 0.35rem 0.15rem;
+  margin: 0;
+  padding: 0.38rem 0.35rem;
+  min-height: 0;
   border: none;
   background: transparent;
   cursor: pointer;
@@ -2543,42 +3469,108 @@ function rerollActiveCardOnly() {
 
 .host-block-fold__chev {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 1.1rem;
-  font-size: 0.65rem;
-  opacity: 0.85;
+  height: 1.1rem;
+  font-size: 0.58rem;
+  line-height: 1;
+  opacity: 0.9;
+  transform: rotate(0deg);
+  transform-origin: center center;
+  transition: transform 0.45s cubic-bezier(0.32, 0.72, 0, 1);
+  /* вирівнювання гліфа ▶ відносно шрифтового центру */
+  margin-top: 0.06em;
+}
+
+.host-block-fold__chev--open {
+  transform: rotate(90deg);
 }
 
 .host-block-fold__label {
   flex: 1;
   margin: 0;
+  line-height: 1.25;
+  display: flex;
+  align-items: center;
 }
 
 .zone-kicker--fold {
   margin: 0;
   text-align: left;
+  line-height: 1.25;
 }
 
 .host-block-fold__body {
   min-width: 0;
 }
 
-.host-block-fold--panel {
+.host-fold-anim {
+  display: grid;
+  grid-template-rows: 0fr;
+  margin-top: 0;
+  transition: grid-template-rows 0.58s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.host-fold-anim--open {
+  grid-template-rows: 1fr;
+  /* лише для відкритого: відступ від смуги згортання; у закритому — margin-top: 0 на .host-fold-anim */
+  margin-top: 0.5rem;
+}
+
+.host-fold-anim__inner {
+  overflow: hidden;
+  min-height: 0;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition:
+    opacity 0.52s ease,
+    transform 0.52s ease;
+}
+
+.host-fold-anim--open .host-fold-anim__inner {
+  overflow: visible;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .host-fold-anim {
+    transition: none;
+  }
+
+  .host-fold-anim__inner {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .host-block-fold__chev {
+    transition: none;
+  }
+}
+
+/* як інші згортання: уся смуга клікабельна */
+.host-block-fold--editor {
+  color: var(--editor-trait-label, var(--text-muted-soft));
+}
+
+.host-block-fold--editor:hover {
+  color: var(--text-heading);
+}
+
+.editor-panel--calm .host-block-fold--editor .panel-kicker {
   margin: 0;
-  padding: 0.2rem 0.35rem;
-  width: auto;
-  flex-shrink: 0;
+  color: inherit;
 }
 
 .editor-panel__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0;
 }
 
-.editor-panel__head .panel-kicker {
-  margin-bottom: 0;
+.editor-panel__head > .panel-kicker {
+  margin: 0;
 }
 
 .editor-panel__collapsible {
@@ -2681,6 +3673,11 @@ function rerollActiveCardOnly() {
   font-family: 'Orbitron', sans-serif;
 }
 
+/* .zone-kicker нижче перебивав margin: 0 у --fold (лішнє місце знизу в смузі згортання) */
+.zone-kicker.zone-kicker--fold {
+  margin: 0;
+}
+
 .admin-zone--players > .zone-kicker {
   margin-bottom: 0.85rem;
 }
@@ -2723,6 +3720,17 @@ function rerollActiveCardOnly() {
   font-size: 0.7rem;
   line-height: 1.45;
   color: var(--text-secondary);
+}
+
+.host-session-stats--standalone {
+  margin-top: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.host-session-stats--standalone .host-session-stats__inner {
+  margin-top: 0;
 }
 
 .host-session-stats__sum {
@@ -2978,6 +3986,16 @@ function rerollActiveCardOnly() {
   margin: 0 0 0.35rem;
 }
 
+#host-editor-panel {
+  scroll-margin-top: 5.5rem;
+}
+
+@media (max-width: 720px) {
+  #host-editor-panel {
+    scroll-margin-top: 4.5rem;
+  }
+}
+
 .editor-panel {
   --editor-space: 0.7rem;
 }
@@ -3178,40 +4196,79 @@ function rerollActiveCardOnly() {
 }
 
 .host-strip-btn {
-  padding: 0.28rem 0.55rem;
-  border-radius: 8px;
-  border: 1px solid var(--border-subtle);
-  background: transparent;
-  color: var(--text-muted-soft);
+  padding: 0.32rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(196, 181, 253, 0.42);
+  background: rgba(15, 23, 42, 0.45);
+  color: var(--text-secondary);
   font-size: 0.58rem;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .host-strip-btn:hover {
-  color: var(--text-heading);
-  border-color: var(--border);
+  color: var(--text-title);
+  border-color: rgba(196, 181, 253, 0.7);
+  background: rgba(88, 28, 135, 0.22);
+  box-shadow: 0 0 14px rgba(168, 85, 247, 0.18);
 }
 
 .host-forget-btn {
   margin-left: 0;
-  padding: 0.28rem 0.55rem;
-  border-radius: 8px;
-  border: 1px solid var(--border-subtle);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 0.62rem;
-  font-weight: 700;
+  padding: 0.32rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  background: var(--danger-bg);
+  color: #fecaca;
+  font-size: 0.58rem;
+  font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .host-forget-btn:hover {
-  color: var(--error-text);
-  border-color: rgba(248, 113, 113, 0.35);
+  color: #ffe4e6;
+  border-color: rgba(248, 113, 113, 0.65);
+  background: rgba(60, 22, 28, 0.45);
+  box-shadow: 0 0 16px var(--danger-glow);
+}
+
+html[data-theme='light'] .host-strip-btn {
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(124, 58, 237, 0.35);
+  color: rgba(30, 27, 46, 0.88);
+  box-shadow: 0 1px 3px rgba(91, 33, 168, 0.08);
+}
+
+html[data-theme='light'] .host-strip-btn:hover {
+  border-color: rgba(124, 58, 237, 0.55);
+  background: rgba(243, 232, 255, 0.95);
+}
+
+html[data-theme='light'] .host-forget-btn {
+  color: #b91c1c;
+  border-color: rgba(220, 38, 38, 0.4);
+  background: rgba(254, 226, 226, 0.85);
+}
+
+html[data-theme='light'] .host-forget-btn:hover {
+  color: #991b1b;
+  border-color: rgba(220, 38, 38, 0.55);
+  background: rgba(254, 202, 202, 0.95);
 }
 
 .mode-label {
@@ -4242,6 +5299,143 @@ function rerollActiveCardOnly() {
 
 .denied-back:hover {
   filter: brightness(1.06);
+}
+
+.host-nom-rule-wrap {
+  margin: 0.5rem 0 0.85rem;
+}
+
+.host-nom-rule {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.host-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 12010;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.host-modal {
+  width: 100%;
+  max-width: 22rem;
+  padding: 1.15rem 1.2rem 1rem;
+  border-radius: 14px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-panel, #1a1525);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+.host-modal--wide {
+  max-width: 28rem;
+}
+
+.host-modal__title {
+  margin: 0 0 0.65rem;
+  font-size: 0.88rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--text-heading);
+}
+
+.host-modal__p {
+  margin: 0 0 0.5rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.host-modal__hint {
+  margin: 0 0 0.85rem;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.host-modal__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.host-modal__row--stack {
+  flex-direction: column;
+  margin-top: 0.35rem;
+}
+
+.host-modal__row--stack .btn-primary,
+.host-modal__row--stack .btn-soft {
+  width: 100%;
+  justify-content: center;
+}
+
+.host-modal__micro {
+  margin: 0 0 0.45rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.host-modal__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.25rem;
+}
+
+.host-tie-dur-chip {
+  min-width: 3.1rem;
+  padding: 0.38rem 0.55rem;
+  border-radius: 9px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-muted);
+  color: var(--text-body);
+  font-size: 0.72rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: filter 0.12s ease, border-color 0.12s ease;
+}
+
+.host-tie-dur-chip:hover {
+  border-color: var(--border-cyan-strong, rgba(94, 231, 223, 0.55));
+  filter: brightness(1.06);
+}
+
+.host-modal__ok {
+  margin-top: 0.85rem;
+  width: 100%;
+}
+
+.host-ballot-summary-list {
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.host-ballot-summary-li {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.75rem;
+}
+
+.host-ballot-summary-meta {
+  color: var(--text-body);
 }
 </style>
 

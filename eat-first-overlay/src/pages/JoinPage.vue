@@ -262,10 +262,6 @@ function scrollToPlayerSlots() {
   })
 }
 
-function goGlobalOverlay() {
-  router.push({ path: '/overlay', query: { game: gameId.value } })
-}
-
 function goAdmin() {
   router.push({ path: '/admin', query: { game: gameId.value } })
 }
@@ -343,10 +339,18 @@ function handUpJoin(pid) {
           <span class="cta-t">{{ $t('join.ctaHost') }}</span>
           <span class="cta-d">{{ $t('join.ctaHostSub') }}</span>
         </button>
-        <button type="button" class="cta cta--obs" style="--stagger-index: 2" @click="goGlobalOverlay">
+        <button
+          type="button"
+          class="cta cta--obs cta--soon"
+          style="--stagger-index: 2"
+          disabled
+        >
           <span class="cta-ico" aria-hidden="true">🎥</span>
-          <span class="cta-t">{{ $t('join.ctaObs') }}</span>
-          <span class="cta-d">{{ $t('join.ctaObsSub') }}</span>
+          <span class="cta-t">
+            {{ $t('join.ctaObs') }}
+            <span class="cta-coming-badge">{{ $t('join.ctaObsComingSoon') }}</span>
+          </span>
+          <span class="cta-d">{{ $t('join.ctaObsSoonHint') }}</span>
         </button>
       </div>
     </section>
@@ -762,7 +766,7 @@ function handUpJoin(pid) {
     box-shadow 0.28s ease;
 }
 
-.cta:hover {
+.cta:hover:not(:disabled) {
   transform: translateY(-5px);
   border-color: var(--border-strong);
   box-shadow:
@@ -770,11 +774,40 @@ function handUpJoin(pid) {
     0 0 36px var(--glow-purple-lg);
 }
 
-.cta--obs:hover {
+.cta--obs:hover:not(:disabled) {
   box-shadow:
     0 10px 28px var(--shadow-deep),
     0 0 40px var(--glow-cyan-lg);
   border-color: var(--border-cyan-strong);
+}
+
+.cta--soon,
+.cta--soon:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+  transform: none;
+  box-shadow: none;
+}
+
+.cta--soon:disabled:hover {
+  transform: none;
+  border-color: var(--cta-border);
+  box-shadow: none;
+}
+
+.cta-coming-badge {
+  display: inline-block;
+  margin-inline-start: 0.45rem;
+  padding: 0.12rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.52rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  border: 1px solid var(--border-cyan-strong);
+  color: var(--text-cyan-strong);
+  background: rgba(34, 211, 238, 0.08);
 }
 
 .cta--play:hover {

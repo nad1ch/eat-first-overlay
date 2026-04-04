@@ -205,6 +205,9 @@
 
   --bg-card: rgba(10, 8, 22, 0.9);
   --bg-card-solid: rgba(10, 8, 22, 0.95);
+  /** Панелі випадаючих списків: майже непрозорі; z нижче модалок (12000+). */
+  --bg-dropdown: #14111f;
+  --z-dropdown: 11950;
   --bg-card-soft: rgba(10, 8, 22, 0.75);
   --bg-elevated: rgba(12, 10, 26, 0.75);
   --bg-input: rgba(8, 6, 20, 0.92);
@@ -349,6 +352,8 @@
 
   --bg-card: #f3effb;
   --bg-card-solid: #fffcff;
+  --bg-dropdown: #ffffff;
+  --z-dropdown: 11950;
   --bg-card-soft: #ebe4f7;
   --bg-elevated: #f6f2fd;
   --bg-input: #fffcff;
@@ -555,6 +560,7 @@ body::-webkit-scrollbar-thumb:hover {
   justify-content: space-between;
   gap: 0.75rem;
   width: 100%;
+  min-width: 0;
 }
 
 .app-shell-header__start {
@@ -577,6 +583,56 @@ body::-webkit-scrollbar-thumb:hover {
   align-items: center;
   gap: 0.65rem;
   flex-shrink: 0;
+  min-width: 0;
+}
+
+/**
+ * Вузьке вікно: перенос рядка + можливість стискання блоку дій,
+ * щоб наїзд на навігацію й бренд не ламав шапку.
+ */
+@media (max-width: 900px) {
+  .app-shell-header__top {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    row-gap: 0.4rem;
+    column-gap: 0.5rem;
+  }
+
+  .app-shell-header__start {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .app-shell-header__end {
+    flex-shrink: 1;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    row-gap: 0.35rem;
+    column-gap: 0.45rem;
+  }
+
+  .app-shell-brand {
+    font-size: clamp(0.52rem, 2.6vw, 0.72rem);
+    letter-spacing: 0.08em;
+  }
+
+  .app-shell-mini-brand {
+    max-width: min(100%, 10.5rem);
+    min-width: 0;
+  }
+
+  .app-shell-mini-brand__nick {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 6.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-shell-mini-brand__nick {
+    max-width: 5.25rem;
+  }
 }
 
 .app-shell-mini-brand {
@@ -911,4 +967,135 @@ body::-webkit-scrollbar-thumb:hover {
 
 [data-theme='light'] .app-site-footer__logo-wrap {
   box-shadow: 0 2px 14px rgba(91, 33, 168, 0.12);
+}
+
+/* --- Чекбокси в стилі шоу: фіолетова рамка / неон як у кнопок --- */
+.ui-checkbox {
+  --ui-check-size: 1.125rem;
+  --ui-check-radius: var(--ui-radius-md, 8px);
+  --ui-check-border: var(--border-strong);
+  --ui-check-bg: var(--bg-input-soft, rgba(8, 6, 20, 0.85));
+  --ui-check-on-bg: linear-gradient(165deg, var(--btn-neon-top), var(--btn-neon-bot));
+  --ui-check-on-border: var(--btn-neon-border);
+  --ui-check-mark: #faf5ff;
+  --ui-check-glow: var(--accent-glow-strong);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ui-check-size);
+  height: var(--ui-check-size);
+  flex-shrink: 0;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.ui-checkbox--text {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  width: auto;
+  height: auto;
+}
+
+/* Область кліку лише на квадраті (рядок з текстом не перекривається). */
+.ui-checkbox__hit {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: var(--ui-check-size);
+  height: var(--ui-check-size);
+  flex-shrink: 0;
+}
+
+.ui-checkbox__hit input {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.ui-checkbox__hit .ui-checkbox__box {
+  grid-area: 1 / 1;
+  pointer-events: none;
+}
+
+.ui-checkbox:not(.ui-checkbox--text) input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.ui-checkbox__box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ui-check-size);
+  height: var(--ui-check-size);
+  box-sizing: border-box;
+  border-radius: var(--ui-check-radius);
+  border: 1.5px solid var(--ui-check-border);
+  background: var(--ui-check-bg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.14s ease;
+  pointer-events: none;
+}
+
+.ui-checkbox input:hover + .ui-checkbox__box {
+  border-color: var(--btn-neon-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 12px var(--ui-check-glow);
+}
+
+.ui-checkbox input:focus-visible + .ui-checkbox__box {
+  outline: 2px solid var(--accent-glow-strong);
+  outline-offset: 2px;
+}
+
+.ui-checkbox input:checked + .ui-checkbox__box {
+  background-image: var(--ui-check-on-bg);
+  background-color: rgba(88, 28, 135, 0.88);
+  border-color: var(--ui-check-on-border);
+  box-shadow:
+    0 0 14px var(--ui-check-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.ui-checkbox input:checked + .ui-checkbox__box::after {
+  content: '';
+  width: 0.28rem;
+  height: 0.5rem;
+  border: solid var(--ui-check-mark);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) translate(-0.02rem, -0.06rem);
+  border-radius: 1px;
+  filter: drop-shadow(0 0 2px rgba(250, 245, 255, 0.35));
+}
+
+[data-theme='light'] .ui-checkbox {
+  --ui-check-border: rgba(124, 58, 237, 0.38);
+  --ui-check-bg: rgba(255, 255, 255, 0.88);
+  --ui-check-on-bg: linear-gradient(165deg, rgba(139, 92, 246, 0.55), rgba(88, 28, 135, 0.62));
+  --ui-check-on-border: rgba(124, 58, 237, 0.65);
+  --ui-check-mark: #faf5ff;
+  --ui-check-glow: rgba(124, 58, 237, 0.2);
+}
+
+.ui-checkbox--lg {
+  --ui-check-size: 1.2rem;
+  --ui-check-radius: 6px;
 }

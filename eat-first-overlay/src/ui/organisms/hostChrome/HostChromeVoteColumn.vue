@@ -1,40 +1,55 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { hostControlChromeStore as store } from '../../../composables/hostControlChrome.js'
 import { useHostChromeAct } from '../../../composables/useHostChromeAct.js'
+import { millisFromFirestore } from '../../../utils/firestoreTime.js'
 
 const { t } = useI18n()
 const act = useHostChromeAct()
 
-function slotNum(slot) {
-  const s = String(slot ?? '')
-  const m = s.match(/^p(\d+)$/i)
-  if (m) return m[1]
-  return s.replace(/^p/i, '') || s
-}
+const tick = ref(Date.now())
+let tickId = null
 
-function choiceGlyph(c) {
-  return c === 'against' ? '👎' : '👍'
-}
+onMounted(() => {
+  tickId = window.setInterval(() => {
+    tick.value = Date.now()
+  }, 250)
+})
 
-const lines = computed(() =>
-  (store.votesLive || []).map((v) => ({
-    voterId: v.id,
-    label: `${slotNum(v.id)} → ${slotNum(v.targetPlayer)} ${choiceGlyph(v.choice)}`,
-  })),
-)
+onUnmounted(() => {
+  if (tickId != null) {
+    window.clearInterval(tickId)
+    tickId = null
+  }
+})
 
 const targetPlayerId = computed(() => String(store.gameRoom?.voting?.targetPlayer ?? '').trim())
 const votingActive = computed(() => Boolean(store.gameRoom?.voting?.active))
 const canStart = computed(() => Boolean(targetPlayerId.value) && !votingActive.value)
-const countFor = computed(() => (store.votesLive || []).filter((v) => v.choice !== 'against').length)
-const countAgainst = computed(() => (store.votesLive || []).filter((v) => v.choice === 'against').length)
-const showLiveScore = computed(() => countFor.value + countAgainst.value > 0)
 
-const voteHistory = computed(() =>
-  Array.isArray(store.voteHistorySessions) ? store.voteHistorySessions.slice(0, 15) : [],
-)
+const voteSlotRemaining = computed(() => {
+  const v = store.gameRoom?.voting
+  if (!v?.active) return null
+  const start = millisFromFirestore(v.voteSlotStartedAt)
+  const sec = Math.max(1, Number(v.slotDurationSec) || 5)
+  if (start == null) return sec
+  const left = sec - (tick.value - start) / 1000
+  return Math.max(0, Math.ceil(left))
+})
+
+const ballotPosition = computed(() => {
+  const v = store.gameRoom?.voting
+  if (!v?.ballotQueue?.length) return null
+  const idx = Math.max(0, Number(v.ballotIndex) || 0)
+  return { idx: idx + 1, total: v.ballotQueue.length }
+})
+
+const slotDurationPick = computed(() => Math.max(1, Number(store.gameRoom?.voting?.slotDurationSec) || 5))
+
+function pickDur(sec) {
+  act('setVoteSlotDuration', sec)
+}
 
 const handRaiseChips = computed(() => {
   const hr = store.handRaises && typeof store.handRaises === 'object' ? store.handRaises : {}
@@ -43,64 +58,76 @@ const handRaiseChips = computed(() => {
     .map((id) => ({ id, n: Math.max(0, Math.floor(Number(hr[id]) || 0)) }))
     .filter((x) => x.n > 0)
 })
-
-function sessionTally(sess) {
-  let f = 0
-  let a = 0
-  for (const v of sess?.votes || []) {
-    if (v.choice === 'against') a += 1
-    else f += 1
-  }
-  return { f, a }
-}
 </script>
 
 <template>
   <section class="hcc-panel hcc-panel--vote" :aria-label="t('hostChrome.voting')">
     <h3 class="hcc-panel-title">{{ t('hostChrome.voting') }}</h3>
-    <div class="hcc-target-block">
-      <span class="hcc-target-block__lbl">{{ t('hostChrome.target') }}</span>
-      <strong class="hcc-target-block__id">{{ targetPlayerId || '—' }}</strong>
+    <p
+      class="hcc-ballot-pos"
+      :class="{ 'hcc-ballot-pos--empty': !ballotPosition }"
+    >
+      <template v-if="ballotPosition">
+        {{ t('hostChrome.ballotPosition', ballotPosition) }}
+      </template>
+      <template v-else>
+        {{ t('hostChrome.ballotQueueEmpty') }}
+      </template>
+    </p>
+    <p
+      v-if="votingActive && voteSlotRemaining != null"
+      class="hcc-vote-slot-timer"
+      role="timer"
+      :aria-live="voteSlotRemaining <= 3 ? 'assertive' : 'polite'"
+    >
+      {{ t('hostChrome.voteSlotTimer', { sec: voteSlotRemaining }) }}
+    </p>
+    <p v-else-if="!votingActive" class="hcc-vote-slot-idle">
+      {{ t('hostChrome.voteSlotIdleHint', { sec: slotDurationPick }) }}
+    </p>
+    <div class="hcc-vote-toolbar">
+      <div class="hcc-target-block hcc-target-block--compact">
+        <span class="hcc-target-block__lbl">{{ t('hostChrome.target') }}</span>
+        <strong class="hcc-target-block__id">{{ targetPlayerId || '—' }}</strong>
+      </div>
+      <div class="hcc-vote-toolbar__controls">
+        <div v-if="!votingActive" class="hcc-vote-dur-row">
+          <span class="hcc-vote-dur-lab">{{ t('hostChrome.voteSlotDuration') }}</span>
+          <div class="hcc-vote-dur-chips">
+            <button
+              v-for="s in [5, 10, 15, 30, 60]"
+              :key="'vd-' + s"
+              type="button"
+              class="hcc-chip-dur"
+              :class="{ on: slotDurationPick === s }"
+              @click="pickDur(s)"
+            >
+              {{ s }}s
+            </button>
+          </div>
+        </div>
+        <div class="hcc-vote-big">
+          <button
+            type="button"
+            class="hcc-btn-xl hcc-btn-xl--go"
+            :disabled="!canStart"
+            :title="t('hostChrome.startVoteTitle')"
+            @click="act('votingStart')"
+          >
+            {{ t('hostChrome.start') }}
+          </button>
+          <button
+            type="button"
+            class="hcc-btn-xl hcc-btn-xl--stop"
+            :disabled="!votingActive"
+            :title="t('hostChrome.stopVoteTitle')"
+            @click="act('votingFinish')"
+          >
+            {{ t('hostChrome.stop') }}
+          </button>
+        </div>
+      </div>
     </div>
-    <div class="hcc-vote-big">
-      <button
-        type="button"
-        class="hcc-btn-xl hcc-btn-xl--go"
-        :disabled="!canStart"
-        :title="t('hostChrome.startVoteTitle')"
-        @click="act('votingStart')"
-      >
-        {{ t('hostChrome.start') }}
-      </button>
-      <button
-        type="button"
-        class="hcc-btn-xl hcc-btn-xl--stop"
-        :disabled="!votingActive"
-        :title="t('hostChrome.stopVoteTitle')"
-        @click="act('votingFinish')"
-      >
-        {{ t('hostChrome.stop') }}
-      </button>
-    </div>
-    <details class="hcc-live">
-      <summary class="hcc-live__sum">
-        {{ t('hostChrome.live') }}
-        <template v-if="showLiveScore">
-          <span class="hcc-live__sc">👍 {{ countFor }}</span>
-          <span class="hcc-live__sc">👎 {{ countAgainst }}</span>
-        </template>
-        <span v-else class="hcc-live__empty">· 0</span>
-      </summary>
-      <p v-if="store.allPlayersVoted && votingActive" class="hcc-all">{{ t('hostChrome.allVoted') }}</p>
-      <p v-if="!targetPlayerId && !votingActive" class="hcc-hint">{{ t('hostChrome.targetHint') }}</p>
-      <ul v-if="lines.length" class="hcc-list">
-        <li v-for="row in lines" :key="row.voterId" class="hcc-li">
-          <span>{{ row.label }}</span>
-          <button type="button" class="hcc-rm" @click="act('removeVote', row.voterId)">×</button>
-        </li>
-      </ul>
-      <p v-else-if="votingActive" class="hcc-no-v">{{ t('hostChrome.noVotes') }}</p>
-    </details>
 
     <details v-if="handRaiseChips.length" class="hcc-sess hcc-sess--hands">
       <summary class="hcc-sess__sum">✋ {{ t('hostChrome.sessionHands') }}</summary>
@@ -110,25 +137,6 @@ function sessionTally(sess) {
           <span class="hcc-sess-n">×{{ row.n }}</span>
         </li>
       </ul>
-    </details>
-
-    <details v-if="voteHistory.length" class="hcc-sess hcc-sess--hist">
-      <summary class="hcc-sess__sum">{{ t('hostChrome.sessionHistory') }}</summary>
-      <p class="hcc-sess-hint">{{ t('hostChrome.sessionHistoryHint') }}</p>
-      <div class="hcc-hist-stack">
-        <div v-for="sess in voteHistory" :key="sess.id" class="hcc-hist-card">
-          <p class="hcc-hist-card__title">
-            R{{ sess.round }} · {{ t('hostChrome.target') }} {{ sess.target || '—' }} · 👍 {{ sessionTally(sess).f }} · 👎
-            {{ sessionTally(sess).a }}
-          </p>
-          <ul v-if="sess.votes && sess.votes.length" class="hcc-hist-ul">
-            <li v-for="(v, idx) in sess.votes" :key="sess.id + '-' + idx + '-' + v.voter" class="hcc-hist-li">
-              <span class="hcc-hist-voter">{{ v.voter }}</span>
-              <span class="hcc-hist-glyph">{{ choiceGlyph(v.choice) }}</span>
-            </li>
-          </ul>
-        </div>
-      </div>
     </details>
   </section>
 </template>

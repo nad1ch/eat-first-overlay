@@ -5,6 +5,7 @@
 
 .hcc {
   width: 100%;
+  min-width: 0;
   padding: var(--ui-space-3) 0 0;
   border-top: none;
   transition:
@@ -19,9 +20,10 @@
   margin-bottom: 0;
 }
 
+/* Flex row + stretch: три панелі однакової висоти (grid + height:100% на панелях давав роз’їзд). */
 .hcc-split {
-  display: grid;
-  grid-template-columns: var(--ui-container-split-columns);
+  display: flex;
+  flex-direction: row;
   align-items: stretch;
   gap: var(--ui-container-split-gap);
   width: 100%;
@@ -29,22 +31,36 @@
 
 @media (max-width: 960px) {
   .hcc-split {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /** У колонці не ділимо висоту порівну — кожна панель по контенту (без наїзду блоків). */
+  .hcc-split > .hcc-panel {
+    flex: 0 0 auto;
+    width: 100%;
+    min-height: 0;
   }
 }
 
 .hcc-panel {
   display: flex;
   flex-direction: column;
+  flex: 1 1 0;
   min-width: 0;
   min-height: 0;
-  height: 100%;
+  box-sizing: border-box;
   padding: var(--ui-container-panel-pad-y) var(--ui-container-panel-pad-x)
     var(--ui-container-panel-pad-bottom);
   border-radius: var(--ui-container-panel-radius);
   border: 1px solid var(--border);
   background: var(--bg-muted);
   box-shadow: 0 2px 12px var(--shadow-elevated);
+}
+
+/* Лічильник рук у колонці голосування — притискаємо донизу. */
+.hcc-panel--vote .hcc-sess--hands {
+  margin-top: auto;
 }
 
 .hcc-panel--controls {
@@ -58,6 +74,20 @@
   font-weight: var(--ui-type-panel-title-weight);
   letter-spacing: var(--ui-type-panel-title-track);
   color: var(--text-muted);
+}
+
+.hcc-timer-remain {
+  margin: 0 0 var(--ui-space-5);
+  padding: var(--ui-space-4) var(--ui-space-5);
+  border-radius: var(--ui-radius-md);
+  border: 1px solid var(--border-cyan);
+  background: var(--bg-obs-hint);
+  font-family: var(--font-display);
+  font-size: var(--ui-control-next-font);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--text-cyan-strong);
+  text-align: center;
 }
 
 .hcc-hands-bar {
@@ -419,6 +449,151 @@
   color: var(--text-muted);
 }
 
+.hcc-vote-toolbar {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: var(--ui-space-5);
+  margin-bottom: var(--ui-space-6);
+}
+
+.hcc-target-block--compact {
+  flex: 0 0 auto;
+  margin-bottom: 0;
+  padding: var(--ui-space-2) var(--ui-space-4);
+  min-width: 3.75rem;
+  max-width: 6.25rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.hcc-target-block--compact .hcc-target-block__lbl {
+  font-size: 0.5rem;
+  letter-spacing: 0.12em;
+}
+
+.hcc-target-block--compact .hcc-target-block__id {
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.hcc-vote-toolbar__controls {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-4);
+}
+
+.hcc-vote-toolbar__controls .hcc-vote-dur-row {
+  margin-bottom: 0;
+}
+
+.hcc-vote-toolbar__controls .hcc-vote-big {
+  margin-bottom: 0;
+}
+
+@media (max-width: 520px) {
+  .hcc-vote-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hcc-target-block--compact {
+    max-width: none;
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: center;
+    gap: var(--ui-space-3);
+    text-align: left;
+  }
+}
+
+.hcc-ballot-pos {
+  margin: 0 0 var(--ui-space-4);
+  font-size: var(--ui-type-caption-size);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-cyan-strong, #7dd3fc);
+}
+
+.hcc-ballot-pos--empty {
+  color: var(--text-highlight);
+  font-weight: 600;
+  font-style: italic;
+  letter-spacing: 0.03em;
+}
+
+.hcc-vote-slot-timer {
+  margin: 0 0 var(--ui-space-5);
+  padding: var(--ui-space-4) var(--ui-space-5);
+  border-radius: var(--ui-radius-md);
+  border: 1px solid var(--reveal-on-border);
+  background: color-mix(in srgb, var(--reveal-on-bg) 88%, transparent);
+  font-family: var(--font-display);
+  font-size: var(--ui-control-next-font);
+  font-weight: 800;
+  text-align: center;
+  color: var(--reveal-on-text);
+}
+
+.hcc-vote-slot-idle {
+  margin: 0 0 var(--ui-space-4);
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.hcc-vote-dur-row {
+  margin-bottom: var(--ui-space-5);
+}
+
+.hcc-vote-dur-lab {
+  display: block;
+  margin-bottom: var(--ui-space-3);
+  font-size: var(--ui-type-overline-size);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.hcc-vote-dur-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-3);
+}
+
+.hcc-chip-dur {
+  min-width: 2.5rem;
+  padding: 0.28rem 0.45rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-input);
+  background: var(--bg-card-solid);
+  color: var(--text-body);
+  font-size: 0.68rem;
+  font-weight: 800;
+  font-family: var(--font-display);
+  cursor: pointer;
+}
+
+.hcc-chip-dur:hover {
+  border-color: var(--border-strong);
+}
+
+.hcc-chip-dur.on {
+  border-color: var(--border-cyan-strong);
+  background: color-mix(in srgb, var(--accent-fill) 28%, transparent);
+  color: var(--text-title);
+}
+
 .hcc-vote-big {
   display: flex;
   flex-wrap: wrap;
@@ -529,94 +704,6 @@
   color: var(--text-highlight);
 }
 
-.hcc-live {
-  border: 1px solid var(--border-cyan);
-  border-radius: var(--ui-radius-lg);
-  padding: var(--ui-space-2) var(--ui-space-6) var(--ui-space-6);
-  background: var(--bg-obs-hint);
-}
-
-.hcc-live__sum {
-  font-size: 0.55rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  color: var(--text-cyan);
-  cursor: pointer;
-  list-style: none;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.3rem;
-}
-
-.hcc-live__sum::-webkit-details-marker {
-  display: none;
-}
-
-.hcc-live__sc {
-  font-family: var(--font-display);
-  color: var(--text-body);
-}
-
-.hcc-live__empty {
-  color: var(--text-muted);
-  font-weight: 600;
-}
-
-.hcc-all {
-  margin: 0.2rem 0 0;
-  font-size: 0.5rem;
-  font-weight: 900;
-  letter-spacing: 0.1em;
-  color: var(--reveal-on-text);
-}
-
-.hcc-hint {
-  margin: 0.2rem 0 0;
-  font-size: 0.52rem;
-  color: var(--text-highlight);
-  font-weight: 600;
-}
-
-.hcc-list {
-  list-style: none;
-  margin: 0.2rem 0 0;
-  padding: 0;
-  max-height: 5rem;
-  overflow-y: auto;
-}
-
-.hcc-li {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: 0.55rem;
-  font-family: var(--font-display);
-  color: var(--text-body);
-  padding: 0.1rem 0;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.hcc-rm {
-  width: 1.35rem;
-  height: 1.35rem;
-  border-radius: 5px;
-  border: 1px solid var(--reveal-off-border);
-  background: var(--reveal-off-bg);
-  color: var(--reveal-off-text);
-  cursor: pointer;
-  flex-shrink: 0;
-  font-size: 0.75rem;
-  line-height: 1;
-}
-
-.hcc-no-v {
-  margin: 0.15rem 0 0;
-  font-size: 0.52rem;
-  color: var(--text-muted);
-}
-
 .hcc-sess {
   margin-top: var(--ui-space-6);
   border: 1px solid var(--border-subtle);
@@ -636,14 +723,6 @@
 
 .hcc-sess__sum::-webkit-details-marker {
   display: none;
-}
-
-.hcc-sess-hint {
-  margin: 0.25rem 0 0.35rem;
-  font-size: 0.48rem;
-  line-height: 1.35;
-  color: var(--text-highlight);
-  font-weight: 600;
 }
 
 .hcc-sess-list {
@@ -667,53 +746,6 @@
 .hcc-sess-n {
   font-weight: 800;
   color: var(--text-body);
-}
-
-.hcc-hist-stack {
-  margin-top: 0.25rem;
-  max-height: 8rem;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.hcc-hist-card {
-  padding: 0.3rem 0.4rem;
-  border-radius: 6px;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-card-solid);
-}
-
-.hcc-hist-card__title {
-  margin: 0;
-  font-size: 0.5rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  color: var(--text-body);
-  line-height: 1.35;
-}
-
-.hcc-hist-ul {
-  margin: 0.25rem 0 0;
-  padding: 0 0 0 0.85rem;
-  font-size: 0.48rem;
-}
-
-.hcc-hist-li {
-  margin: 0.08rem 0;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.hcc-hist-voter {
-  font-family: var(--font-display);
-  font-weight: 700;
-}
-
-.hcc-hist-glyph {
-  margin-left: auto;
 }
 
 @container hcc-controls (max-width: 400px) {

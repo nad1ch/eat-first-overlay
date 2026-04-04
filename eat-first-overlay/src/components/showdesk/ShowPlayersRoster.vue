@@ -23,6 +23,17 @@ const props = defineProps({
   useHostPanel: { type: Boolean, default: false },
   /** Слоти для чипів «кого номінують» (ціль номінації) */
   playerSlots: { type: Array, default: () => [] },
+  /** Слоти, позначені чекбоксом для масових дій (ведучий) */
+  bulkSelectedIds: { type: Array, default: () => [] },
+  /** Підказка порядку номінацій / черги голосування */
+  orderHint: { type: String, default: '' },
+  /** Список слотів, що вже віддали голос у поточному раунді */
+  votedPlayerIdsThisRound: { type: Array, default: () => [] },
+  /**
+   * Останній слот черги = останній за номінаціями: спочатку показуємо тих, хто ще не голосував
+   * (руки / порядок карток).
+   */
+  prioritizeNonVoterHands: { type: Boolean, default: false },
 })
 
 const emit = defineEmits([
@@ -30,6 +41,10 @@ const emit = defineEmits([
   'host-command',
   'update:selectedPlayerId',
   'toggle-nomination',
+  'toggle-bulk',
+  'apply-ballot-order',
+  'bulk-delete-request',
+  'bulk-clear',
 ])
 
 function cardActive(p) {
@@ -55,10 +70,23 @@ function nominatorsLine(pid) {
   return nums.length ? nums.join(', ') : ''
 }
 
-function statusLine(p) {
+function playerDisplayName(p) {
+  const nm = typeof p?.name === 'string' ? p.name.trim() : ''
+  return nm.length ? nm : ''
+}
+
+/** Під номером слота: нік (якщо є), інакше статуси / «—». */
+function cardSubtitle(p) {
   if (p.eliminated === true) return t('roster.eliminated')
+  const nm = playerDisplayName(p)
+  if (nm) return nm
   if (String(p.id) === String(props.spotlightPlayerId || '').trim()) return t('roster.spotlightStatus')
   return t('roster.statusDash')
+}
+
+function cardSubtitleIsName(p) {
+  if (p.eliminated === true) return false
+  return Boolean(playerDisplayName(p))
 }
 
 function isSpeak(p) {
@@ -99,9 +127,27 @@ function handUp(p) {
   return props.handsMap?.[id] === true
 }
 
+const votedSet = computed(() => {
+  const s = new Set()
+  for (const id of props.votedPlayerIdsThisRound || []) {
+    const n = normalizePlayerSlotId(String(id ?? ''))
+    if (n) s.add(n)
+  }
+  return s
+})
+
 const playersSorted = computed(() => {
   const list = [...props.players]
+  const pri = props.prioritizeNonVoterHands && props.useHostPanel
+  const vset = votedSet.value
   list.sort((a, b) => {
+    const ida = normalizePlayerSlotId(String(a.id))
+    const idb = normalizePlayerSlotId(String(b.id))
+    if (pri) {
+      const av = vset.has(ida) ? 1 : 0
+      const bv = vset.has(idb) ? 1 : 0
+      if (av !== bv) return av - bv
+    }
     const ah = handUp(a) ? 1 : 0
     const bh = handUp(b) ? 1 : 0
     if (bh !== ah) return bh - ah
@@ -151,11 +197,11 @@ function cmd(type) {
 }
 
 /** Обрана картка = хто виставляє (by); chip = кого виставляють (target). */
-function pairActive(targetSlot) {
+function pairActive(slot) {
   const by = String(props.selectedPlayerId || '').trim()
-  const t = String(targetSlot || '').trim()
-  if (!t || !by) return false
-  return props.nominations.some((n) => String(n.target) === t && String(n.by) === by)
+  const tgt = String(slot || '').trim()
+  if (!tgt || !by) return false
+  return props.nominations.some((n) => String(n.target) === tgt && String(n.by) === by)
 }
 
 function toggleNom(targetSlot) {
@@ -163,6 +209,16 @@ function toggleNom(targetSlot) {
   const target = String(targetSlot || '').trim()
   if (!target || !by || selectedEliminated.value) return
   emit('toggle-nomination', { target, by })
+}
+
+function isBulkChecked(pid) {
+  const id = String(pid ?? '')
+  return props.bulkSelectedIds.some((x) => String(x) === id)
+}
+
+function onBulkCheckboxChange(p, ev) {
+  ev.stopPropagation()
+  emit('toggle-bulk', { id: p.id, checked: ev.target.checked })
 }
 
 const aliveSlotsForNom = computed(() => {
@@ -177,29 +233,54 @@ const aliveSlotsForNom = computed(() => {
     <p class="roster-hint">
       {{ useHostPanel ? t('roster.hintPanel') : t('roster.hintClick') }}
     </p>
+    <p v-if="useHostPanel && orderHint" class="roster-order-hint">{{ orderHint }}</p>
+    <p v-if="useHostPanel && prioritizeNonVoterHands" class="roster-nonvote-hint">{{ t('roster.nonVoterHandsFirst') }}</p>
+    <p v-if="useHostPanel" class="roster-bulk-hint">{{ t('roster.bulkHint') }}</p>
 
     <div class="roster-shell" :class="{ 'roster-shell--panel': useHostPanel }">
-      <div class="roster-grid">
-        <button
+      <div class="roster-grid" :class="{ 'roster-grid--host-panel': useHostPanel }">
+        <div
           v-for="p in playersSorted"
           :key="p.id"
-          type="button"
-          class="pcard"
+          class="pcard-shell"
           :class="{
-            on: p.id === currentPlayerId,
-            pick: useHostPanel && String(selectedPlayerId) === String(p.id),
-            elim: p.eliminated === true,
-            speak: String(speakerId || '').trim() === p.id,
-            spot: String(spotlightPlayerId || '').trim() === p.id,
-            'pcard--hand': handUp(p),
-            'pcard--vote-target':
-              votingActive &&
-              String(votingTargetId || '').trim() === p.id &&
-              p.eliminated !== true &&
-              String(speakerId || '').trim() !== p.id,
+            'pcard-shell--bulk-on': useHostPanel && isBulkChecked(p.id),
+            'pcard-shell--host-bulk': useHostPanel && p.eliminated !== true,
           }"
-          @click="onCardClick(p)"
         >
+          <label
+            v-if="useHostPanel && p.eliminated !== true"
+            class="pcard-bulk ui-checkbox"
+            :title="t('roster.bulkCheckTitle')"
+            @click.stop
+          >
+            <span class="ui-checkbox__hit">
+              <input
+                type="checkbox"
+                :checked="isBulkChecked(p.id)"
+                @change="onBulkCheckboxChange(p, $event)"
+              />
+              <span class="ui-checkbox__box" aria-hidden="true" />
+            </span>
+          </label>
+          <button
+            type="button"
+            class="pcard"
+            :class="{
+              on: p.id === currentPlayerId,
+              pick: useHostPanel && String(selectedPlayerId) === String(p.id),
+              elim: p.eliminated === true,
+              speak: String(speakerId || '').trim() === p.id,
+              spot: String(spotlightPlayerId || '').trim() === p.id,
+              'pcard--hand': handUp(p),
+              'pcard--vote-target':
+                votingActive &&
+                String(votingTargetId || '').trim() === p.id &&
+                p.eliminated !== true &&
+                String(speakerId || '').trim() !== p.id,
+            }"
+            @click="onCardClick(p)"
+          >
           <span
             v-if="handUp(p) && p.eliminated !== true"
             class="pcard-hand-corner"
@@ -217,6 +298,19 @@ const aliveSlotsForNom = computed(() => {
             ✓
           </span>
           <span v-if="p.eliminated === true" class="elim-badge" aria-hidden="true">{{ t('roster.eliminated') }}</span>
+          <div v-if="useHostPanel" class="pcard-host-top">
+            <div v-if="p.eliminated !== true && showBadgesRow(p)" class="pcard-badges">
+              <span v-if="isSpeak(p)" class="pcb pcb--speak">{{ t('roster.speaking') }}</span>
+              <template v-else>
+                <span v-if="isVoteTargetCard(p)" class="pcb pcb--target">{{ t('roster.targetBadge') }}</span>
+                <template v-if="isNominatedCard(p)">
+                  <span class="pcb pcb--nom">{{ t('roster.nomBadge') }}</span>
+                  <span class="pcb pcb--nom-who">{{ nominatorsLine(p.id) }}</span>
+                </template>
+              </template>
+            </div>
+            <div v-else class="pcard-badges pcard-badges--reserve" aria-hidden="true" />
+          </div>
           <div v-else-if="showBadgesRow(p)" class="pcard-badges">
             <span v-if="isSpeak(p)" class="pcb pcb--speak">{{ t('roster.speaking') }}</span>
             <template v-else>
@@ -228,17 +322,40 @@ const aliveSlotsForNom = computed(() => {
             </template>
           </div>
           <span class="num">{{ slotNum(p.id) }}</span>
-          <span class="st">{{ statusLine(p) }}</span>
+          <span class="st" :class="{ 'st--name': cardSubtitleIsName(p) }">{{ cardSubtitle(p) }}</span>
           <span v-if="cardActive(p)" class="card-ico" :title="t('roster.activeCardTitle')">🃏</span>
-        </button>
+          </button>
+        </div>
       </div>
 
       <aside v-if="useHostPanel" class="act-panel">
+        <template v-if="bulkSelectedIds.length">
+          <p class="act-bulk-meta">{{ t('roster.bulkSelected', { n: bulkSelectedIds.length }) }}</p>
+          <button type="button" class="act-btn act-btn--danger" @click="emit('bulk-delete-request')">
+            {{ t('roster.bulkDelete', { n: bulkSelectedIds.length }) }}
+          </button>
+          <button type="button" class="act-btn act-btn--ghost" @click="emit('bulk-clear')">
+            {{ t('roster.bulkClear') }}
+          </button>
+          <hr class="act-divider" />
+        </template>
+        <button type="button" class="act-btn act-btn--soft act-btn--ballot" @click="emit('apply-ballot-order')">
+          {{ t('roster.ballotFromNom') }}
+        </button>
         <template v-if="selectedPlayer">
           <p class="act-panel__id">{{ selectedPlayerId }}</p>
-          <button type="button" class="act-btn act-btn--soft" @click="openEditorSelected">{{ t('roster.editor') }}</button>
 
-          <template v-if="!selectedEliminated">
+          <template v-if="selectedEliminated">
+            <p class="act-elim-note">{{ t('roster.eliminated') }}</p>
+            <button type="button" class="act-btn act-btn--revive" @click="cmd('revive-player')">
+              {{ t('roster.returnToGame') }}
+            </button>
+            <button type="button" class="act-btn act-btn--soft" @click="openEditorSelected">{{ t('roster.editor') }}</button>
+          </template>
+
+          <template v-else>
+            <button type="button" class="act-btn act-btn--soft" @click="openEditorSelected">{{ t('roster.editor') }}</button>
+
             <button v-if="!speakerOnSelected" type="button" class="act-btn" @click="cmd('speaker')">
               {{ t('roster.speaker') }}
             </button>
@@ -303,6 +420,73 @@ const aliveSlotsForNom = computed(() => {
   color: var(--text-muted);
 }
 
+.roster-order-hint {
+  margin: -0.4rem 0 0.45rem;
+  font-size: 0.62rem;
+  line-height: 1.35;
+  color: var(--text-cyan-strong, #7dd3fc);
+  font-weight: 700;
+}
+
+.roster-nonvote-hint {
+  margin: -0.15rem 0 0.5rem;
+  font-size: 0.58rem;
+  line-height: 1.35;
+  color: var(--text-highlight);
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.roster-bulk-hint {
+  margin: 0 0 0.55rem;
+  font-size: 0.58rem;
+  line-height: 1.3;
+  color: var(--text-muted);
+}
+
+.pcard-shell {
+  position: relative;
+  /* Не даємо слоту стиснутись у «смужку» поруч з панеллю ведучого. */
+  min-width: min(100%, 7.25rem);
+}
+
+.pcard-shell--bulk-on .pcard {
+  border-color: var(--border-cyan-strong, rgba(94, 231, 223, 0.55));
+  box-shadow: 0 0 0 1px rgba(94, 231, 223, 0.2);
+}
+
+.pcard-bulk {
+  position: absolute;
+  left: 0.12rem;
+  top: 0.12rem;
+  z-index: 5;
+  margin: 0;
+  cursor: pointer;
+}
+
+.pcard-bulk.ui-checkbox {
+  --ui-check-size: 1.05rem;
+}
+
+.act-bulk-meta {
+  margin: 0 0 0.4rem;
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: var(--text-highlight);
+}
+
+.act-divider {
+  margin: 0.65rem 0;
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.act-btn--ghost {
+  border: 1px dashed var(--border-subtle);
+  background: transparent;
+  color: var(--text-muted);
+}
+
 .roster--embedded {
   padding: 0;
   margin-bottom: 0;
@@ -335,8 +519,113 @@ const aliveSlotsForNom = computed(() => {
 
 .roster-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
   gap: 0.45rem;
+}
+
+/* Запас під scale(1.03) при hover, щоби світіння рамки не ловив overflow батьківського блоку. */
+.roster-grid--host-panel {
+  padding: 0.4rem 0.3rem;
+  margin: -0.15rem -0.1rem 0;
+  /* Більші клітинки → 3–4 рядки при ~10 слотах замість одного довгого ряду. */
+  grid-template-columns: repeat(auto-fill, minmax(9.75rem, 1fr));
+  gap: 0.55rem 0.5rem;
+}
+
+.roster-grid--host-panel .pcard-shell {
+  min-width: min(100%, 9.75rem);
+  border-radius: 12px;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.roster-grid--host-panel .pcard {
+  height: 8.2rem;
+  min-height: 8.2rem;
+  max-height: 8.2rem;
+  padding: 0.52rem 0.44rem 0.52rem;
+  gap: 0.26rem;
+  justify-content: flex-start;
+}
+
+.pcard-host-top {
+  width: 100%;
+  min-height: 1.32rem;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  margin-bottom: 0.12rem;
+  flex-shrink: 0;
+}
+
+.roster-grid--host-panel .pcard-badges {
+  min-height: 1.12rem;
+  margin-bottom: 0;
+}
+
+.pcard-badges--reserve {
+  min-height: 1.12rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.roster-grid--host-panel .num {
+  font-size: 1.75rem;
+}
+
+.roster-grid--host-panel .st {
+  font-size: 0.66rem;
+  white-space: normal;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  line-height: 1.32;
+  min-height: 2.64em;
+  word-break: break-word;
+}
+
+.roster-grid--host-panel .st--name {
+  font-size: 0.82rem;
+  letter-spacing: 0.03em;
+}
+
+.roster-grid--host-panel .pcb {
+  font-size: 0.52rem;
+}
+
+.roster-grid--host-panel .pcb--nom {
+  font-size: 0.47rem;
+}
+
+.roster-grid--host-panel .pcb--nom-who {
+  font-size: 0.45rem;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+}
+
+.roster-grid--host-panel .elim-badge {
+  font-size: 0.55rem;
+  top: 0.24rem;
+}
+
+.roster-grid--host-panel .card-ico {
+  font-size: 0.82rem;
+  top: 0.22rem;
+  right: 0.26rem;
+}
+
+.roster-grid--host-panel .pcard-hand-corner {
+  font-size: 1.08rem;
+}
+
+.roster-grid--host-panel .pcard-ready-corner {
+  font-size: 0.84rem;
 }
 
 .pcard-badges {
@@ -393,11 +682,17 @@ const aliveSlotsForNom = computed(() => {
   position: absolute;
   left: 0.2rem;
   top: 0.2rem;
-  z-index: 3;
+  z-index: 6;
   font-size: 1rem;
   line-height: 1;
   filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.55));
   pointer-events: none;
+}
+
+/* Чекбокс масового виділення зліва зверху — руку зсуваємо, щоб не ховалась під ним. */
+.pcard-shell--host-bulk .pcard-hand-corner {
+  left: 1.4rem;
+  top: 0.14rem;
 }
 
 .pcard-ready-corner {
@@ -415,6 +710,8 @@ const aliveSlotsForNom = computed(() => {
 
 .pcard {
   position: relative;
+  width: 100%;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -493,9 +790,55 @@ const aliveSlotsForNom = computed(() => {
   pointer-events: none;
 }
 
-.pcard.elim > * {
+/* Не робимо relative абсолютні кутки / бейдж — інакше «ВИБУВ» потрапляє в потік і зсуває .num */
+.pcard.elim > *:not(.elim-badge):not(.card-ico):not(.pcard-hand-corner):not(.pcard-ready-corner) {
   position: relative;
   z-index: 1;
+}
+
+/** Після базового .pcard.elim — вибір / редактор на вибулих без зовнішнього glow за край картки. */
+.pcard.elim.pick {
+  border-color: rgba(45, 212, 191, 0.45);
+  box-shadow:
+    inset 0 0 0 2px rgba(45, 212, 191, 0.55),
+    inset 0 0 44px rgba(0, 0, 0, 0.62);
+}
+
+.pcard.elim.on {
+  border-color: rgba(168, 85, 247, 0.45);
+  box-shadow:
+    inset 0 0 0 2px rgba(168, 85, 247, 0.38),
+    inset 0 0 44px rgba(0, 0, 0, 0.62);
+}
+
+.pcard.elim.on.pick {
+  border-color: rgba(45, 212, 191, 0.5);
+  box-shadow:
+    inset 0 0 0 2px rgba(45, 212, 191, 0.58),
+    inset 0 0 36px rgba(88, 28, 135, 0.25),
+    inset 0 0 44px rgba(0, 0, 0, 0.55);
+}
+
+.pcard.elim:hover {
+  transform: none;
+  border-color: rgba(127, 29, 29, 0.65);
+  box-shadow: inset 0 0 48px rgba(0, 0, 0, 0.65);
+}
+
+.pcard.elim.pick:hover {
+  transform: none;
+  border-color: rgba(45, 212, 191, 0.55);
+  box-shadow:
+    inset 0 0 0 2px rgba(45, 212, 191, 0.62),
+    inset 0 0 44px rgba(0, 0, 0, 0.62);
+}
+
+.pcard.elim.on:hover:not(.pick) {
+  transform: none;
+  border-color: rgba(168, 85, 247, 0.52);
+  box-shadow:
+    inset 0 0 0 2px rgba(168, 85, 247, 0.42),
+    inset 0 0 44px rgba(0, 0, 0, 0.62);
 }
 
 .elim-badge {
@@ -535,11 +878,24 @@ const aliveSlotsForNom = computed(() => {
 }
 
 .st {
+  width: 100%;
+  max-width: 100%;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 0.58rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
+}
+
+.st--name {
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-weight: 600;
+  font-size: 0.62rem;
 }
 
 .pcard.speak .st {
@@ -662,6 +1018,27 @@ const aliveSlotsForNom = computed(() => {
 
 .act-btn--danger {
   border-color: rgba(248, 113, 113, 0.35);
+  color: #fecaca;
+}
+
+.act-btn--revive {
+  border-color: rgba(52, 211, 153, 0.45);
+  background: color-mix(in srgb, rgba(16, 185, 129, 0.22) 50%, var(--bg-card-soft));
+  color: #a7f3d0;
+  font-weight: 800;
+}
+
+.act-btn--revive:hover {
+  border-color: rgba(52, 211, 153, 0.65);
+  color: #ecfdf5;
+}
+
+.act-elim-note {
+  margin: 0 0 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-align: center;
   color: #fecaca;
 }
 
