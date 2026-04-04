@@ -14,7 +14,11 @@ import {
 import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
 import { millisFromFirestore } from '../utils/firestoreTime.js'
 import AppPageLoader from '../ui/molecules/AppPageLoader.vue'
+import VoiceVideoGrid from '../components/VoiceVideoGrid.vue'
+import { liveKitConfigured } from '../config/livekit.js'
 import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId.js'
+import { normalizePlayerSlotId } from '../utils/playerSlot.js'
+import { getOrCreateDeviceId } from '../utils/deviceId.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -40,6 +44,15 @@ const personalPlayerId = computed(() => {
 
 const isPersonal = computed(() => personalPlayerId.value != null)
 
+/** Унікальний identity для глобального оверлею (spectator), щоб не зіткнутися з іншим учасником у LiveKit. */
+const liveKitIdentity = computed(() => {
+  if (personalPlayerId.value) return normalizePlayerSlotId(personalPlayerId.value)
+  const dev = getOrCreateDeviceId().replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)
+  return `spectator-${dev || 'browser'}`
+})
+
+const lkSpotlightUnmute = computed(() => String(route.query.lk_focus ?? '') === '1')
+
 const players = ref([])
 const singlePlayer = ref(null)
 const gameRoom = ref({})
@@ -56,6 +69,34 @@ const overlayTokenGateBlocks = computed(() => {
   const st = typeof p.joinToken === 'string' ? p.joinToken.trim() : ''
   if (!st) return false
   return urlTok !== st
+})
+
+const liveKitDisplayName = computed(() => {
+  if (personalPlayerId.value && singlePlayer.value && typeof singlePlayer.value.name === 'string') {
+    return singlePlayer.value.name
+  }
+  if (personalPlayerId.value) return personalPlayerId.value
+  return 'Spectator'
+})
+
+const liveKitCanPublish = computed(() => {
+  if (!personalPlayerId.value) return false
+  if (overlayTokenGateBlocks.value) return false
+  if (singlePlayer.value?.eliminated === true) return false
+  return true
+})
+
+const liveKitEliminatedLocal = computed(() => singlePlayer.value?.eliminated === true)
+
+const liveKitPlayerNameMap = computed(() => {
+  const m = {}
+  if (isPersonal.value && singlePlayer.value) {
+    m[singlePlayer.value.id] = singlePlayer.value.name || singlePlayer.value.id
+  }
+  for (const p of players.value) {
+    m[p.id] = typeof p.name === 'string' && p.name.trim() ? p.name : p.id
+  }
+  return m
 })
 
 let unsubscribe = null
@@ -425,6 +466,19 @@ onUnmounted(() => {
 
 <template>
   <div class="overlay-page">
+    <VoiceVideoGrid
+      v-if="liveKitConfigured()"
+      :overlay-ready="overlayPageReady"
+      :game-id="gameId"
+      :local-identity="liveKitIdentity"
+      :display-name="liveKitDisplayName"
+      :can-publish="liveKitCanPublish"
+      :spotlight-slot="activeSpotlightId ?? ''"
+      :speaker-slot="speakerForTimerId ?? ''"
+      :spotlight-unmute-mode="lkSpotlightUnmute"
+      :eliminated-local="liveKitEliminatedLocal"
+      :player-name-map="liveKitPlayerNameMap"
+    />
     <AppPageLoader
       :visible="!overlayPageReady"
       :label="t('overlayPage.sync')"

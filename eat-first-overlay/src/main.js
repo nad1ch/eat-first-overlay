@@ -20,6 +20,7 @@ if (typeof window !== 'undefined') {
 }
 import { initAnalytics, trackTechnicalEvent } from './analytics/bootstrap.js'
 import { ensureMetaDescription } from './constants/seo.js'
+import { callableApiEnabled } from './services/callableApi.js'
 import { ensureAnonymousAuth } from './services/authBootstrap.js'
 
 ensureMetaDescription()
@@ -49,6 +50,16 @@ if (typeof document !== 'undefined') {
 }
 
 ;(async () => {
-  await ensureAnonymousAuth().catch((e) => console.warn('[auth bootstrap]', e))
+  if (callableApiEnabled()) {
+    await ensureAnonymousAuth().catch((e) => {
+      const code = e && typeof e === 'object' && 'code' in e ? String(e.code) : ''
+      console.warn(
+        '[auth] Anonymous sign-in не вдався (потрібно для Cloud Functions). ' +
+          'У Firebase Console: Authentication → почати/увімкнути провайдер Anonymous. ' +
+          'Якщо Functions не використовуєш — прибери VITE_FUNCTIONS_REGION з env.',
+        code || e,
+      )
+    })
+  }
   app.mount('#app')
 })()
