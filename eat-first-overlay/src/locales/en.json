@@ -23,6 +23,89 @@
     "footerEggClose": "Close",
     "footerEggHint": "Click the bagel or stick"
   },
+  "onboarding": {
+    "openGuide": "How to use",
+    "close": "Close",
+    "progress": "Step {n} of {total}",
+    "next": "Next",
+    "back": "Back",
+    "done": "Done",
+    "dontShowAgain": "Do not show again for this page",
+    "tours": {
+      "join": {
+        "title": "Lobby — quick start",
+        "steps": [
+          {
+            "title": "What to do here",
+            "text": "Enter the game id from the stream. The slot grid is player seats. Each streamer adds their own overlay in OBS; the global grid is only a helper."
+          },
+          {
+            "title": "You are a player",
+            "text": "Pick a free slot. On the slot: “Overlay” (OBS URL) and “My panel” (cards and actions). Without a slot the panel is unavailable."
+          },
+          {
+            "title": "You are the host",
+            "text": "The desk opens from a separate link (key or host mode from the lobby). Players still enter via the lobby; they do not need the desk URL."
+          },
+          {
+            "title": "OBS",
+            "text": "Add a browser source with the URL from your slot card. Enable transparent background. Scale and crop for your scene layout."
+          }
+        ]
+      },
+      "controlHost": {
+        "title": "Host desk — basics",
+        "steps": [
+          {
+            "title": "Overview",
+            "text": "Show phases and the room live here. Collapse blocks to reduce clutter on stream."
+          },
+          {
+            "title": "Players & slots",
+            "text": "Select a slot in the roster — actions appear on the right: cards, elimination, helpers. Changes show on player overlays right away."
+          },
+          {
+            "title": "Characters & cards",
+            "text": "Edit the player name and art for the room, save. Attach cards to a slot when you run the bit."
+          },
+          {
+            "title": "Voting",
+            "text": "When the voting phase is active, run the poll and finale per your show rules; players vote from their panels."
+          }
+        ]
+      },
+      "controlPlayer": {
+        "title": "Player panel — basics",
+        "steps": [
+          {
+            "title": "What this is",
+            "text": "You control your cards and on-stream state. The host drives room phases — actions may be locked until the phase allows them."
+          },
+          {
+            "title": "Cards & broadcast",
+            "text": "Dealing and revealing updates your OBS overlay — viewers see what you do in the panel. During voting, follow the room prompts."
+          },
+          {
+            "title": "Show this again",
+            "text": "Tap “How to use” in the header anytime to reopen this walkthrough."
+          }
+        ]
+      },
+      "overlay": {
+        "title": "Overlay for OBS",
+        "steps": [
+          {
+            "title": "What this page is for",
+            "text": "You do not click it while playing — only add it as a browser source over your scene in OBS (or similar)."
+          },
+          {
+            "title": "How to hook it up",
+            "text": "Create a browser source and paste the same URL as “Overlay” in the lobby. Enable transparent background; resize and position for your camera."
+          }
+        ]
+      }
+    }
+  },
   "join": {
     "loading": "Connecting to the room…",
     "eyebrow": "Live show",

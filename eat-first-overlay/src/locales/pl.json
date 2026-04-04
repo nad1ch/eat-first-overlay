@@ -23,6 +23,89 @@
     "footerEggClose": "Zamknij",
     "footerEggHint": "Kliknij bajgiel lub patyczek"
   },
+  "onboarding": {
+    "openGuide": "Jak korzystać",
+    "close": "Zamknij",
+    "progress": "Krok {n} z {total}",
+    "next": "Dalej",
+    "back": "Wstecz",
+    "done": "Gotowe",
+    "dontShowAgain": "Nie pokazuj ponownie na tej stronie",
+    "tours": {
+      "join": {
+        "title": "Lobby — szybki start",
+        "steps": [
+          {
+            "title": "Co tu zrobić",
+            "text": "Wpisz ID gry ze streamu. Siatka slotów to miejsca graczy. Każdy streamer dodaje swój overlay w OBS osobno; globalna siatka jest tylko pomocą."
+          },
+          {
+            "title": "Jesteś graczem",
+            "text": "Wybierz wolny slot. Przy slocie: „Overlay” (URL do OBS) i „Mój panel” (karty i akcje). Bez slotu panel jest niedostępny."
+          },
+          {
+            "title": "Jesteś prowadzącym",
+            "text": "Pulpit otwiera się osobnym linkiem (klucz lub tryb hosta z lobby). Gracze i tak wchodzą przez lobby; URL pulpitu im nie jest potrzebny."
+          },
+          {
+            "title": "OBS",
+            "text": "Źródło przeglądarki z URL ze slotu. Włącz przezroczyste tło. Dopasuj skalę i kadrowanie do swojej sceny."
+          }
+        ]
+      },
+      "controlHost": {
+        "title": "Pulpit prowadzącego — skrót",
+        "steps": [
+          {
+            "title": "Ogólnie",
+            "text": "Tutaj idą fazy show i pokój na żywo. Bloki można zwijać — mniej bałaganu na stole w streamie."
+          },
+          {
+            "title": "Gracze i sloty",
+            "text": "Wybierz slot w rosterze — po prawej pojawią się akcje: karty, odpad, pomocnicze. Zmiany widać od razu na overlayach."
+          },
+          {
+            "title": "Postać i karty",
+            "text": "Edytuj imię i grafikę gracza w pokoju, zapisz. Podłącz karty do slotu, gdy prowadzisz numer."
+          },
+          {
+            "title": "Głosowanie",
+            "text": "Gdy faza głosowania jest aktywna — prowadź plebiscyt i finał według zasad show; gracze głosują ze swoich paneli."
+          }
+        ]
+      },
+      "controlPlayer": {
+        "title": "Panel gracza — skrót",
+        "steps": [
+          {
+            "title": "Co to jest",
+            "text": "Sterujesz kartami i stanem na wizji. Fazy ustala prowadzący — część akcji może być zablokowana do czasu, aż faza na to pozwoli."
+          },
+          {
+            "title": "Karty i wizja",
+            "text": "Rozdanie/odkrycie aktualizuje twój overlay w OBS — widzowie widzą to, co robisz w panelu. Przy głosowaniu trzymaj się podpowiedzi z pokoju."
+          },
+          {
+            "title": "Pokaż ponownie",
+            "text": "„Jak korzystać” w nagłówku otworzy tę instrukcję w dowolnej chwili."
+          }
+        ]
+      },
+      "overlay": {
+        "title": "Overlay do OBS",
+        "steps": [
+          {
+            "title": "Do czego ta strona",
+            "text": "Nie klika się jej w grze — tylko dodaje jako źródło przeglądarki nad sceną w OBS (lub podobnym)."
+          },
+          {
+            "title": "Jak podłączyć",
+            "text": "Utwórz browser source, wklej ten sam URL co „Overlay” w lobby. Przezroczyste tło; dopasuj rozmiar i pozycję do kamery."
+          }
+        ]
+      }
+    }
+  },
   "join": {
     "loading": "Łączenie z pokojem…",
     "eyebrow": "Live show",

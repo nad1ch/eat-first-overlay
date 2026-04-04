@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useTheme } from './composables/useTheme.js'
@@ -8,9 +8,15 @@ import HostControlChromeBar from './components/showdesk/HostControlChromeBar.vue
 import AppHeaderNav from './ui/molecules/AppHeaderNav.vue'
 import AppHeaderToolbar from './ui/organisms/AppHeaderToolbar.vue'
 import AppSiteFooter from './ui/organisms/AppSiteFooter.vue'
+import OnboardingTourModal from './ui/organisms/OnboardingTourModal.vue'
 import { persistLocale, LOCALE_OPTIONS } from './i18n'
 import { useSeoCanonical } from './composables/useSeoCanonical.js'
 import { adminControlTransitionInstant } from './router.js'
+import {
+  dismissOnboardingTour,
+  isOnboardingDismissed,
+  resolveOnboardingTourKeyFromRoute,
+} from './utils/onboardingStorage.js'
 
 const localeMenuOptions = LOCALE_OPTIONS.map((o) => ({ value: o.code, label: o.label }))
 
@@ -40,6 +46,36 @@ const routeTransition = computed(() => {
 const themeIcon = computed(() => (theme.value === 'dark' ? '☀️' : '🌙'))
 const themeLabel = computed(() => (theme.value === 'dark' ? t('app.themeLight') : t('app.themeDark')))
 const footerYear = new Date().getFullYear()
+
+const onboardingOpen = ref(false)
+const onboardingTourKey = ref('')
+
+const onboardingForRoute = computed(() => resolveOnboardingTourKeyFromRoute(route))
+
+function openOnboardingForCurrentRoute() {
+  const k = onboardingForRoute.value
+  if (!k) return
+  onboardingTourKey.value = k
+  onboardingOpen.value = true
+}
+
+function tryAutoOnboarding() {
+  const k = onboardingForRoute.value
+  if (!k || isOnboardingDismissed(k)) return
+  nextTick(() => {
+    const again = onboardingForRoute.value
+    if (!again || again !== k || isOnboardingDismissed(k)) return
+    onboardingTourKey.value = k
+    onboardingOpen.value = true
+  })
+}
+
+watch(() => route.fullPath, tryAutoOnboarding, { immediate: true })
+
+function onOnboardingDismissSave() {
+  const k = onboardingTourKey.value
+  if (k) dismissOnboardingTour(k)
+}
 </script>
 
 <template>
@@ -61,8 +97,10 @@ const footerYear = new Date().getFullYear()
           :model-locale="locale"
           :theme-icon="themeIcon"
           :theme-label="themeLabel"
+          :show-onboarding-guide="Boolean(onboardingForRoute)"
           @update:locale="persistLocale"
           @toggle-theme="toggleTheme"
+          @open-onboarding="openOnboardingForCurrentRoute"
         />
       </div>
       <div v-if="hostChromeOn" class="app-shell-header__host-stack">
@@ -91,6 +129,12 @@ const footerYear = new Date().getFullYear()
     </main>
 
     <AppSiteFooter v-if="showChrome" :year="footerYear" />
+
+    <OnboardingTourModal
+      v-model:open="onboardingOpen"
+      :tour-key="onboardingTourKey"
+      @dismiss-save="onOnboardingDismissSave"
+    />
   </div>
 </template>
 

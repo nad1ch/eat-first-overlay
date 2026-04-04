@@ -23,6 +23,89 @@
     "footerEggClose": "Schließen",
     "footerEggHint": "Klick auf Kringel oder Stäbchen"
   },
+  "onboarding": {
+    "openGuide": "Kurzanleitung",
+    "close": "Schließen",
+    "progress": "Schritt {n} von {total}",
+    "next": "Weiter",
+    "back": "Zurück",
+    "done": "Fertig",
+    "dontShowAgain": "Für diese Seite nicht mehr anzeigen",
+    "tours": {
+      "join": {
+        "title": "Lobby — Schnellstart",
+        "steps": [
+          {
+            "title": "Was hier passiert",
+            "text": "Game-ID aus dem Stream eingeben. Das Slot-Raster sind die Plätze. Jeder Streamer bindet sein Overlay in OBS ein; das globale Raster ist nur Hilfe."
+          },
+          {
+            "title": "Du bist Spieler",
+            "text": "Freien Slot wählen. Am Slot: „Overlay“ (OBS-URL) und „Mein Panel“ (Karten & Aktionen). Ohne Slot gibt es kein Panel."
+          },
+          {
+            "title": "Du bist Host",
+            "text": "Das Pult öffnet sich separat (Key oder Host-Modus aus der Lobby). Spieler kommen weiter über die Lobby; die Pult-URL brauchen sie nicht."
+          },
+          {
+            "title": "OBS",
+            "text": "Browserquelle mit der URL aus der Slot-Karte. Transparenten Hintergrund aktivieren. Größe und Ausschnitt an dein Layout anpassen."
+          }
+        ]
+      },
+      "controlHost": {
+        "title": "Host-Pult — Kurzüberblick",
+        "steps": [
+          {
+            "title": "Überblick",
+            "text": "Hier laufen Show-Phasen und der Raum live. Blöcke kannst du einklappen, damit es im Stream ruhiger wirkt."
+          },
+          {
+            "title": "Spieler & Slots",
+            "text": "Slot im Roster wählen — rechts erscheinen Aktionen: Karten, Ausscheiden, Helfer. Änderungen sieht man sofort auf den Overlays."
+          },
+          {
+            "title": "Figuren & Karten",
+            "text": "Namen und Bild für den Spieler im Raum bearbeiten, speichern. Karten am Slot anlegen, wenn du den Gag fährst."
+          },
+          {
+            "title": "Abstimmung",
+            "text": "Ist die Abstimmungsphase aktiv, führst du Umfrage und Finale nach deinen Show-Regeln; Spieler voten in ihren Panels."
+          }
+        ]
+      },
+      "controlPlayer": {
+        "title": "Spieler-Panel — Kurzüberblick",
+        "steps": [
+          {
+            "title": "Wofür das Panel ist",
+            "text": "Du steuerst Karten und On-Air-Status. Phasen setzt der Host — manche Aktionen sind gesperrt, bis die Phase es erlaubt."
+          },
+          {
+            "title": "Karten & Sendung",
+            "text": "Geben und Aufdecken aktualisiert dein OBS-Overlay — Zuschauer sehen, was du im Panel tust. Bei Abstimmung: Hinweise im Raum befolgen."
+          },
+          {
+            "title": "Nochmal anzeigen",
+            "text": "„Kurzanleitung“ im Header öffnet diese Tour jederzeit wieder."
+          }
+        ]
+      },
+      "overlay": {
+        "title": "Overlay für OBS",
+        "steps": [
+          {
+            "title": "Wozu diese Seite",
+            "text": "Beim Spiel nicht anklicken — nur als Browserquelle über die Szene legen (OBS o. ä.)."
+          },
+          {
+            "title": "Einbinden",
+            "text": "Browserquelle anlegen, dieselbe URL wie „Overlay“ in der Lobby einfügen. Transparenten Hintergrund an; Größe/Position für die Kamera."
+          }
+        ]
+      }
+    }
+  },
   "join": {
     "loading": "Verbindung zum Raum…",
     "eyebrow": "Live show",
