@@ -1,3 +1,5 @@
+import { VideoPresets } from 'livekit-client'
+
 /** LiveKit WebSocket URL (наприклад wss://PROJECT.livekit.cloud). */
 export function liveKitConfigured() {
   return Boolean(String(import.meta.env.VITE_LIVEKIT_URL ?? '').trim())
@@ -21,8 +23,18 @@ export function getLiveKitTokenUrl() {
 /**
  * Якість відео для підписника (simulcast): high | medium | low.
  * low — мінімальний шар (~180p), medium — середній (~360p залежно від SFU), high — без обмежень у клієнті.
- * На паблішері має був увімкнений simulcast, інакше ефекту може не бути.
+ * На паблішері має бути увімкнений simulcast, інакше ефекту може не бути.
  */
 export function getLiveKitSubscribeQualityMode() {
   return String(import.meta.env.VITE_LK_SUBSCRIBE_VIDEO_QUALITY ?? 'high').toLowerCase()
+}
+
+/**
+ * Параметри getUserMedia для вебками: 1080p / 30 fps (див. VideoPresets.h1080 у SDK).
+ * Без цього Room використовував би дефолт SDK — зараз це 720p.
+ */
+export function getLiveKitVideoCaptureDefaults() {
+  return {
+    resolution: VideoPresets.h1080.resolution,
+  }
 }

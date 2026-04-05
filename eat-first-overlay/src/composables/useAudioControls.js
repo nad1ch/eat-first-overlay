@@ -1,5 +1,6 @@
 import { ref, watch } from 'vue'
 import { Room } from 'livekit-client'
+import { getLiveKitVideoCaptureDefaults } from '../config/livekit.js'
 
 const defaultAudioCapture = () => ({
   echoCancellation: true,
@@ -70,9 +71,10 @@ export function useAudioControls(roomRef, options) {
   async function setCameraEnabled(on) {
     const room = getRoomFromRef(roomRef)
     if (!room || !canControl.value) return
+    const base = getLiveKitVideoCaptureDefaults()
     const opts = selectedVideoInputId.value
-      ? { deviceId: { exact: selectedVideoInputId.value } }
-      : undefined
+      ? { ...base, deviceId: { exact: selectedVideoInputId.value } }
+      : base
     await room.localParticipant.setCameraEnabled(!!on, opts)
     cameraEnabled.value = room.localParticipant.isCameraEnabled
   }
