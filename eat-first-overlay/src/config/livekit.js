@@ -13,3 +13,12 @@ export function getLiveKitTokenUrl() {
   if (u) return u
   return '/__livekit/token'
 }
+
+/**
+ * Якість відео для підписника (simulcast): high | medium | low.
+ * low — мінімальний шар (~180p), medium — середній (~360p залежно від SFU), high — без обмежень у клієнті.
+ * На паблішері має був увімкнений simulcast, інакше ефекту може не бути.
+ */
+export function getLiveKitSubscribeQualityMode() {
+  return String(import.meta.env.VITE_LK_SUBSCRIBE_VIDEO_QUALITY ?? 'high').toLowerCase()
+}

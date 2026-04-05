@@ -137,9 +137,9 @@
     "ctaHost": "Ich bin Host",
     "ctaHostSub": "Show-Pult · Timer · Phasen (Zugangsschlüssel)",
     "ctaObs": "OBS · Overlay",
-    "ctaObsSub": "Globales Raster oder Browser-Quelle",
+    "ctaObsSub": "Globales Raster für Browser Source öffnen (alle Slots)",
     "ctaObsComingSoon": "Demnächst",
-    "ctaObsSoonHint": "Lobby-Zugang hier vorübergehend aus — nutze den OBS-Overlay-Button am Slot nach der Wahl.",
+    "ctaObsSoonHint": "Persönliches Overlay — „OBS overlay“ am Slot nach der Auswahl.",
     "obsTitle": "OBS · Schnellstart",
     "obs1": "Source: Browser (or Browser Source).",
     "obs2": "URL von „OBS-Overlay“ am Slot oder global einfügen.",
@@ -169,7 +169,12 @@
     "nameModalTitle": "Ім’я за столом",
     "nameModalPlaceholder": "Як показувати на екрані",
     "nameModalContinue": "Продовжити",
-    "nameModalCancel": "Скасувати"
+    "nameModalCancel": "Скасувати",
+    "zoomTitle": "Zoom-ähnlicher Raum",
+    "zoomHint": "Spielerkameras (wenn in deren Overlay aktiv) und dieselben Karten wie im globalen OBS. Hier nur Ansicht — Kamera über persönliches /overlay veröffentlichen.",
+    "zoomWaiting": "Spieler werden geladen…",
+    "zoomNoPlayers": "Noch keine Spieler in diesem Raum.",
+    "zoomLiveKitName": "Lobby"
   },
   "admin": {
     "eyebrow": "Host",
@@ -526,7 +531,25 @@
     "phaseBanner": "Phase: {phase} · Runde {round} · Im Raum: {n}",
     "tokenMismatchTitle": "Посилання недійсне",
     "tokenMismatchHint": "Відкрий лобі й оверлей зі свого слоту (у OBS — посилання без токена).",
-    "tokenMismatchCta": "Лобі"
+    "tokenMismatchCta": "Лобі",
+    "mosaicDragHandle": "Ziehen, um mit einer anderen Kamera zu tauschen",
+    "liveKit": {
+      "statusNotConfigured": "LiveKit · nicht konfiguriert",
+      "statusWaitingGame": "LiveKit · warte auf Spieldaten…",
+      "statusConnecting": "LiveKit · verbinden…",
+      "statusConnected": "LiveKit · verbunden",
+      "statusDisconnected": "LiveKit · getrennt",
+      "statusIdle": "LiveKit · bereit",
+      "statusError": "LiveKit · Fehler: {msg}",
+      "notConfiguredHint": "VITE_LIVEKIT_URL setzen (in Dev zusätzlich LIVEKIT_API_KEY / SECRET — siehe .env.example).",
+      "waitingHint": "Verbindung nach Firestore-Sync. Hängt es — Game-ID und Netzwerk prüfen.",
+      "hintControls": "Video/Audio auf den Karten; Mikro und Kamera hier.",
+      "spectatorHint": "Zuschauer: ?player=p1 (dein Slot) anhängen, um Kamera und Mikro zu aktivieren.",
+      "eliminatedNoPublish": "Ausgeschieden — Kamera und Mikro bleiben aus.",
+      "enableSound": "Ton aktivieren",
+      "enableSoundHint": "Ohne Klick blockiert der Browser Remote-Audio. Button oder zuerst Mikro/Kamera.",
+      "debugSummary": "LiveKit debug (dev)"
+    }
   },
   "overlayCard": {
     "eliminated": "OUT",

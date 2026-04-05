@@ -1,4 +1,4 @@
-import { ref, watch, watchEffect } from 'vue'
+import { ref, watch, watchEffect, unref } from 'vue'
 import { RoomEvent, Track } from 'livekit-client'
 
 const DEFAULT_MAX_VIDEO = 4
@@ -12,9 +12,11 @@ const DEFAULT_MAX_VIDEO = 4
  *   spotlightSlot: import('vue').Ref<string | null> | import('vue').ComputedRef<string | null>,
  *   speakerSlot: import('vue').Ref<string | null> | import('vue').ComputedRef<string | null>,
  *   includeLocal: import('vue').Ref<boolean> | import('vue').ComputedRef<boolean>,
- *   maxVideo?: number,
+ *   maxVideo?: number | import('vue').Ref<number> | import('vue').ComputedRef<number>,
+ *   subscriberMaxQuality?: import('vue').Ref<import('livekit-client').VideoQuality | null | undefined> | import('livekit-client').VideoQuality | null,
  *   playerLabels: import('vue').Ref<Record<string, string>> | import('vue').ComputedRef<Record<string, string>>,
  *   volumeByIdentity: import('vue').Ref<Record<string, number>>,
+ *   eliminatedSlots?: import('vue').Ref<Set<string>> | import('vue').ComputedRef<Set<string>>,
  * }} options
  */
 export function useMediaTracks(roomRef, options) {
@@ -22,10 +24,36 @@ export function useMediaTracks(roomRef, options) {
     spotlightSlot,
     speakerSlot,
     includeLocal,
-    maxVideo = DEFAULT_MAX_VIDEO,
+    maxVideo: maxVideoOption = DEFAULT_MAX_VIDEO,
+    subscriberMaxQuality: subscriberMaxQualityOption = null,
     playerLabels,
     volumeByIdentity,
+    eliminatedSlots,
   } = options
+
+  function resolveMaxVideo() {
+    const m = unref(maxVideoOption)
+    return typeof m === 'number' && m > 0 ? m : DEFAULT_MAX_VIDEO
+  }
+
+  function resolveSubscriberQuality() {
+    return subscriberMaxQualityOption == null ? null : unref(subscriberMaxQualityOption)
+  }
+
+  function applySubscriberVideoQualityCap(room) {
+    const cap = resolveSubscriberQuality()
+    if (cap === undefined || cap === null) return
+    for (const p of room.remoteParticipants.values()) {
+      for (const pub of p.trackPublications.values()) {
+        if (pub.kind !== Track.Kind.Video || !pub.isSubscribed) continue
+        try {
+          pub.setVideoQuality(cap)
+        } catch {
+          /* */
+        }
+      }
+    }
+  }
 
   /** @type {import('vue').Ref<Array<{
    *  identity: string,
@@ -55,23 +83,26 @@ export function useMediaTracks(roomRef, options) {
   }
 
   function applySubscriptions(room) {
+    const maxVideo = resolveMaxVideo()
     const local = room.localParticipant
     const localCam = local?.isCameraEnabled === true
     const remoteBudget = Math.max(0, maxVideo - (localCam && includeLocal.value ? 1 : 0))
     const ordered = sortRemoteIds(room)
     const videoSet = new Set(ordered.slice(0, remoteBudget))
+    const eliminated = eliminatedSlots?.value ?? new Set()
 
     for (const p of room.remoteParticipants.values()) {
+      const isElim = eliminated.has(p.identity)
       for (const pub of p.trackPublications.values()) {
         if (pub.kind === Track.Kind.Audio) {
           try {
-            pub.setSubscribed(true)
+            pub.setSubscribed(!isElim)
           } catch {
             /* */
           }
         } else if (pub.kind === Track.Kind.Video) {
           try {
-            pub.setSubscribed(videoSet.has(p.identity))
+            pub.setSubscribed(!isElim && videoSet.has(p.identity))
           } catch {
             /* */
           }
@@ -104,14 +135,16 @@ export function useMediaTracks(roomRef, options) {
     }
     applySubscriptions(room)
     applyVolume(room)
+    applySubscriberVideoQualityCap(room)
 
     const speaking = new Set(room.activeSpeakers.map((p) => p.identity))
     const local = room.localParticipant
     const ordered = sortRemoteIds(room)
     const localCam = local.isCameraEnabled === true
-    const remoteBudget = Math.max(0, maxVideo - (localCam && includeLocal.value ? 1 : 0))
+    const remoteBudget = Math.max(0, resolveMaxVideo() - (localCam && includeLocal.value ? 1 : 0))
     const videoSet = new Set(ordered.slice(0, remoteBudget))
     const labels = playerLabels.value ?? {}
+    const eliminated = eliminatedSlots?.value ?? new Set()
 
     const out = []
     if (includeLocal.value) {
@@ -126,6 +159,7 @@ export function useMediaTracks(roomRef, options) {
       })
     }
     for (const id of ordered) {
+      if (eliminated.has(id)) continue
       const p = room.remoteParticipants.get(id)
       if (!p) continue
       const hasSubscribedVideo = [...p.trackPublications.values()].some(
@@ -190,7 +224,25 @@ export function useMediaTracks(roomRef, options) {
   )
 
   watch(
-    () => [String(spotlightSlot.value ?? ''), String(speakerSlot.value ?? ''), includeLocal.value],
+    () => [
+      String(spotlightSlot.value ?? ''),
+      String(speakerSlot.value ?? ''),
+      includeLocal.value,
+      resolveMaxVideo(),
+      resolveSubscriberQuality(),
+    ],
+    () => {
+      const room = roomRef.value
+      if (room) rebuild(room)
+    },
+  )
+
+  watch(
+    () => {
+      const s = eliminatedSlots?.value
+      if (!s || s.size === 0) return ''
+      return [...s].sort().join('\0')
+    },
     () => {
       const room = roomRef.value
       if (room) rebuild(room)

@@ -1,62 +1,69 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, inject, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ConnectionState } from 'livekit-client'
 import { liveKitConfigured } from '../config/livekit.js'
-import { useLiveKitRoom } from '../composables/useLiveKitRoom.js'
-import { useMediaTracks } from '../composables/useMediaTracks.js'
 import { useAudioControls } from '../composables/useAudioControls.js'
-import ParticipantTile from './ParticipantTile.vue'
 
 const props = defineProps({
+  lkConnectionState: { type: String, required: true },
+  lkError: { type: Object, default: null },
+  /** liveKitConfigured && overlayReady && gameId && identity */
+  lkRoomEnabled: { type: Boolean, default: false },
   overlayReady: { type: Boolean, default: false },
-  gameId: { type: String, required: true },
-  localIdentity: { type: String, required: true },
-  displayName: { type: String, default: '' },
   /** Чи можна публікувати аудіо/відео (слот гравця, не spectator, не елімінація). */
   canPublish: { type: Boolean, default: false },
-  spotlightSlot: { type: String, default: '' },
+  /** Глобальний оверлей без ?player= — лише перегляд. */
+  spectatorMode: { type: Boolean, default: false },
   speakerSlot: { type: String, default: '' },
-  /** true: лиш активний спікер (speakerSlot) може залишати мік увімкненим. */
   spotlightUnmuteMode: { type: Boolean, default: false },
   eliminatedLocal: { type: Boolean, default: false },
-  playerNameMap: { type: Object, default: () => ({}) },
+  localIdentity: { type: String, required: true },
 })
 
-const enabled = computed(
-  () =>
-    liveKitConfigured() &&
-    props.overlayReady &&
-    Boolean(String(props.gameId || '').trim()) &&
-    Boolean(String(props.localIdentity || '').trim()),
-)
+const { t } = useI18n()
 
-const roomName = computed(() => String(props.gameId || '').trim())
-const identity = computed(() => String(props.localIdentity || '').trim())
-const displayName = computed(() => String(props.displayName || props.localIdentity || '').trim())
+/** Не передаємо Room через prop — Vue полегковує Ref і ламає useAudioControls. */
+const lkRoomRef = inject('liveKitOverlayRoom', null) ?? shallowRef(null)
+
+/** Браузер блокує AudioContext до першого кліку — після успішного startAudio ховаємо CTA. */
+const remoteAudioUnlocked = ref(false)
+
+const isDev = import.meta.env.DEV
+
+const configured = computed(() => liveKitConfigured())
+
+const debugSnapshot = computed(() => ({
+  configured: configured.value,
+  overlayReady: props.overlayReady,
+  lkRoomEnabled: props.lkRoomEnabled,
+  connectionState: props.lkConnectionState,
+  spectatorMode: props.spectatorMode,
+  canPublish: props.canPublish,
+}))
+
+const statusMain = computed(() => {
+  if (!configured.value) return t('overlayPage.liveKit.statusNotConfigured')
+  if (!props.overlayReady) return t('overlayPage.liveKit.statusWaitingGame')
+  if (props.lkError)
+    return t('overlayPage.liveKit.statusError', {
+      msg: String(props.lkError.message || props.lkError).slice(0, 120),
+    })
+  const s = props.lkConnectionState
+  if (s === ConnectionState.Connected) return t('overlayPage.liveKit.statusConnected')
+  if (s === ConnectionState.Connecting || s === ConnectionState.Reconnecting)
+    return t('overlayPage.liveKit.statusConnecting')
+  if (s === ConnectionState.Disconnected) return t('overlayPage.liveKit.statusDisconnected')
+  return t('overlayPage.liveKit.statusIdle')
+})
+
+const statusHint = computed(() => {
+  if (!configured.value) return t('overlayPage.liveKit.notConfiguredHint')
+  if (!props.overlayReady) return t('overlayPage.liveKit.waitingHint')
+  return ''
+})
+
 const canPublishRef = computed(() => props.canPublish)
-
-const { room, connectionState, error } = useLiveKitRoom({
-  enabled,
-  roomName,
-  identity,
-  displayName,
-  canPublish: canPublishRef,
-})
-
-const volumeByIdentity = ref({})
-
-const playerLabels = computed(() => props.playerNameMap || {})
-
-const includeLocal = computed(() => props.canPublish)
-
-const { tiles } = useMediaTracks(room, {
-  spotlightSlot: computed(() => props.spotlightSlot || null),
-  speakerSlot: computed(() => props.speakerSlot || null),
-  includeLocal,
-  maxVideo: 4,
-  playerLabels,
-  volumeByIdentity,
-})
 
 const {
   micEnabled,
@@ -70,34 +77,84 @@ const {
   setAudioInput,
   setAudioOutput,
   setVideoInput,
-} = useAudioControls(room, {
+} = useAudioControls(lkRoomRef, {
   canControl: canPublishRef,
 })
 
-/** До 4 відео-плиток; решта лише аудіо-рядок. */
-const videoTiles = computed(() => {
-  const v = []
-  const a = []
-  for (const t of tiles.value) {
-    if (t.showVideo) v.push(t)
-    else a.push(t)
-  }
-  return { video: v.slice(0, 4), audioOnly: a }
-})
+watch(
+  () => props.lkConnectionState,
+  (s) => {
+    if (s !== ConnectionState.Connected) remoteAudioUnlocked.value = false
+  },
+)
 
-function volFor(id) {
-  const v = volumeByIdentity.value[id]
-  return typeof v === 'number' ? v : 1
+async function unlockRemoteAudio() {
+  const r = lkRoomRef.value
+  if (!r) return
+  try {
+    await r.startAudio()
+    remoteAudioUnlocked.value = true
+  } catch {
+    /* NotAllowedError тощо — користувач може натиснути ще раз */
+  }
 }
 
-function setVolume(id, v) {
-  volumeByIdentity.value = { ...volumeByIdentity.value, [id]: v }
+/** Будь-який pointerdown на сторінці (лобі / оверлей) — валідний жест для AudioContext. */
+let gestureUnlockTeardown = null
+
+function armGestureUnlockIfNeeded() {
+  if (typeof window === 'undefined') return
+  if (gestureUnlockTeardown) return
+  const onGesture = () => {
+    void unlockRemoteAudio()
+  }
+  window.addEventListener('pointerdown', onGesture, { capture: true, passive: true })
+  gestureUnlockTeardown = () => {
+    window.removeEventListener('pointerdown', onGesture, { capture: true })
+    gestureUnlockTeardown = null
+  }
+}
+
+function disarmGestureUnlock() {
+  gestureUnlockTeardown?.()
+}
+
+watch(
+  () =>
+    configured.value &&
+    props.overlayReady &&
+    !props.lkError &&
+    props.lkConnectionState === ConnectionState.Connected &&
+    !remoteAudioUnlocked.value,
+  (needUnlock) => {
+    if (needUnlock) armGestureUnlockIfNeeded()
+    else disarmGestureUnlock()
+  },
+  { flush: 'post' },
+)
+
+watch(remoteAudioUnlocked, (unlocked) => {
+  if (unlocked) disarmGestureUnlock()
+})
+
+onUnmounted(() => {
+  disarmGestureUnlock()
+})
+
+async function onMicToggle() {
+  await unlockRemoteAudio()
+  await setMicEnabled(!micEnabled.value)
+}
+
+async function onCamToggle() {
+  await unlockRemoteAudio()
+  await setCameraEnabled(!cameraEnabled.value)
 }
 
 watch(
   () => props.eliminatedLocal,
   async (elim) => {
-    if (elim && room.value) {
+    if (elim && lkRoomRef.value) {
       await setMicEnabled(false).catch(() => {})
       await setCameraEnabled(false).catch(() => {})
     }
@@ -107,7 +164,7 @@ watch(
 watch(
   () => [props.spotlightUnmuteMode, props.speakerSlot, props.localIdentity, props.eliminatedLocal, props.canPublish],
   async () => {
-    if (!room.value || props.eliminatedLocal || !props.canPublish) return
+    if (!lkRoomRef.value || props.eliminatedLocal || !props.canPublish) return
     if (!props.spotlightUnmuteMode) return
     const sp = String(props.speakerSlot || '').trim()
     const me = String(props.localIdentity || '').trim()
@@ -116,49 +173,68 @@ watch(
     }
   },
 )
-
-const statusLine = computed(() => {
-  if (!liveKitConfigured()) return ''
-  const s = connectionState.value
-  if (s === ConnectionState.Connected) return 'LiveKit · OK'
-  if (s === ConnectionState.Connecting || s === ConnectionState.Reconnecting) return 'LiveKit · …'
-  if (error.value) return `LiveKit · ${error.value.message}`
-  return 'LiveKit · off'
-})
 </script>
 
 <template>
-  <aside v-if="liveKitConfigured()" class="vvg" aria-label="Voice / video">
+  <aside class="vvg" aria-label="Voice / video">
     <div class="vvg__head">
-      <span class="vvg__status">{{ statusLine }}</span>
+      <span class="vvg__status" :class="{ 'vvg__status--bad': !configured || (overlayReady && lkError) }">{{
+        statusMain
+      }}</span>
     </div>
 
-    <div class="vvg__grid">
-      <ParticipantTile
-        v-for="t in videoTiles.video"
-        :key="t.identity + '-v'"
-        :tile="t"
-        :volume="volFor(t.identity)"
-        @update:volume="setVolume(t.identity, $event)"
-      />
-    </div>
+    <p v-if="statusHint" class="vvg__hint vvg__hint--warn">{{ statusHint }}</p>
 
-    <div v-if="videoTiles.audioOnly.length" class="vvg__audio-row">
-      <ParticipantTile
-        v-for="t in videoTiles.audioOnly"
-        :key="t.identity + '-a'"
-        :tile="{ ...t, showVideo: false }"
-        :volume="volFor(t.identity)"
-        @update:volume="setVolume(t.identity, $event)"
-      />
-    </div>
+    <p v-else-if="overlayReady && configured" class="vvg__hint">{{ t('overlayPage.liveKit.hintControls') }}</p>
+
+    <p v-if="spectatorMode && configured && overlayReady" class="vvg__callout">
+      {{ t('overlayPage.liveKit.spectatorHint') }}
+    </p>
+
+    <button
+      v-if="
+        configured &&
+        overlayReady &&
+        !lkError &&
+        lkConnectionState === ConnectionState.Connected &&
+        !remoteAudioUnlocked
+      "
+      type="button"
+      class="vvg__btn vvg__btn--primary"
+      @click="unlockRemoteAudio"
+    >
+      {{ t('overlayPage.liveKit.enableSound') }}
+    </button>
+    <p
+      v-if="
+        configured &&
+        overlayReady &&
+        lkConnectionState === ConnectionState.Connected &&
+        !remoteAudioUnlocked
+      "
+      class="vvg__hint"
+    >
+      {{ t('overlayPage.liveKit.enableSoundHint') }}
+    </p>
+
+    <p
+      v-if="!spectatorMode && !canPublish && eliminatedLocal && overlayReady && configured"
+      class="vvg__callout vvg__callout--muted"
+    >
+      {{ t('overlayPage.liveKit.eliminatedNoPublish') }}
+    </p>
+
+    <details v-if="isDev" class="vvg__debug">
+      <summary>{{ t('overlayPage.liveKit.debugSummary') }}</summary>
+      <pre class="vvg__pre">{{ JSON.stringify(debugSnapshot, null, 2) }}</pre>
+    </details>
 
     <div v-if="canPublish" class="vvg__ctrl">
       <button
         type="button"
         class="vvg__btn"
         :class="{ 'vvg__btn--off': !micEnabled }"
-        @click="setMicEnabled(!micEnabled)"
+        @click="onMicToggle"
       >
         {{ micEnabled ? 'Mic on' : 'Mic off' }}
       </button>
@@ -166,7 +242,7 @@ const statusLine = computed(() => {
         type="button"
         class="vvg__btn"
         :class="{ 'vvg__btn--off': !cameraEnabled }"
-        @click="setCameraEnabled(!cameraEnabled)"
+        @click="onCamToggle"
       >
         {{ cameraEnabled ? 'Cam on' : 'Cam off' }}
       </button>
@@ -229,22 +305,69 @@ const statusLine = computed(() => {
 .vvg__status {
   font-variant-numeric: tabular-nums;
 }
-.vvg__grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.35rem;
+.vvg__status--bad {
+  color: #fda4af;
 }
-.vvg__audio-row {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  margin-top: 0.35rem;
+.vvg__hint {
+  margin: 0 0 0.4rem;
+  opacity: 0.75;
+  font-size: 0.65rem;
+  line-height: 1.35;
+}
+.vvg__hint--warn {
+  opacity: 0.9;
+  color: #fde68a;
+}
+.vvg__callout {
+  margin: 0 0 0.45rem;
+  padding: 0.35rem 0.4rem;
+  border-radius: 8px;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(165, 180, 252, 0.35);
+  font-size: 0.64rem;
+  line-height: 1.4;
+  color: rgba(224, 231, 255, 0.95);
+}
+.vvg__callout--muted {
+  background: rgba(55, 48, 74, 0.55);
+  border-color: rgba(167, 139, 250, 0.2);
+  color: rgba(226, 232, 240, 0.82);
+}
+.vvg__debug {
+  margin: 0 0 0.45rem;
+  font-size: 0.6rem;
+  opacity: 0.88;
+}
+.vvg__debug summary {
+  cursor: pointer;
+  color: #c4b5fd;
+}
+.vvg__pre {
+  margin: 0.35rem 0 0;
+  padding: 0.35rem;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: auto;
+  max-height: 8rem;
+  font-size: 0.58rem;
+  line-height: 1.35;
 }
 .vvg__ctrl {
   display: flex;
   gap: 0.35rem;
   margin-top: 0.45rem;
   flex-wrap: wrap;
+}
+.vvg__btn--primary {
+  width: 100%;
+  margin: 0.35rem 0 0.25rem;
+  flex: none;
+  min-width: unset;
+  border-color: rgba(167, 139, 250, 0.55);
+  background: rgba(124, 58, 237, 0.35);
+}
+.vvg__btn--primary:hover {
+  background: rgba(124, 58, 237, 0.5);
 }
 .vvg__btn {
   flex: 1;

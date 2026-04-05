@@ -7,6 +7,9 @@ import { setJoinSessionToken } from '../utils/joinSessionToken.js'
 import { useI18n } from 'vue-i18n'
 import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
 import AppPageLoader from '../ui/molecules/AppPageLoader.vue'
+/* Тимчасово приховано: «Кімната як у Zoom» на головній join-сторінці
+import LobbyZoomStage from '../components/LobbyZoomStage.vue'
+*/
 import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId.js'
 import { callableApiEnabled } from '../services/callableApi.js'
 import { ensureAnonymousAuth } from '../services/authBootstrap.js'
@@ -135,6 +138,11 @@ function slotNum(id) {
 /** OBS / стрім: без токена (публічне джерело). */
 function openPersonalOverlay(pid) {
   router.push({ path: '/overlay', query: { game: gameId.value, player: String(pid).trim() } })
+}
+
+/** Глобальна сітка оверлею для OBS (без ?player — глядацька сцена). */
+function openGlobalOverlay() {
+  router.push({ path: '/overlay', query: { game: gameId.value } })
 }
 
 const joinActionBusy = ref(false)
@@ -341,16 +349,13 @@ function handUpJoin(pid) {
         </button>
         <button
           type="button"
-          class="cta cta--obs cta--soon"
+          class="cta cta--obs"
           style="--stagger-index: 2"
-          disabled
+          @click="openGlobalOverlay"
         >
           <span class="cta-ico" aria-hidden="true">🎥</span>
-          <span class="cta-t">
-            {{ $t('join.ctaObs') }}
-            <span class="cta-coming-badge">{{ $t('join.ctaObsComingSoon') }}</span>
-          </span>
-          <span class="cta-d">{{ $t('join.ctaObsSoonHint') }}</span>
+          <span class="cta-t">{{ $t('join.ctaObs') }}</span>
+          <span class="cta-d">{{ $t('join.ctaObsSub') }}</span>
         </button>
       </div>
     </section>
@@ -373,6 +378,16 @@ function handUpJoin(pid) {
         <code class="obs-hint__code">{{ globalOverlayUrl }}</code>
       </p>
     </section>
+
+    <!-- Тимчасово приховано: блок «Кімната як у Zoom» (LobbyZoomStage + LiveKit лобі-мозаїка)
+    <LobbyZoomStage
+      :game-id="gameId"
+      :players="players"
+      :game-room="gameRoomJoin"
+      :votes="votesJoin"
+      :data-ready="joinLobbyReady"
+    />
+    -->
 
     <section
       id="player-slots"

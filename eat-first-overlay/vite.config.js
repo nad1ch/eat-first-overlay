@@ -1,9 +1,19 @@
-import { defineConfig } from 'vite'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { liveKitDevTokenPlugin } from './vite-plugin-livekit-dev.mjs'
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
 // https://vite.dev/config/
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
+  // У middleware для /__livekit/token потрібні LIVEKIT_API_KEY / SECRET з .env (без префікса VITE_).
+  const loaded = loadEnv(mode, __dirname, '')
+  for (const [k, v] of Object.entries(loaded)) {
+    if (process.env[k] === undefined && v !== '') process.env[k] = v
+  }
+
   return {
     plugins: [
       vue(),

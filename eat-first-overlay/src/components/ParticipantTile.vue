@@ -1,17 +1,41 @@
 <script setup>
-import { ref, watch, onUnmounted, nextTick } from 'vue'
+import { computed, ref, watch, onUnmounted, nextTick } from 'vue'
 import { Track } from 'livekit-client'
 
 const props = defineProps({
   tile: { type: Object, required: true },
   volume: { type: Number, default: 1 },
+  /** Компактний режим для вбудови в картку гравця */
+  embed: { type: Boolean, default: false },
+  /** Повна клітинка сітки / шар під оверлеєм */
+  layer: { type: Boolean, default: false },
+  /** Персональний повноекранний фон (без radius) */
+  soloFill: { type: Boolean, default: false },
+  /**
+   * Глобальна мозаїка: відео вміщується в область над підписом/гучністю (object-fit: contain — без обрізки кадру).
+   * Зелена «говоряча» рамка на батьківській клітинці (inset), не на ptile.
+   */
+  mosaicMode: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['update:volume'])
 
 const videoRef = ref(null)
+const audioRef = ref(null)
+
+const ptileClass = computed(() => ({
+  'ptile--speaking': props.tile.isSpeaking && !props.mosaicMode,
+  'ptile--audio': !props.tile.showVideo,
+  'ptile--embed': props.embed && !props.layer,
+  'ptile--layer': props.layer,
+  'ptile--solo-fill': props.soloFill,
+  'ptile--mosaic-dynamic': props.mosaicMode && props.layer,
+}))
+
 /** @type {import('livekit-client').VideoTrack | null} */
 let attached = null
+/** @type {import('livekit-client').AudioTrack | null} */
+let attachedAudio = null
 
 function detach() {
   const el = videoRef.value
@@ -23,6 +47,18 @@ function detach() {
     }
   }
   attached = null
+}
+
+function detachAudio() {
+  const el = audioRef.value
+  if (attachedAudio && el) {
+    try {
+      attachedAudio.detach(el)
+    } catch {
+      /* */
+    }
+  }
+  attachedAudio = null
 }
 
 watch(
@@ -48,30 +84,74 @@ watch(
   { immediate: true, flush: 'post' },
 )
 
+watch(
+  () => [props.tile.participant, props.tile.isLocal, props.tile.identity],
+  async () => {
+    await nextTick()
+    detachAudio()
+    if (props.tile.isLocal) return
+    const el = audioRef.value
+    if (!el) return
+    try {
+      const pub = props.tile.participant.getTrackPublication(Track.Source.Microphone)
+      const at = pub?.audioTrack
+      if (at) {
+        at.attach(el)
+        attachedAudio = at
+      }
+    } catch {
+      /* */
+    }
+  },
+  { immediate: true, flush: 'post' },
+)
+
 onUnmounted(() => {
   detach()
+  detachAudio()
 })
 </script>
 
 <template>
-  <div
-    class="ptile"
-    :class="{ 'ptile--speaking': tile.isSpeaking, 'ptile--audio': !tile.showVideo }"
-  >
-    <video
-      v-show="tile.showVideo"
-      ref="videoRef"
-      class="ptile__video"
-      playsinline
-      autoplay
-    />
-    <div v-show="!tile.showVideo" class="ptile__avatar" aria-hidden="true">
-      <span class="ptile__mono">{{
-        String(tile.label || tile.identity)
-          .slice(0, 2)
-          .toUpperCase()
-      }}</span>
-    </div>
+  <div class="ptile" :class="ptileClass">
+    <audio ref="audioRef" class="ptile__audio" autoplay playsinline />
+    <template v-if="mosaicMode && layer">
+      <div class="ptile__video-stage" :class="{ 'ptile__video-stage--avatar-only': !tile.showVideo }">
+        <template v-if="tile.showVideo">
+          <div class="ptile__video-wrap">
+            <video
+              ref="videoRef"
+              class="ptile__video ptile__video--mosaic"
+              playsinline
+              autoplay
+            />
+          </div>
+        </template>
+        <div v-else class="ptile__avatar ptile__avatar--mosaic" aria-hidden="true">
+          <span class="ptile__mono">{{
+            String(tile.label || tile.identity)
+              .slice(0, 2)
+              .toUpperCase()
+          }}</span>
+        </div>
+      </div>
+    </template>
+    <template v-else>
+      <video
+        v-show="tile.showVideo"
+        ref="videoRef"
+        class="ptile__video"
+        playsinline
+        autoplay
+      />
+      <div v-show="!tile.showVideo" class="ptile__avatar" aria-hidden="true">
+        <span class="ptile__mono">{{
+          String(tile.label || tile.identity)
+            .slice(0, 2)
+            .toUpperCase()
+        }}</span>
+      </div>
+    </template>
     <div class="ptile__meta">
       <span class="ptile__name">{{ tile.label }}</span>
       <span v-if="tile.isMuted" class="ptile__muted" title="Muted" aria-label="Muted">🔇</span>
@@ -103,6 +183,40 @@ onUnmounted(() => {
   flex-direction: column;
   justify-content: flex-end;
 }
+.ptile--embed {
+  aspect-ratio: 16 / 9;
+  max-height: clamp(4.5rem, 14vw, 7rem);
+  border-radius: 8px;
+}
+.ptile--embed.ptile--audio {
+  max-height: 4.25rem;
+  min-height: 4rem;
+}
+.ptile--layer {
+  aspect-ratio: unset;
+  max-height: none;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 14px;
+}
+.ptile--layer.ptile--audio {
+  min-height: 6rem;
+}
+.ptile--layer.ptile--solo-fill {
+  border-radius: 0;
+  min-height: 100vh;
+}
+.ptile--layer .ptile__vol {
+  pointer-events: auto;
+}
+.ptile__audio {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
 .ptile--speaking {
   border-color: rgba(34, 197, 94, 0.75);
   box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.35);
@@ -119,12 +233,61 @@ onUnmounted(() => {
   object-fit: cover;
   background: #000;
 }
+.ptile--layer.ptile--mosaic-dynamic {
+  aspect-ratio: unset;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  border-radius: 0;
+  border-width: 0;
+  background: transparent;
+  overflow: hidden;
+}
+.ptile__video-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+}
+.ptile__video-stage--avatar-only {
+  flex: 1 1 auto;
+  min-height: 3.5rem;
+}
+.ptile__video-wrap {
+  flex: 1 1 auto;
+  align-self: stretch;
+  width: 100%;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  border-radius: 6px;
+}
+.ptile__video--mosaic {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  background: #000;
+  border-radius: 6px;
+}
 .ptile__avatar {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   background: linear-gradient(145deg, #2a2438, #15121c);
+}
+.ptile__avatar--mosaic {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 3.5rem;
+  align-self: stretch;
+  border-radius: 6px;
 }
 .ptile__mono {
   font-size: 1.25rem;

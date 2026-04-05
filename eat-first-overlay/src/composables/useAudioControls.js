@@ -15,6 +15,18 @@ const defaultAudioCapture = () => ({
  *   canControl: import('vue').Ref<boolean> | import('vue').ComputedRef<boolean>,
  * }} options
  */
+/**
+ * Vue інколи полегковує ref при передачі в prop — тоді замість ShallowRef приходить Room | null.
+ * @param {import('vue').ShallowRef<import('livekit-client').Room | null> | import('livekit-client').Room | null} roomRef
+ */
+function getRoomFromRef(roomRef) {
+  if (roomRef == null) return null
+  if (typeof roomRef === 'object' && 'value' in roomRef) {
+    return /** @type {import('livekit-client').Room | null} */ (roomRef.value)
+  }
+  return /** @type {import('livekit-client').Room | null} */ (roomRef)
+}
+
 export function useAudioControls(roomRef, options) {
   const { canControl } = options
 
@@ -45,7 +57,7 @@ export function useAudioControls(roomRef, options) {
   }
 
   async function setMicEnabled(on) {
-    const room = roomRef.value
+    const room = getRoomFromRef(roomRef)
     if (!room || !canControl.value) return
     const capture = defaultAudioCapture()
     if (selectedAudioInputId.value) {
@@ -56,7 +68,7 @@ export function useAudioControls(roomRef, options) {
   }
 
   async function setCameraEnabled(on) {
-    const room = roomRef.value
+    const room = getRoomFromRef(roomRef)
     if (!room || !canControl.value) return
     const opts = selectedVideoInputId.value
       ? { deviceId: { exact: selectedVideoInputId.value } }
@@ -67,7 +79,7 @@ export function useAudioControls(roomRef, options) {
 
   async function setAudioInput(deviceId) {
     selectedAudioInputId.value = deviceId
-    const room = roomRef.value
+    const room = getRoomFromRef(roomRef)
     if (!room || !canControl.value) return
     if (micEnabled.value) {
       await room.switchActiveDevice('audioinput', deviceId, true)
@@ -79,14 +91,14 @@ export function useAudioControls(roomRef, options) {
 
   async function setAudioOutput(deviceId) {
     selectedAudioOutputId.value = deviceId
-    const room = roomRef.value
+    const room = getRoomFromRef(roomRef)
     if (!room) return
     await room.switchActiveDevice('audiooutput', deviceId, true)
   }
 
   async function setVideoInput(deviceId) {
     selectedVideoInputId.value = deviceId
-    const room = roomRef.value
+    const room = getRoomFromRef(roomRef)
     if (!room || !canControl.value) return
     if (cameraEnabled.value) {
       await room.switchActiveDevice('videoinput', deviceId, true)
@@ -97,7 +109,7 @@ export function useAudioControls(roomRef, options) {
   }
 
   watch(
-    () => roomRef.value,
+    () => getRoomFromRef(roomRef),
     (room) => {
       if (!room) {
         micEnabled.value = false

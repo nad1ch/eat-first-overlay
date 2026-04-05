@@ -1,5 +1,7 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, provide, ref, watch, watchEffect } from 'vue'
+import { useLiveKitRoom } from '../composables/useLiveKitRoom.js'
+import { useMediaTracks } from '../composables/useMediaTracks.js'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import OverlayPlayerCard from '../components/OverlayPlayerCard.vue'
@@ -15,9 +17,14 @@ import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
 import { millisFromFirestore } from '../utils/firestoreTime.js'
 import AppPageLoader from '../ui/molecules/AppPageLoader.vue'
 import VoiceVideoGrid from '../components/VoiceVideoGrid.vue'
-import { liveKitConfigured } from '../config/livekit.js'
+import LiveKitVideoLayer from '../components/LiveKitVideoLayer.vue'
+import ParticipantTile from '../components/ParticipantTile.vue'
+import { VideoQuality } from 'livekit-client'
+import { getLiveKitSubscribeQualityMode, liveKitConfigured } from '../config/livekit.js'
 import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId.js'
-import { normalizePlayerSlotId } from '../utils/playerSlot.js'
+import { useMosaicPlayerOrder } from '../composables/useMosaicPlayerOrder.js'
+import { discordLikeGridDims } from '../utils/discordLikeGrid.js'
+import { normalizePlayerSlotId, playerSlotOrderIndex } from '../utils/playerSlot.js'
 import { getOrCreateDeviceId } from '../utils/deviceId.js'
 
 const route = useRoute()
@@ -91,10 +98,15 @@ const liveKitEliminatedLocal = computed(() => singlePlayer.value?.eliminated ===
 const liveKitPlayerNameMap = computed(() => {
   const m = {}
   if (isPersonal.value && singlePlayer.value) {
-    m[singlePlayer.value.id] = singlePlayer.value.name || singlePlayer.value.id
+    const id = normalizePlayerSlotId(singlePlayer.value.id)
+    m[id] =
+      typeof singlePlayer.value.name === 'string' && singlePlayer.value.name.trim()
+        ? singlePlayer.value.name
+        : id
   }
   for (const p of players.value) {
-    m[p.id] = typeof p.name === 'string' && p.name.trim() ? p.name : p.id
+    const id = normalizePlayerSlotId(p.id)
+    m[id] = typeof p.name === 'string' && p.name.trim() ? p.name : id
   }
   return m
 })
@@ -234,6 +246,136 @@ watch(
 )
 
 const overlayPageReady = computed(() => gotGameRoomOv.value && gotPrimaryOv.value)
+
+const lkRoomEnabled = computed(
+  () =>
+    liveKitConfigured() &&
+    overlayPageReady.value &&
+    Boolean(String(gameId.value || '').trim()) &&
+    Boolean(String(liveKitIdentity.value || '').trim()),
+)
+
+const lkVolumeByIdentity = ref({})
+
+const liveKitEliminatedSlots = computed(() => {
+  const s = new Set()
+  for (const p of players.value) {
+    if (p.eliminated === true) s.add(normalizePlayerSlotId(p.id))
+  }
+  return s
+})
+
+const { room: lkRoom, connectionState: lkConnectionState, error: lkRoomError } = useLiveKitRoom({
+  enabled: lkRoomEnabled,
+  roomName: gameId,
+  identity: liveKitIdentity,
+  displayName: liveKitDisplayName,
+  canPublish: liveKitCanPublish,
+})
+
+const lkMaxVideoSlots = computed(() => {
+  if (isPersonal.value) return 4
+  const alive = players.value.filter((p) => p.eliminated !== true).length
+  return Math.min(24, Math.max(1, alive || 12))
+})
+
+const lkSubscriberQualityCap = computed(() => {
+  const q = String(route.query.lk_q ?? '').trim().toLowerCase()
+  if (q === 'low' || q === '360' || q === '360p') return VideoQuality.LOW
+  if (q === 'medium' || q === '480' || q === '480p') return VideoQuality.MEDIUM
+  if (q === 'high' || q === 'off' || q === 'max') return null
+  const env = getLiveKitSubscribeQualityMode()
+  if (env === 'low') return VideoQuality.LOW
+  if (env === 'medium') return VideoQuality.MEDIUM
+  return null
+})
+
+const { tiles: lkTiles } = useMediaTracks(lkRoom, {
+  spotlightSlot: activeSpotlightId,
+  speakerSlot: speakerForTimerId,
+  includeLocal: liveKitCanPublish,
+  maxVideo: lkMaxVideoSlots,
+  subscriberMaxQuality: lkSubscriberQualityCap,
+  playerLabels: liveKitPlayerNameMap,
+  volumeByIdentity: lkVolumeByIdentity,
+  eliminatedSlots: liveKitEliminatedSlots,
+})
+
+provide('liveKitOverlayRoom', lkRoom)
+
+function liveKitTileForPlayer(player) {
+  if (!liveKitConfigured() || !player || player.eliminated === true) return null
+  const id = normalizePlayerSlotId(player.id)
+  return lkTiles.value.find((t) => t.identity === id) ?? null
+}
+
+function liveKitVolumeForPlayer(player) {
+  const id = normalizePlayerSlotId(player.id)
+  const v = lkVolumeByIdentity.value[id]
+  return typeof v === 'number' ? v : 1
+}
+
+function setLiveKitVolumeForPlayer(player, v) {
+  const id = normalizePlayerSlotId(player.id)
+  lkVolumeByIdentity.value = { ...lkVolumeByIdentity.value, [id]: v }
+}
+
+/** Як у Discord: активні спікери зверху, далі стабільно p1, p2, … */
+const playersOrderedForGlobalMosaic = computed(() => {
+  const list = [...players.value]
+  const speaking = new Set(lkTiles.value.filter((t) => t.isSpeaking).map((t) => t.identity))
+  list.sort((a, b) => {
+    const ida = normalizePlayerSlotId(a.id)
+    const idb = normalizePlayerSlotId(b.id)
+    const sa = speaking.has(ida) ? 0 : 1
+    const sb = speaking.has(idb) ? 0 : 1
+    if (sa !== sb) return sa - sb
+    return playerSlotOrderIndex(a.id) - playerSlotOrderIndex(b.id)
+  })
+  return list
+})
+
+const {
+  playersDisplayOrdered: playersDisplayOrderedForGlobalMosaic,
+  mosaicDragSourceId,
+  mosaicDropTargetId,
+  onMosaicDragStart,
+  onMosaicDragEnd,
+  onMosaicDragOver,
+  onMosaicDragEnterPlayer,
+  onMosaicDrop,
+} = useMosaicPlayerOrder(gameId, playersOrderedForGlobalMosaic)
+
+const globalMosaicEl = ref(null)
+const globalMosaicSize = ref({
+  width: typeof window !== 'undefined' ? window.innerWidth : 1280,
+  height: typeof window !== 'undefined' ? Math.max(320, window.innerHeight - 160) : 720,
+})
+
+watchEffect((onCleanup) => {
+  const el = globalMosaicEl.value
+  if (!el || typeof ResizeObserver === 'undefined') return
+  const ro = new ResizeObserver((entries) => {
+    const cr = entries[0]?.contentRect
+    if (!cr) return
+    globalMosaicSize.value = {
+      width: Math.max(1, cr.width),
+      height: Math.max(1, cr.height),
+    }
+  })
+  ro.observe(el)
+  onCleanup(() => ro.disconnect())
+})
+
+const globalMosaicGridStyle = computed(() => {
+  const n = playersDisplayOrderedForGlobalMosaic.value.length
+  const { width: w, height: h } = globalMosaicSize.value
+  const { cols, rows } = discordLikeGridDims(n, w, h)
+  return {
+    gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+    gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+  }
+})
 
 /** Банер лише при зміні раунду в кімнаті (не прив’язано до фази) */
 const roundBannerVisible = ref(false)
@@ -467,17 +609,16 @@ onUnmounted(() => {
 <template>
   <div class="overlay-page">
     <VoiceVideoGrid
-      v-if="liveKitConfigured()"
+      :lk-connection-state="lkConnectionState"
+      :lk-error="lkRoomError"
+      :lk-room-enabled="lkRoomEnabled"
       :overlay-ready="overlayPageReady"
-      :game-id="gameId"
-      :local-identity="liveKitIdentity"
-      :display-name="liveKitDisplayName"
       :can-publish="liveKitCanPublish"
-      :spotlight-slot="activeSpotlightId ?? ''"
+      :spectator-mode="!isPersonal"
       :speaker-slot="speakerForTimerId ?? ''"
       :spotlight-unmute-mode="lkSpotlightUnmute"
       :eliminated-local="liveKitEliminatedLocal"
-      :player-name-map="liveKitPlayerNameMap"
+      :local-identity="liveKitIdentity"
     />
     <AppPageLoader
       :visible="!overlayPageReady"
@@ -555,61 +696,131 @@ onUnmounted(() => {
       <p class="overlay-vote-top__hint">{{ t('overlayPage.voteInPanel') }}</p>
     </div>
 
-    <div v-if="isPersonal && !overlayTokenGateBlocks" class="single-stage single-stage--hud" data-onb="overlay-content">
-      <OverlayPlayerCard
-        v-if="singlePlayer"
-        :player="singlePlayer"
-        :is-spotlight="isSpotlightPlayer(singlePlayer)"
-        :is-timer-target="isTimerPlayer(singlePlayer)"
-        :cinema="cinemaHud"
-        :drama="dramaPersonal"
-        :voting-active="votingActive"
-        :voting-target-id="votingTargetId"
-        :vote-interactive="false"
-        :hide-vote-strip="true"
-        :game-id="gameId"
-        :nominated-player-id="nominatedPlayerId"
-        :nominated-by-id="nominatedById"
-        :nominators-line="nominatorsLineFor(singlePlayer.id)"
-        :room-round="roomRound"
-        :votes-received="votesForTarget(singlePlayer.id)"
-        :has-voted-this-round="personalHasVotedThisRound"
-        :is-vote-target-self="personalIsVoteTarget"
-        :hand-raised="isHandRaised(singlePlayer)"
-        :idle-waiting="showIdleWaitingCue"
-        v-bind="cardTimerProps(singlePlayer)"
-        solo
-      />
-    </div>
-
-    <div v-else class="board-frame" :class="{ 'board-frame--cinema': cinemaGrid }" data-onb="overlay-content">
-      <div class="grid" :class="{ 'grid--cinema': cinemaGrid }">
+    <div
+      v-if="isPersonal && !overlayTokenGateBlocks"
+      class="single-stage-wrap"
+      data-onb="overlay-content"
+      data-stage="personal"
+    >
+      <div
+        v-if="liveKitConfigured() && overlayPageReady && singlePlayer"
+        class="single-stage-wrap__under"
+      >
+        <LiveKitVideoLayer
+          mode="solo"
+          :solo-player="singlePlayer"
+          :get-tile="liveKitTileForPlayer"
+          :get-volume="liveKitVolumeForPlayer"
+          @volume-change="({ player: pl, volume: vol }) => setLiveKitVolumeForPlayer(pl, vol)"
+        />
+      </div>
+      <div class="single-stage single-stage--hud single-stage-wrap__over">
         <OverlayPlayerCard
-          v-for="p in players"
-          :key="p.id"
-          :player="p"
-          :is-spotlight="isSpotlightPlayer(p)"
-          :is-timer-target="isTimerPlayer(p)"
-          :dimmed="gridDimNonSpeakers && !isTimerPlayer(p)"
-          :cinema="cinemaGrid"
-          :drama="dramaMode"
+          v-if="singlePlayer"
+          :player="singlePlayer"
+          :is-spotlight="isSpotlightPlayer(singlePlayer)"
+          :is-timer-target="isTimerPlayer(singlePlayer)"
+          :cinema="cinemaHud"
+          :drama="dramaPersonal"
           :voting-active="votingActive"
           :voting-target-id="votingTargetId"
           :vote-interactive="false"
+          :hide-vote-strip="true"
           :game-id="gameId"
           :nominated-player-id="nominatedPlayerId"
           :nominated-by-id="nominatedById"
-          :nominators-line="nominatorsLineFor(p.id)"
+          :nominators-line="nominatorsLineFor(singlePlayer.id)"
           :room-round="roomRound"
-          :votes-received="votesForTarget(p.id)"
-          :has-voted-this-round="false"
-          :is-vote-target-self="false"
-          :hand-raised="isHandRaised(p)"
-          :suppress-hand-badge="handsClusterMode"
-          v-bind="cardTimerProps(p)"
+          :votes-received="votesForTarget(singlePlayer.id)"
+          :has-voted-this-round="personalHasVotedThisRound"
+          :is-vote-target-self="personalIsVoteTarget"
+          :hand-raised="isHandRaised(singlePlayer)"
+          :idle-waiting="showIdleWaitingCue"
+          v-bind="cardTimerProps(singlePlayer)"
+          solo
         />
       </div>
     </div>
+
+    <div
+      v-else-if="!isPersonal"
+      ref="globalMosaicEl"
+      class="overlay-global-mosaic"
+      :style="globalMosaicGridStyle"
+      data-onb="overlay-content"
+      data-stage="global"
+    >
+      <template v-if="liveKitConfigured() && overlayPageReady && playersDisplayOrderedForGlobalMosaic.length">
+        <div
+          v-for="p in playersDisplayOrderedForGlobalMosaic"
+          :key="p.id"
+          class="mosaic-cell"
+          :class="{
+            'mosaic-cell--speaking': !!liveKitTileForPlayer(p)?.isSpeaking,
+            'mosaic-cell--drag-over':
+              mosaicDropTargetId != null &&
+              normalizePlayerSlotId(mosaicDropTargetId) === normalizePlayerSlotId(p.id),
+            'mosaic-cell--drag-source': mosaicDragSourceId === normalizePlayerSlotId(p.id),
+          }"
+          @dragover="
+            (e) => {
+              onMosaicDragOver(e)
+              onMosaicDragEnterPlayer(p)
+            }
+          "
+          @drop="onMosaicDrop(p, $event)"
+        >
+          <span
+            class="mosaic-drag-handle"
+            draggable="true"
+            :title="t('overlayPage.mosaicDragHandle')"
+            :aria-label="t('overlayPage.mosaicDragHandle')"
+            role="button"
+            tabindex="0"
+            @dragstart="onMosaicDragStart(p, $event)"
+            @dragend="onMosaicDragEnd"
+            @click.stop
+          >
+            <span class="mosaic-drag-handle__grip" aria-hidden="true">⋮⋮</span>
+          </span>
+          <div class="mosaic-cell__under">
+            <ParticipantTile
+              v-if="liveKitTileForPlayer(p)"
+              layer
+              mosaic-mode
+              :tile="liveKitTileForPlayer(p)"
+              :volume="liveKitVolumeForPlayer(p)"
+              @update:volume="setLiveKitVolumeForPlayer(p, $event)"
+            />
+          </div>
+          <div class="mosaic-cell__over">
+            <OverlayPlayerCard
+              mosaic-tile
+              solo
+              :player="p"
+              :is-spotlight="isSpotlightPlayer(p)"
+              :is-timer-target="isTimerPlayer(p)"
+              :cinema="cinemaGrid"
+              :drama="dramaMode"
+              :voting-active="votingActive"
+              :voting-target-id="votingTargetId"
+              :vote-interactive="false"
+              :hide-vote-strip="true"
+              :game-id="gameId"
+              :nominated-player-id="nominatedPlayerId"
+              :nominated-by-id="nominatedById"
+              :nominators-line="nominatorsLineFor(p.id)"
+              :room-round="roomRound"
+              :votes-received="votesForTarget(p.id)"
+              :has-voted-this-round="false"
+              :is-vote-target-self="false"
+              :hand-raised="isHandRaised(p)"
+              :suppress-hand-badge="handsClusterMode"
+              v-bind="cardTimerProps(p)"
+            />
+          </div>
+        </div>
+      </template>
     </div>
 
     <Teleport to="body">
@@ -625,20 +836,27 @@ onUnmounted(() => {
     </Teleport>
     </div>
   </div>
+  </div>
 </template>
 
 <style scoped>
 .overlay-page {
   min-height: 100vh;
+  min-height: 100dvh;
   width: 100%;
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 .overlay-root {
-  min-height: 100vh;
+  flex: 1;
+  min-height: 0;
   width: 100%;
   box-sizing: border-box;
   position: relative;
+  display: flex;
+  flex-direction: column;
   /* Завжди темний канвас для ефіру, незалежно від теми сайту */
   background: #050308;
 }
@@ -665,6 +883,89 @@ onUnmounted(() => {
   min-height: 0;
   transform-origin: top center;
   transition: transform 0.35s ease;
+}
+
+.overlay-global-mosaic {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: clamp(4px, 0.35vw, 8px);
+  padding: clamp(4px, 0.35vw, 8px);
+  box-sizing: border-box;
+}
+
+.mosaic-cell {
+  container-type: size;
+  container-name: mosaic;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #050308;
+  border: 1px solid rgba(168, 85, 247, 0.18);
+}
+
+.mosaic-cell__under {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.mosaic-cell__under :deep(.ptile--layer) {
+  border-radius: 0;
+  min-height: 100% !important;
+  height: 100%;
+}
+
+.mosaic-cell__over {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.mosaic-drag-handle {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 22;
+  min-width: 1.65rem;
+  min-height: 1.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  pointer-events: auto;
+  border-radius: 8px;
+  background: rgba(5, 3, 12, 0.78);
+  border: 1px solid rgba(168, 85, 247, 0.38);
+  color: rgba(226, 220, 255, 0.9);
+  user-select: none;
+}
+.mosaic-drag-handle:active {
+  cursor: grabbing;
+}
+.mosaic-drag-handle__grip {
+  font-size: 0.62rem;
+  line-height: 1;
+  letter-spacing: -0.06em;
+}
+.mosaic-cell--speaking {
+  box-shadow:
+    inset 0 0 0 3px rgba(34, 197, 94, 0.88),
+    inset 0 0 18px rgba(34, 197, 94, 0.12);
+}
+
+.mosaic-cell--drag-over {
+  outline: 2px solid rgba(129, 140, 248, 0.92);
+  outline-offset: -2px;
+}
+.mosaic-cell--drag-source {
+  opacity: 0.74;
 }
 
 .overlay-body--all-voted {
@@ -879,13 +1180,13 @@ onUnmounted(() => {
   }
 }
 
-.overlay-root--drama .board-head,
-.overlay-root--drama .grid {
+.overlay-root--drama .board-head {
   position: relative;
   z-index: 1;
 }
 
 .board-head {
+  flex-shrink: 0;
   text-align: center;
   margin-bottom: 1.1rem;
   max-width: 960px;
@@ -901,24 +1202,6 @@ onUnmounted(() => {
   text-transform: uppercase;
   font-family: 'Orbitron', sans-serif;
   color: rgba(196, 181, 253, 0.72);
-}
-
-.board-frame {
-  width: 100%;
-  max-width: 1240px;
-  margin: 0 auto;
-  padding: clamp(0.85rem, 2vw, 1.35rem);
-  border-radius: 20px;
-  border: 1px solid rgba(168, 85, 247, 0.22);
-  background: linear-gradient(165deg, rgba(12, 8, 28, 0.55) 0%, rgba(6, 4, 16, 0.35) 100%);
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.35),
-    0 12px 40px rgba(0, 0, 0, 0.35);
-}
-
-.board-frame--cinema {
-  max-width: 1320px;
-  padding-bottom: 1rem;
 }
 
 .eyebrow {
@@ -1056,6 +1339,23 @@ onUnmounted(() => {
   }
 }
 
+.single-stage-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 100vh;
+  width: 100%;
+}
+.single-stage-wrap__under {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.single-stage-wrap__over {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
 .single-stage--hud {
   position: relative;
   z-index: 1;
@@ -1066,32 +1366,6 @@ onUnmounted(() => {
   padding: 0;
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.85rem 1rem;
-  max-width: 1200px;
-  margin: 0 auto;
-  align-content: end;
-}
-
-.grid--cinema {
-  gap: 1.35rem 1.5rem;
-  max-width: 1280px;
-  padding-bottom: 0.5rem;
-}
-
-@media (min-width: 900px) {
-  .grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (max-width: 520px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
-}
 </style>
 
 <style>

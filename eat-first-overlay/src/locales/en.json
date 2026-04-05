@@ -42,7 +42,7 @@
           },
           {
             "title": "Who you are",
-            "text": "Players pick a slot further down; the host uses a separate desk link (this row is a shortcut). OBS uses the URL from your slot.",
+            "text": "Players pick a slot further down; the host uses a separate desk link. OBS: global grid — “OBS · overlay” button; personal URL — on your slot.",
             "target": "join-roles"
           },
           {
@@ -137,9 +137,9 @@
     "ctaHost": "I'm the host",
     "ctaHostSub": "Show desk · timer · phases (access key)",
     "ctaObs": "OBS · overlay",
-    "ctaObsSub": "Global grid or a browser source for your scene",
+    "ctaObsSub": "Open the global grid for Browser Source (all slots)",
     "ctaObsComingSoon": "Coming soon",
-    "ctaObsSoonHint": "Lobby entry for this path is temporarily off — use the OBS overlay button on your slot after you pick one.",
+    "ctaObsSoonHint": "Personal overlay — use “OBS overlay” on your slot after you pick it.",
     "obsTitle": "OBS · quick start",
     "obs1": "Source: Browser (or Browser Source).",
     "obs2": "Paste the URL from “OBS overlay” on your slot or the global URL — depends on your scene.",
@@ -169,7 +169,12 @@
     "nameModalTitle": "Ім’я за столом",
     "nameModalPlaceholder": "Як показувати на екрані",
     "nameModalContinue": "Продовжити",
-    "nameModalCancel": "Скасувати"
+    "nameModalCancel": "Скасувати",
+    "zoomTitle": "Zoom-style room",
+    "zoomHint": "Player cameras (when enabled from their overlay) and the same cards as the global OBS view. View-only here — publish your cam from your personal /overlay.",
+    "zoomWaiting": "Loading players…",
+    "zoomNoPlayers": "No players in this room yet.",
+    "zoomLiveKitName": "Lobby"
   },
   "admin": {
     "eyebrow": "Host",
@@ -526,7 +531,25 @@
     "phaseBanner": "Phase: {phase} · Round {round} · In room: {n}",
     "tokenMismatchTitle": "Посилання недійсне",
     "tokenMismatchHint": "Відкрий лобі й оверлей зі свого слоту (у OBS — посилання без токена).",
-    "tokenMismatchCta": "Лобі"
+    "tokenMismatchCta": "Lobby",
+    "mosaicDragHandle": "Drag to swap with another camera tile",
+    "liveKit": {
+      "statusNotConfigured": "LiveKit · not configured",
+      "statusWaitingGame": "LiveKit · waiting for game data…",
+      "statusConnecting": "LiveKit · connecting…",
+      "statusConnected": "LiveKit · connected",
+      "statusDisconnected": "LiveKit · disconnected",
+      "statusIdle": "LiveKit · idle",
+      "statusError": "LiveKit · error: {msg}",
+      "notConfiguredHint": "Set VITE_LIVEKIT_URL (and dev LIVEKIT_API_KEY / SECRET — see .env.example).",
+      "waitingHint": "Connecting after Firestore sync. If this stays long, check the game id and network.",
+      "hintControls": "Video/audio on player cards; mic & camera are here.",
+      "spectatorHint": "Spectator view: add ?player=p1 (your slot) to enable camera and mic.",
+      "eliminatedNoPublish": "Eliminated — camera and mic stay off.",
+      "enableSound": "Enable sound",
+      "enableSoundHint": "Browsers block remote audio until you interact. Click here or use Mic/Cam first.",
+      "debugSummary": "LiveKit debug (dev)"
+    }
   },
   "overlayCard": {
     "eliminated": "OUT",
