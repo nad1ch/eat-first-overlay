@@ -1,7 +1,11 @@
 import { shallowRef, ref, watch, onUnmounted } from 'vue'
 import { Room, RoomEvent, ConnectionState } from 'livekit-client'
 import { fetchLiveKitToken } from '../services/livekitToken.js'
-import { getLiveKitServerUrl, getLiveKitVideoCaptureDefaults } from '../config/livekit.js'
+import {
+  getLiveKitServerUrl,
+  getLiveKitVideoCaptureDefaults,
+  getLiveKitPublishDefaults,
+} from '../config/livekit.js'
 
 /**
  * Керування одним екземпляром Room: connect / disconnect / reconnect.
@@ -95,6 +99,7 @@ export function useLiveKitRoom(options) {
         autoGainControl: true,
       },
       videoCaptureDefaults: getLiveKitVideoCaptureDefaults(),
+      publishDefaults: getLiveKitPublishDefaults(),
     })
     bindRoomEvents(r)
     room.value = r

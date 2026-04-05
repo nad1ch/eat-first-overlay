@@ -29,12 +29,33 @@ export function getLiveKitSubscribeQualityMode() {
   return String(import.meta.env.VITE_LK_SUBSCRIBE_VIDEO_QUALITY ?? 'high').toLowerCase()
 }
 
+/** Основний шар Full HD (~3 Mbps — компроміс артефакти / навантаження для VP8 simulcast). */
+const PRIMARY_FHD_MAX_BITRATE = 3_000_000
+const PRIMARY_FHD_MAX_FRAMERATE = 30
+
 /**
- * Параметри getUserMedia для вебками: 1080p / 30 fps (див. VideoPresets.h1080 у SDK).
- * Без цього Room використовував би дефолт SDK — зараз це 720p.
+ * Параметри getUserMedia для вебками: 1080p + явні 30 fps (без «розгону» до 60 fps з камери).
  */
 export function getLiveKitVideoCaptureDefaults() {
   return {
     resolution: VideoPresets.h1080.resolution,
+    frameRate: PRIMARY_FHD_MAX_FRAMERATE,
+  }
+}
+
+/**
+ * Публікація камери: VP8 simulcast — рівно **три** відеошари (RID q/h/f), не чотири.
+ * У client-sdk-js з `videoSimulcastLayers` беруться лише **перші два** пресети; третій — це завжди
+ * primary (1080p). Тобто `[h180, h360, h720]` **не** дасть окремо 360 і 720: третій елемент ігнорується.
+ * Щоб мати «масово низька якість + гравці ближче до HD + OBS full» → **[h180, h720]** → шари ~180p, ~720p, 1080p.
+ */
+export function getLiveKitPublishDefaults() {
+  return {
+    simulcast: true,
+    videoEncoding: {
+      maxBitrate: PRIMARY_FHD_MAX_BITRATE,
+      maxFramerate: PRIMARY_FHD_MAX_FRAMERATE,
+    },
+    videoSimulcastLayers: [VideoPresets.h180, VideoPresets.h720],
   }
 }
