@@ -317,7 +317,7 @@ function handUpJoin(pid) {
       <li><span class="join-steps__n">3</span> {{ $t('join.step3') }}</li>
     </ol>
 
-    <div class="game-bar anim-slide-up" style="animation-delay: 80ms">
+    <div class="game-bar anim-slide-up" style="animation-delay: 80ms" data-onb="join-game-bar">
       <label class="lbl" for="gid">{{ $t('join.gameId') }}</label>
       <div class="game-row">
         <input id="gid" v-model="gameInput" type="text" class="inp" autocomplete="off" />
@@ -325,7 +325,7 @@ function handUpJoin(pid) {
       </div>
     </div>
 
-    <section class="roles roles--clean" aria-labelledby="roles-title">
+    <section class="roles roles--clean" aria-labelledby="roles-title" data-onb="join-roles">
       <h2 id="roles-title" class="roles-title">{{ $t('join.whoTitle') }}</h2>
       <p class="roles-hint">{{ $t('join.whoHint') }}</p>
       <div class="cta-grid anim-stagger">
@@ -355,7 +355,12 @@ function handUpJoin(pid) {
       </div>
     </section>
 
-    <section class="obs-hint anim-slide-up" style="animation-delay: 0.12s" aria-labelledby="obs-hint-title">
+    <section
+      class="obs-hint anim-slide-up"
+      style="animation-delay: 0.12s"
+      aria-labelledby="obs-hint-title"
+      data-onb="join-obs"
+    >
       <h2 id="obs-hint-title" class="obs-hint__title">{{ $t('join.obsTitle') }}</h2>
       <ol class="obs-hint__list">
         <li>{{ $t('join.obs1') }}</li>
@@ -369,7 +374,13 @@ function handUpJoin(pid) {
       </p>
     </section>
 
-    <section id="player-slots" class="cards-wrap anim-slide-up" style="animation-delay: 0.16s" aria-labelledby="slots-title">
+    <section
+      id="player-slots"
+      class="cards-wrap anim-slide-up"
+      style="animation-delay: 0.16s"
+      aria-labelledby="slots-title"
+      data-onb="join-slots"
+    >
       <h2 id="slots-title" class="sec-title">{{ $t('join.slotsTitle') }}</h2>
       <p class="sec-sub sec-sub--emph">
         {{ $t('join.slotsSub') }}

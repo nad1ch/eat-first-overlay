@@ -78,6 +78,10 @@ export async function applyActiveCardEffect(gameId, playerId, effectId, scenario
     await applyGlobalAction(gameId, 'phobia', sid)
     return { ok: true, message: 'Усім нова фобія' }
   }
+  if (effectId === ACTIVE_CARD_EFFECT_IDS.REROLL_LUGGAGE_ALL) {
+    await applyGlobalAction(gameId, 'luggage', sid)
+    return { ok: true, message: 'Усім новий багаж' }
+  }
 
   if (effectId === ACTIVE_CARD_EFFECT_IDS.REVEAL_ALL_SELF) {
     return setAllRevealed(gameId, playerId, true)

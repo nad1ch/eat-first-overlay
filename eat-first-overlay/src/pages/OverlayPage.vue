@@ -510,6 +510,7 @@ onUnmounted(() => {
     <div
       class="overlay-body"
       :class="{ 'overlay-body--all-voted': showAllVotedBanner }"
+      data-onb="overlay-body"
     >
     <header
       v-if="!isPersonal"
@@ -554,7 +555,7 @@ onUnmounted(() => {
       <p class="overlay-vote-top__hint">{{ t('overlayPage.voteInPanel') }}</p>
     </div>
 
-    <div v-if="isPersonal && !overlayTokenGateBlocks" class="single-stage single-stage--hud">
+    <div v-if="isPersonal && !overlayTokenGateBlocks" class="single-stage single-stage--hud" data-onb="overlay-content">
       <OverlayPlayerCard
         v-if="singlePlayer"
         :player="singlePlayer"
@@ -581,7 +582,7 @@ onUnmounted(() => {
       />
     </div>
 
-    <div v-else class="board-frame" :class="{ 'board-frame--cinema': cinemaGrid }">
+    <div v-else class="board-frame" :class="{ 'board-frame--cinema': cinemaGrid }" data-onb="overlay-content">
       <div class="grid" :class="{ 'grid--cinema': cinemaGrid }">
         <OverlayPlayerCard
           v-for="p in players"

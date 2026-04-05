@@ -23,6 +23,105 @@
     "footerEggClose": "Schließen",
     "footerEggHint": "Klick auf Kringel oder Stäbchen"
   },
+  "onboarding": {
+    "openGuide": "Kurzanleitung",
+    "close": "Schließen",
+    "progress": "Schritt {n} von {total}",
+    "next": "Weiter",
+    "back": "Zurück",
+    "done": "Fertig",
+    "dontShowAgain": "Für diese Seite nicht mehr anzeigen",
+    "tours": {
+      "join": {
+        "title": "Lobby — Schnellstart",
+        "steps": [
+          {
+            "title": "Game-ID",
+            "text": "ID aus dem Stream eingeben und OK — Slots und Raumdaten laden nach.",
+            "target": "join-game-bar"
+          },
+          {
+            "title": "Rolle",
+            "text": "Spieler wählen unten einen Slot; Host nutzt ein separates Pult (Shortcut hier). OBS-URL kommt vom eigenen Slot.",
+            "target": "join-roles"
+          },
+          {
+            "title": "Slots",
+            "text": "„Mein Panel“ oder Slot beanspruchen, dann „Overlay“ kopiert die Browserquellen-URL für OBS.",
+            "target": "join-slots"
+          },
+          {
+            "title": "OBS-Hinweise",
+            "text": "Kurz-Checkliste: transparenter Hintergrund, Szenengröße, Refresh — Details in diesem Block.",
+            "target": "join-obs"
+          }
+        ]
+      },
+      "controlHost": {
+        "title": "Host-Pult — Kurzüberblick",
+        "steps": [
+          {
+            "title": "Modus & Blöcke",
+            "text": "Oben: Pult-Modus, alles einklappen oder gespeicherten Key vergessen. Blöcke bei Bedarf aufklappen.",
+            "target": "control-host-strip"
+          },
+          {
+            "title": "Live & Phasen",
+            "text": "Live-Raum: Show-Phase, Links, Timer. In der Abstimmung: Umfrage nach euren Regeln; Spieler voten im Panel.",
+            "target": "control-host-live",
+            "expandHost": "live"
+          },
+          {
+            "title": "Slot-Roster",
+            "text": "Slot wählen — rechts Aktionen: Karte, Rauswurf, Noms, Masse. Änderungen sofort auf den Overlays.",
+            "target": "control-host-roster",
+            "expandHost": "players"
+          },
+          {
+            "title": "Generierung",
+            "text": "Szenario, Zufallsmerkmale, globale Rolls für alle — die „Tisch“-Tools.",
+            "target": "control-host-gen",
+            "expandHost": "gen"
+          }
+        ]
+      },
+      "controlPlayer": {
+        "title": "Spieler-Panel — Kurzüberblick",
+        "steps": [
+          {
+            "title": "Hand & Ready",
+            "text": "Schnellaktionen: Hand hoch für den Host und Bereitschaft. Abhängig von Phase und Regeln.",
+            "target": "control-player-actions"
+          },
+          {
+            "title": "Profil & Traits",
+            "text": "Felder für Zuschauer im Overlay ein- oder ausblenden. Phasen setzt der Host.",
+            "target": "control-player-card"
+          },
+          {
+            "title": "Aktive Karte",
+            "text": "Szenario-Karte: vom Host anfordern oder warten. Tour wieder über „Kurzanleitung“ in der Kopfzeile.",
+            "target": "control-player-active-card"
+          }
+        ]
+      },
+      "overlay": {
+        "title": "Overlay für OBS",
+        "steps": [
+          {
+            "title": "Zuschauer-Szene",
+            "text": "Beim Spiel nicht klicken — als Browserquelle über’s Video. Alles unten sehen die Zuschauer.",
+            "target": "overlay-body"
+          },
+          {
+            "title": "Karte einrahmen",
+            "text": "Quelle auf Webcam skalieren; transparenten Hintergrund in OBS. Gleiche URL wie „Overlay“ in der Lobby.",
+            "target": "overlay-content"
+          }
+        ]
+      }
+    }
+  },
   "join": {
     "loading": "Verbindung zum Raum…",
     "eyebrow": "Live show",

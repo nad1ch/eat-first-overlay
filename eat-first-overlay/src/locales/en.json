@@ -23,6 +23,105 @@
     "footerEggClose": "Close",
     "footerEggHint": "Click the bagel or stick"
   },
+  "onboarding": {
+    "openGuide": "How to use",
+    "close": "Close",
+    "progress": "Step {n} of {total}",
+    "next": "Next",
+    "back": "Back",
+    "done": "Done",
+    "dontShowAgain": "Do not show again for this page",
+    "tours": {
+      "join": {
+        "title": "Lobby — quick start",
+        "steps": [
+          {
+            "title": "Game id",
+            "text": "Enter the room id from the show and press OK — slots and room data load below.",
+            "target": "join-game-bar"
+          },
+          {
+            "title": "Who you are",
+            "text": "Players pick a slot further down; the host uses a separate desk link (this row is a shortcut). OBS uses the URL from your slot.",
+            "target": "join-roles"
+          },
+          {
+            "title": "Slots",
+            "text": "“My panel” or claim a slot, then “Overlay” copies the browser-source URL for OBS.",
+            "target": "join-slots"
+          },
+          {
+            "title": "OBS hints",
+            "text": "Quick checklist: transparent background, scene size, refresh when active — details in this block.",
+            "target": "join-obs"
+          }
+        ]
+      },
+      "controlHost": {
+        "title": "Host desk — basics",
+        "steps": [
+          {
+            "title": "Mode & sections",
+            "text": "Top strip: desk mode, collapse all sections, or clear the saved key. Open the sections you need as you go.",
+            "target": "control-host-strip"
+          },
+          {
+            "title": "Live & phases",
+            "text": "Live room: show phase, links for players, timers. In voting, run the poll per your rules; players vote from their panels.",
+            "target": "control-host-live",
+            "expandHost": "live"
+          },
+          {
+            "title": "Slot roster",
+            "text": "Pick a slot — tools on the right: card, elimination, noms, bulk ops. Changes appear on overlays immediately.",
+            "target": "control-host-roster",
+            "expandHost": "players"
+          },
+          {
+            "title": "Generation",
+            "text": "Scenario, random traits, and global rolls for the whole cast — the “tabletop” tools live here.",
+            "target": "control-host-gen",
+            "expandHost": "gen"
+          }
+        ]
+      },
+      "controlPlayer": {
+        "title": "Player panel — basics",
+        "steps": [
+          {
+            "title": "Hand & ready",
+            "text": "Quick controls: raised hand for the host and your ready state. Availability depends on phase and room rules.",
+            "target": "control-player-actions"
+          },
+          {
+            "title": "Profile & traits",
+            "text": "Show or hide lines for viewers on your overlay with the toggles next to fields. The host drives phases.",
+            "target": "control-player-card"
+          },
+          {
+            "title": "Active card",
+            "text": "Scenario card: request from the host or wait for a deal. Reopen this tour anytime via “How to use” in the header.",
+            "target": "control-player-active-card"
+          }
+        ]
+      },
+      "overlay": {
+        "title": "Overlay for OBS",
+        "steps": [
+          {
+            "title": "Audience scene",
+            "text": "Do not click this while playing — add it as a browser source on top of video. Everything below is what viewers see.",
+            "target": "overlay-body"
+          },
+          {
+            "title": "Frame the card",
+            "text": "Scale and crop the source to your webcam; enable transparent background in OBS. Same URL as “Overlay” in the lobby.",
+            "target": "overlay-content"
+          }
+        ]
+      }
+    }
+  },
   "join": {
     "loading": "Connecting to the room…",
     "eyebrow": "Live show",

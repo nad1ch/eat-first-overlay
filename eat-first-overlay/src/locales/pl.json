@@ -23,6 +23,105 @@
     "footerEggClose": "Zamknij",
     "footerEggHint": "Kliknij bajgiel lub patyczek"
   },
+  "onboarding": {
+    "openGuide": "Jak korzystać",
+    "close": "Zamknij",
+    "progress": "Krok {n} z {total}",
+    "next": "Dalej",
+    "back": "Wstecz",
+    "done": "Gotowe",
+    "dontShowAgain": "Nie pokazuj ponownie na tej stronie",
+    "tours": {
+      "join": {
+        "title": "Lobby — szybki start",
+        "steps": [
+          {
+            "title": "ID gry",
+            "text": "Wpisz identyfikator pokoju ze streamu i OK — załadują się sloty i stan gry.",
+            "target": "join-game-bar"
+          },
+          {
+            "title": "Twoja rola",
+            "text": "Gracz wybiera slot niżej; prowadzący ma osobny pulpit (ten rząd to skrót). OBS — URL ze swojego slotu.",
+            "target": "join-roles"
+          },
+          {
+            "title": "Sloty",
+            "text": "„Mój panel” lub zajęcie slotu, potem „Overlay” kopiuje URL źródła przeglądarki do OBS.",
+            "target": "join-slots"
+          },
+          {
+            "title": "Podpowiedź OBS",
+            "text": "Krótka lista: przezroczyste tło, rozmiar sceny, odświeżanie — szczegóły w tym bloku.",
+            "target": "join-obs"
+          }
+        ]
+      },
+      "controlHost": {
+        "title": "Pulpit prowadzącego — skrót",
+        "steps": [
+          {
+            "title": "Tryb i sekcje",
+            "text": "Górny pasek: tryb pulpitu, zwijanie sekcji lub czyszczenie klucza. Rozwijaj tylko to, czego potrzebujesz.",
+            "target": "control-host-strip"
+          },
+          {
+            "title": "Efir i fazy",
+            "text": "Stan na żywo: faza show, linki, timer. Przy głosowaniu prowadź ankietę według zasad; gracze głosują w panelach.",
+            "target": "control-host-live",
+            "expandHost": "live"
+          },
+          {
+            "title": "Roster slotów",
+            "text": "Wybierz slot — po prawej akcje: karta, odpad, nominacje, masa. Zmiany od razu na overlayach.",
+            "target": "control-host-roster",
+            "expandHost": "players"
+          },
+          {
+            "title": "Generacja",
+            "text": "Scenariusz, losowe cechy, rzuty globalne dla całej obsady — narzędzia „na stole”.",
+            "target": "control-host-gen",
+            "expandHost": "gen"
+          }
+        ]
+      },
+      "controlPlayer": {
+        "title": "Panel gracza — skrót",
+        "steps": [
+          {
+            "title": "Ręka i gotowość",
+            "text": "Szybkie akcje: ręka dla prowadzącego i status gotowości. Zależne od fazy i zasad pokoju.",
+            "target": "control-player-actions"
+          },
+          {
+            "title": "Profil i cechy",
+            "text": "Pokazuj lub chowaj pola dla widzów na overlayu przyciskami przy polach. Fazy ustala prowadzący.",
+            "target": "control-player-card"
+          },
+          {
+            "title": "Aktywna karta",
+            "text": "Karta scenariusza: poproś prowadzącego lub poczekaj na rozdanie. Tour znów otworzysz przez „Jak korzystać” w nagłówku.",
+            "target": "control-player-active-card"
+          }
+        ]
+      },
+      "overlay": {
+        "title": "Overlay do OBS",
+        "steps": [
+          {
+            "title": "Scena dla widzów",
+            "text": "Nie klikać w grze — dodać jako źródło przeglądarki nad obrazem. Cały blok niżej to to, co widzi publiczność.",
+            "target": "overlay-body"
+          },
+          {
+            "title": "Kadrowanie karty",
+            "text": "Dopasuj rozmiar do kamery; włącz przezroczyste tło w OBS. Ten sam URL co „Overlay” w lobby.",
+            "target": "overlay-content"
+          }
+        ]
+      }
+    }
+  },
   "join": {
     "loading": "Łączenie z pokojem…",
     "eyebrow": "Live show",

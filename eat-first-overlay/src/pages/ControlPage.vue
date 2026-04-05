@@ -2548,6 +2548,9 @@ onUnmounted(() => {
   clearTimeout(saveTimer)
   clearTimeout(toastTimer)
   cleanupSubs()
+  if (typeof window !== 'undefined') {
+    window.removeEventListener(EAT_FIRST_ONBOARDING_EXPAND, onEatFirstOnboardingExpand)
+  }
   if (tickTimer != null) {
     window.clearInterval(tickTimer)
     tickTimer = null
@@ -2612,6 +2615,27 @@ function hostExpandAllBlocks() {
   o.editor = true
 }
 
+const EAT_FIRST_ONBOARDING_EXPAND = 'eat-first-onboarding-expand'
+
+function onEatFirstOnboardingExpand(ev) {
+  if (!isAdmin.value) return
+  const b = ev?.detail?.hostBlock
+  if (b == null || typeof b !== 'string') return
+  const o = hostBlocksOpen.value
+  const key = b.trim()
+  if (key === 'live') o.live = true
+  else if (key === 'sessionStats') o.sessionStats = true
+  else if (key === 'activeCard') o.activeCard = true
+  else if (key === 'players') o.players = true
+  else if (key === 'gen') o.gen = true
+  else if (key === 'editor') o.editor = true
+}
+
+onMounted(() => {
+  if (typeof window === 'undefined') return
+  window.addEventListener(EAT_FIRST_ONBOARDING_EXPAND, onEatFirstOnboardingExpand)
+})
+
 const activeCardPanelKey = computed(
   () =>
     `${characterState.activeCard.used ? 'u' : 'a'}-${characterState.activeCardRequest ? 'r' : 'n'}-${String(characterState.activeCard.title ?? '').slice(0, 24)}`,
@@ -2652,7 +2676,11 @@ function rerollActiveCardOnly() {
     />
     <p v-if="loadError" class="error error--alert" role="alert">{{ loadError }}</p>
 
-    <div class="mode-strip" :class="{ admin: isAdmin, player: !isAdmin }">
+    <div
+      class="mode-strip"
+      :class="{ admin: isAdmin, player: !isAdmin }"
+      :data-onb="isAdmin ? 'control-host-strip' : undefined"
+    >
       <span class="mode-label">{{ modeLabel }}</span>
       <span v-if="!isAdmin" class="status-pill" :data-s="myStatusLabel">{{ myStatusLabel }}</span>
       <div v-if="isAdmin" class="host-mode-actions">
@@ -2669,7 +2697,11 @@ function rerollActiveCardOnly() {
     </div>
 
     <template v-if="isAdmin">
-      <section class="admin-zone admin-zone--live admin-card admin-zone--live-priority" :aria-label="t('control.ariaLive')">
+      <section
+        class="admin-zone admin-zone--live admin-card admin-zone--live-priority"
+        :aria-label="t('control.ariaLive')"
+        data-onb="control-host-live"
+      >
         <button
           type="button"
           class="host-block-fold"
@@ -2861,6 +2893,7 @@ function rerollActiveCardOnly() {
         class="admin-zone admin-zone--players"
         :class="{ 'admin-zone--nominated-active': nominatedPlayerActive }"
         :aria-label="t('control.ariaPlayers')"
+        data-onb="control-host-roster"
       >
         <button
           type="button"
@@ -2943,7 +2976,11 @@ function rerollActiveCardOnly() {
         </div>
       </section>
 
-      <section class="admin-zone admin-zone--generate admin-zone--tier-lower" :aria-label="t('control.ariaGen')">
+      <section
+        class="admin-zone admin-zone--generate admin-zone--tier-lower"
+        :aria-label="t('control.ariaGen')"
+        data-onb="control-host-gen"
+      >
         <button
           type="button"
           class="host-block-fold host-block-fold--soft"
@@ -3051,6 +3088,7 @@ function rerollActiveCardOnly() {
         class="player-hero-actions"
         role="group"
         :aria-label="t('control.playerQuickActionsAria')"
+        data-onb="control-player-actions"
       >
         <div class="hand-toggle" role="group" :aria-label="t('control.handGroup')">
           <button
@@ -3182,7 +3220,7 @@ function rerollActiveCardOnly() {
         </div>
       </div>
 
-      <div v-else class="player-char-grid">
+      <div v-else class="player-char-grid" data-onb="control-player-card">
         <div class="trait-block trait-block--player trait-block--identity player-char-grid__identity">
           <div class="trait-toolbar">
             <span class="trait-label">{{ t('control.profile') }}</span>
@@ -3299,7 +3337,7 @@ function rerollActiveCardOnly() {
         </div>
       </div>
 
-      <div v-if="!isAdmin" class="active-card-box">
+      <div v-if="!isAdmin" class="active-card-box" data-onb="control-player-active-card">
         <h3 class="ac-title">{{ t('control.activeCard') }}</h3>
         <Transition name="ac-swap" mode="out-in">
           <div :key="activeCardPanelKey" class="active-card-player-block">
