@@ -3208,15 +3208,11 @@ function rerollActiveCardOnly() {
           </div>
           <div class="identity-reveal-block">
             <p class="pv-line"><span class="mk">{{ t('control.name') }}</span> {{ characterState.name || '—' }}</p>
-            <Transition name="stat-reveal" mode="out-in">
-              <div v-if="characterState.demographicsRevealed" key="dem-on">
-                <p class="pv-line">
-                  <span class="mk">{{ t('control.ageGender') }}</span> {{ characterState.age || '—' }} ·
-                  {{ formatGenderDisplay(characterState.gender) }}
-                </p>
-              </div>
-              <p v-else key="dem-off" class="pv-hidden">••••••</p>
-            </Transition>
+            <p class="pv-line">
+              <span class="mk">{{ t('control.ageGender') }}</span> {{ characterState.age || '—' }} ·
+              {{ formatGenderDisplay(characterState.gender) }}
+            </p>
+            <p class="pv-hint">{{ t('control.playerPanelRevealHint') }}</p>
           </div>
         </div>
 
@@ -3235,16 +3231,9 @@ function rerollActiveCardOnly() {
                   {{ characterState[row.key].revealed ? t('control.open') : t('control.closed') }}
                 </button>
               </div>
-              <Transition name="stat-reveal" mode="out-in">
-                <p
-                  v-if="characterState[row.key].revealed"
-                  :key="'open-' + row.key"
-                  class="trait-value-preview trait-value-preview--on"
-                >
-                  {{ characterState[row.key].value || '—' }}
-                </p>
-                <p v-else :key="'shut-' + row.key" class="trait-value-preview trait-value-preview--off">••••••</p>
-              </Transition>
+              <p class="trait-value-preview trait-value-preview--on">
+                {{ characterState[row.key].value || '—' }}
+              </p>
             </div>
           </div>
           <div class="player-traits-col" :aria-label="t('control.ariaTraitsR')">
@@ -3261,16 +3250,9 @@ function rerollActiveCardOnly() {
                   {{ characterState[row.key].revealed ? t('control.open') : t('control.closed') }}
                 </button>
               </div>
-              <Transition name="stat-reveal" mode="out-in">
-                <p
-                  v-if="characterState[row.key].revealed"
-                  :key="'open-' + row.key"
-                  class="trait-value-preview trait-value-preview--on"
-                >
-                  {{ characterState[row.key].value || '—' }}
-                </p>
-                <p v-else :key="'shut-' + row.key" class="trait-value-preview trait-value-preview--off">••••••</p>
-              </Transition>
+              <p class="trait-value-preview trait-value-preview--on">
+                {{ characterState[row.key].value || '—' }}
+              </p>
             </div>
           </div>
         </div>
@@ -4831,6 +4813,15 @@ html[data-theme='light'] .host-forget-btn:hover {
   letter-spacing: 0.25em;
   font-size: 1.1rem;
   color: var(--text-muted);
+}
+
+.pv-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
 }
 
 .trait-value-preview {

@@ -69,16 +69,13 @@ function chunkFor(player, key) {
 
 function statDisplay(player, fieldKey) {
   const c = chunkFor(player, fieldKey)
-  const open = props.solo || c.revealed
-  if (!open) return { mode: 'label', text: labelByKey.value[fieldKey] }
+  if (!c.revealed) return { mode: 'label', text: labelByKey.value[fieldKey] }
   const v = String(c.value ?? '').trim()
   return { mode: 'value', text: v.length ? v : '—' }
 }
 
 /** Вік/стать на оверлеї; ім’я окремо завжди */
 function demographicsRevealed(player) {
-  /** Персональний оверлей: гравець завжди бачить свої дані, незалежно від «закрито» для ефіру. */
-  if (props.solo) return true
   if (player.demographicsRevealed === true) return true
   if (player.demographicsRevealed === false) return false
   return player.identityRevealed === true
@@ -99,9 +96,7 @@ function displayAgeGenderLine(player) {
 }
 
 function chunkForDisplay(player, key) {
-  const c = chunkFor(player, key)
-  if (props.solo) return { ...c, revealed: true }
-  return c
+  return chunkFor(player, key)
 }
 
 function isEliminated(player) {
@@ -135,7 +130,7 @@ const deathSvgSrc = computed(() => {
 })
 
 function valueRevealKey(player, rowKey) {
-  const r = props.solo || chunkFor(player, rowKey).revealed
+  const r = chunkFor(player, rowKey).revealed
   return `${player.id}-${rowKey}-${r ? 'open' : 'closed'}`
 }
 

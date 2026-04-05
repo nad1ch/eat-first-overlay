@@ -485,6 +485,7 @@
     "yourChar": "Dein Charakter",
     "profileOverlay": "Profil (Overlay)",
     "demographicsOnOverlay": "Вік і стать на оверлеї",
+    "playerPanelRevealHint": "Offen/Geschlossen steuert nur den Stream-Overlay. Hier siehst du immer deinen vollen Bogen.",
     "profile": "Profil",
     "reroll": "Neu würfeln",
     "rerollField": "Feld neu würfeln",
