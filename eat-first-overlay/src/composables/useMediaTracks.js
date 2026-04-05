@@ -358,6 +358,9 @@ export function useMediaTracks(roomRef, options) {
   const pendingTrackIdentities = new Set()
 
   function runFlushedFrame(room) {
+    if (typeof document !== 'undefined' && document.hidden) {
+      return
+    }
     applyVolume(room)
 
     const sk = subscriptionContextKey(room)
@@ -490,9 +493,20 @@ export function useMediaTracks(roomRef, options) {
       room.on(e, h)
     }
 
+    function onVisibilityChange() {
+      if (typeof document === 'undefined' || document.hidden) return
+      scheduleFlush(room)
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibilityChange)
+    }
+
     bootstrapRoomSession(room)
 
     onCleanup(() => {
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibilityChange)
+      }
       if (flushRaf) {
         cancelAnimationFrame(flushRaf)
         flushRaf = 0

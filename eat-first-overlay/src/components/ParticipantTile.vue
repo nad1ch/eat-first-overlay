@@ -3,7 +3,14 @@ import { computed, ref, watch, onUnmounted, nextTick } from 'vue'
 import { Track } from 'livekit-client'
 
 const props = defineProps({
-  tile: { type: Object, required: true },
+  /** LiveKit participant (стабільне посилання для attach). */
+  participant: { type: Object, required: true },
+  identity: { type: String, default: '' },
+  label: { type: String, default: '' },
+  isLocal: { type: Boolean, default: false },
+  showVideo: { type: Boolean, default: true },
+  isMuted: { type: Boolean, default: false },
+  isSpeaking: { type: Boolean, default: false },
   volume: { type: Number, default: 1 },
   /** Компактний режим для вбудови в картку гравця */
   embed: { type: Boolean, default: false },
@@ -24,8 +31,8 @@ const videoRef = ref(null)
 const audioRef = ref(null)
 
 const ptileClass = computed(() => ({
-  'ptile--speaking': props.tile.isSpeaking && !props.mosaicMode,
-  'ptile--audio': !props.tile.showVideo,
+  'ptile--speaking': props.isSpeaking && !props.mosaicMode,
+  'ptile--audio': !props.showVideo,
   'ptile--embed': props.embed && !props.layer,
   'ptile--layer': props.layer,
   'ptile--solo-fill': props.soloFill,
@@ -62,19 +69,19 @@ function detachAudio() {
 }
 
 watch(
-  () => [props.tile.participant, props.tile.showVideo, props.tile.identity],
+  () => [props.participant, props.showVideo, props.identity],
   async () => {
     await nextTick()
     detach()
-    if (!props.tile.showVideo) return
+    if (!props.showVideo) return
     const el = videoRef.value
     if (!el) return
     try {
-      const pub = props.tile.participant.getTrackPublication(Track.Source.Camera)
+      const pub = props.participant.getTrackPublication(Track.Source.Camera)
       const vt = pub?.videoTrack
       if (vt) {
         vt.attach(el)
-        el.muted = !!props.tile.isLocal
+        el.muted = !!props.isLocal
         attached = vt
       }
     } catch {
@@ -85,15 +92,15 @@ watch(
 )
 
 watch(
-  () => [props.tile.participant, props.tile.isLocal, props.tile.identity],
+  () => [props.participant, props.isLocal, props.identity],
   async () => {
     await nextTick()
     detachAudio()
-    if (props.tile.isLocal) return
+    if (props.isLocal) return
     const el = audioRef.value
     if (!el) return
     try {
-      const pub = props.tile.participant.getTrackPublication(Track.Source.Microphone)
+      const pub = props.participant.getTrackPublication(Track.Source.Microphone)
       const at = pub?.audioTrack
       if (at) {
         at.attach(el)
@@ -110,14 +117,19 @@ onUnmounted(() => {
   detach()
   detachAudio()
 })
+
+function initials() {
+  const s = String(props.label || props.identity || '')
+  return s.slice(0, 2).toUpperCase()
+}
 </script>
 
 <template>
   <div class="ptile" :class="ptileClass">
     <audio ref="audioRef" class="ptile__audio" autoplay playsinline />
     <template v-if="mosaicMode && layer">
-      <div class="ptile__video-stage" :class="{ 'ptile__video-stage--avatar-only': !tile.showVideo }">
-        <template v-if="tile.showVideo">
+      <div class="ptile__video-stage" :class="{ 'ptile__video-stage--avatar-only': !showVideo }">
+        <template v-if="showVideo">
           <div class="ptile__video-wrap">
             <video
               ref="videoRef"
@@ -128,35 +140,27 @@ onUnmounted(() => {
           </div>
         </template>
         <div v-else class="ptile__avatar ptile__avatar--mosaic" aria-hidden="true">
-          <span class="ptile__mono">{{
-            String(tile.label || tile.identity)
-              .slice(0, 2)
-              .toUpperCase()
-          }}</span>
+          <span class="ptile__mono">{{ initials() }}</span>
         </div>
       </div>
     </template>
     <template v-else>
       <video
-        v-show="tile.showVideo"
+        v-show="showVideo"
         ref="videoRef"
         class="ptile__video"
         playsinline
         autoplay
       />
-      <div v-show="!tile.showVideo" class="ptile__avatar" aria-hidden="true">
-        <span class="ptile__mono">{{
-          String(tile.label || tile.identity)
-            .slice(0, 2)
-            .toUpperCase()
-        }}</span>
+      <div v-show="!showVideo" class="ptile__avatar" aria-hidden="true">
+        <span class="ptile__mono">{{ initials() }}</span>
       </div>
     </template>
     <div class="ptile__meta">
-      <span class="ptile__name">{{ tile.label }}</span>
-      <span v-if="tile.isMuted" class="ptile__muted" title="Muted" aria-label="Muted">🔇</span>
+      <span class="ptile__name">{{ label }}</span>
+      <span v-if="isMuted" class="ptile__muted" title="Muted" aria-label="Muted">🔇</span>
     </div>
-    <label v-if="!tile.isLocal" class="ptile__vol">
+    <label v-if="!isLocal" class="ptile__vol">
       <span class="sr-only">Volume</span>
       <input
         type="range"
@@ -202,10 +206,6 @@ onUnmounted(() => {
 }
 .ptile--layer.ptile--audio {
   min-height: 6rem;
-}
-.ptile--layer.ptile--solo-fill {
-  border-radius: 0;
-  min-height: 100vh;
 }
 .ptile--layer .ptile__vol {
   pointer-events: auto;

@@ -229,7 +229,13 @@ function slotNumForBanner() {
                 v-if="row.tile"
                 layer
                 mosaic-mode
-                :tile="row.tile"
+                :participant="row.tile.participant"
+                :identity="row.tile.identity"
+                :label="row.tile.label"
+                :is-local="row.tile.isLocal"
+                :show-video="row.tile.showVideo"
+                :is-muted="row.tile.isMuted"
+                :is-speaking="row.tile.isSpeaking"
                 :volume="row.volume"
                 @update:volume="setLiveKitVolumeForPlayer(row.player, $event)"
               />

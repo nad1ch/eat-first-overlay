@@ -1,13 +1,18 @@
-import { computed, unref } from 'vue'
+import { computed, unref, reactive, shallowRef, watchEffect, triggerRef } from 'vue'
 import { nominationsFromRoom } from '../services/gameService'
 
 /**
  * Зведення похідних пропсів для OverlayPlayerCard (глобальна мозаїка + solo), щоб
  * OverlayPage не тягнув десятки дрібних функцій у шаблоні.
  *
+ * Глобальна мозаїка (PR5): стабільний `Map(id → reactive row)` + `Object.assign(row.card, …)`
+ * замість `computed(() => order.map(() => ({ … })))`, щоб не віддавати нові об’єкти рядків
+ * на кожен тик таймера / speaking / голосів.
+ *
  * @param {{
  *   gameId: import('vue').Ref<string> | import('vue').ComputedRef<string>,
- *   gameRoom: import('vue').Ref<Record<string, unknown>>,
+ *   nominationsRoomSlice: import('vue').ComputedRef<Record<string, unknown>>,
+ *   handsMap: import('vue').ComputedRef<Record<string, unknown>>,
  *   votes: import('vue').Ref<Array<Record<string, unknown>>>,
  *   roomRound: import('vue').ComputedRef<number>,
  *   singlePlayer: import('vue').Ref<Record<string, unknown> | null>,
@@ -36,7 +41,8 @@ import { nominationsFromRoom } from '../services/gameService'
 export function useOverlayCardViewModels(ctx) {
   const {
     gameId,
-    gameRoom,
+    nominationsRoomSlice,
+    handsMap,
     votes,
     roomRound,
     singlePlayer,
@@ -62,6 +68,11 @@ export function useOverlayCardViewModels(ctx) {
     liveKitVolumeForPlayer: lkVolumeFn,
   } = ctx
 
+  /** @type {import('vue').ShallowRef<Map<string, import('vue').UnwrapNestedRefs<{ player: Record<string, unknown>, tile: unknown, volume: number, card: Record<string, unknown> }>>>} */
+  const mosaicRowById = shallowRef(new Map())
+  /** Стабільний порядок id; не оновлюємо масив, якщо послідовність тих самих id не змінилась. */
+  const mosaicOrderedIds = shallowRef([])
+
   function slotNumFromId(id) {
     const s = String(id ?? '')
     const m = s.match(/^p(\d+)$/i)
@@ -71,11 +82,12 @@ export function useOverlayCardViewModels(ctx) {
 
   function nominatorsLineFor(pid) {
     const id = String(pid ?? '')
-    const list = nominationsFromRoom(gameRoom.value)
+    const slice = nominationsRoomSlice.value
+    const list = nominationsFromRoom(slice)
     const nums = list.filter((x) => String(x.target) === id).map((x) => slotNumFromId(x.by))
     if (nums.length) return nums.join(', ')
-    const n = String(gameRoom.value?.nominatedPlayer ?? '').trim()
-    const b = String(gameRoom.value?.nominatedBy ?? '').trim()
+    const n = String(slice?.nominatedPlayer ?? '').trim()
+    const b = String(slice?.nominatedBy ?? '').trim()
     if (n === id && b) return slotNumFromId(b)
     return ''
   }
@@ -158,16 +170,104 @@ export function useOverlayCardViewModels(ctx) {
     }
   })
 
-  const globalMosaicCardViewModels = computed(() => {
-    if (!playersDisplayOrderedRef || !lkTileFn || !lkVolumeFn) return []
+  watchEffect(() => {
+    if (!playersDisplayOrderedRef || !lkTileFn || !lkVolumeFn) {
+      mosaicOrderedIds.value = []
+      const map = mosaicRowById.value
+      if (map.size > 0) {
+        map.clear()
+        triggerRef(mosaicRowById)
+      }
+      return
+    }
+
+    nominationsRoomSlice.value
+    handsMap.value
+    votes.value
+    roomRound.value
+    activeSpotlightId.value
+    speakerForTimerId.value
+    speakerTimeLeft.value
+    speakerTimerTotal.value
+    cinemaGrid.value
+    dramaMode.value
+    votingActive.value
+    votingTargetId.value
+    nominatedPlayerId.value
+    nominatedById.value
+    handsClusterMode.value
+    unref(gameId)
+
     const order = playersDisplayOrderedRef.value
-    if (!order?.length) return []
-    return order.map((player) => ({
-      player,
-      tile: lkTileFn(player),
-      volume: lkVolumeFn(player),
-      card: globalMosaicCardProps(player),
-    }))
+    const map = mosaicRowById.value
+
+    if (!order?.length) {
+      mosaicOrderedIds.value = []
+      if (map.size > 0) {
+        map.clear()
+        triggerRef(mosaicRowById)
+      }
+      return
+    }
+
+    const nextIds = order.map((p) => p.id)
+    const prevIds = mosaicOrderedIds.value
+    const orderChanged =
+      prevIds.length !== nextIds.length || nextIds.some((id, i) => id !== prevIds[i])
+    if (orderChanged) {
+      mosaicOrderedIds.value = nextIds
+    }
+
+    let mapMutated = false
+    const idSet = new Set(nextIds)
+
+    for (const p of order) {
+      const id = p.id
+      let row = map.get(id)
+      if (!row) {
+        row = reactive({
+          player: p,
+          tile: null,
+          volume: 1,
+          card: {},
+        })
+        map.set(id, row)
+        mapMutated = true
+      } else {
+        row.player = p
+      }
+      row.tile = lkTileFn(p)
+      row.volume = lkVolumeFn(p)
+      const nextCard = globalMosaicCardProps(p)
+      if (!('speakerTimeLeft' in nextCard)) {
+        delete row.card.speakerTimeLeft
+        delete row.card.speakerTimerTotal
+      }
+      Object.assign(row.card, nextCard)
+    }
+
+    for (const id of [...map.keys()]) {
+      if (!idSet.has(id)) {
+        map.delete(id)
+        mapMutated = true
+      }
+    }
+
+    if (mapMutated) {
+      triggerRef(mosaicRowById)
+    }
+  })
+
+  const globalMosaicCardViewModels = computed(() => {
+    const ids = mosaicOrderedIds.value
+    const map = mosaicRowById.value
+    if (!ids.length) return []
+    const out = []
+    for (const id of ids) {
+      const row = map.get(id)
+      if (row) out.push(row)
+    }
+    return out
   })
 
   return {

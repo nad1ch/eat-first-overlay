@@ -25,6 +25,9 @@ import { useOverlaySpeakerCountdown } from '../composables/useOverlaySpeakerCoun
 import { useOverlayMosaicOrder } from '../composables/useOverlayMosaicOrder.js'
 import { useOverlayCardViewModels } from '../composables/useOverlayCardViewModels.js'
 import { useOverlayLiveKitBindings } from '../composables/useOverlayLiveKitBindings.js'
+import { useOverlayRoomState } from '../composables/useOverlayRoomState.js'
+import { useOverlayVotingState } from '../composables/useOverlayVotingState.js'
+import { useOverlayUiState } from '../composables/useOverlayUiState.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -176,27 +179,17 @@ watch(
   { immediate: true },
 )
 
-const activeSpotlightId = computed(() => {
-  const a = gameRoom.value?.activePlayer
-  if (a == null) return null
-  const s = String(a).trim()
-  return s.length ? s : null
-})
+const {
+  gamePhase,
+  roomRound,
+  activeSpotlightId,
+  speakerForTimerId,
+  overlayPaused,
+  handsMap,
+  nominationsRoomSlice,
+} = useOverlayRoomState(gameRoom)
 
-/** Таймер прив’язаний до currentSpeaker; legacy: activePlayer якщо поле ще не мігрувало. */
-const speakerForTimerId = computed(() => {
-  const gr = gameRoom.value
-  const cs = String(gr?.currentSpeaker ?? '').trim()
-  if (cs) return cs
-  const hasClock =
-    (Number(gr?.speakingTimer) > 0 && gr?.timerStartedAt) ||
-    (gr?.timerPaused === true && Number.isFinite(Number(gr?.timerRemainingFrozen)))
-  if (hasClock) {
-    const leg = String(gr?.activePlayer ?? '').trim()
-    return leg || null
-  }
-  return null
-})
+const { votingActive, votingTargetId, nominatedPlayerId, nominatedById } = useOverlayVotingState(gameRoom)
 
 const aliveInGame = computed(
   () => players.value.filter((p) => p.eliminated !== true).length,
@@ -322,7 +315,7 @@ let roundBannerTimer = null
 const lastSeenRoundBanner = ref(null)
 
 watch(
-  () => clampRoundForOverlay(gameRoom.value?.round),
+  roomRound,
   (r) => {
     if (lastSeenRoundBanner.value === null) {
       lastSeenRoundBanner.value = r
@@ -339,48 +332,20 @@ watch(
   { immediate: true, flush: 'post' },
 )
 
-const dramaMode = computed(() => {
-  if (isPersonal.value) return false
-  return aliveInGame.value === 3
+const { dramaMode, dramaPersonal, overlayDrama, globalStatusLine } = useOverlayUiState({
+  isPersonal,
+  players,
+  aliveForCinema,
+  aliveInGame,
+  gamePhase,
+  roomRound,
+  t,
+  te,
 })
-
-/** Персональний оверлей: та сама «напруга», коли в грі лишилось 3. */
-const dramaPersonal = computed(() => isPersonal.value && aliveForCinema.value === 3)
-
-const globalStatusLine = computed(() => {
-  const phRaw = String(gameRoom.value?.gamePhase || 'intro')
-  const pk = `gamePhase.${phRaw}`
-  const ph = te(pk) ? t(pk) : phRaw
-  const r = clampRoundForOverlay(gameRoom.value?.round)
-  const n = players.value.length
-  return t('overlayPage.phaseBanner', { phase: ph, round: r, n })
-})
-
-/** Тільки глобальна сітка: на персональному оверлеї без vignette/фільтра по центру вебки */
-const overlayDrama = computed(() => dramaMode.value)
-
-const overlayPaused = computed(() => gameRoom.value?.timerPaused === true)
-
-/** У глобальній сітці затемнюємо картки, поки обраний спікер (фокус на тому, хто говорить). */
-const gridDimNonSpeakers = computed(
-  () => !isPersonal.value && Boolean(speakerForTimerId.value),
-)
-
-const votingActive = computed(() => gameRoom.value?.voting?.active === true)
-const votingTargetId = computed(() => String(gameRoom.value?.voting?.targetPlayer ?? '').trim())
-const nominatedPlayerId = computed(() => String(gameRoom.value?.nominatedPlayer ?? '').trim())
-const nominatedById = computed(() => String(gameRoom.value?.nominatedBy ?? '').trim())
-
-function handsMap() {
-  const h = gameRoom.value?.hands
-  return h && typeof h === 'object' ? h : {}
-}
 
 function isHandRaised(p) {
-  return handsMap()[String(p.id)] === true
+  return handsMap.value[String(p.id)] === true
 }
-
-const roomRound = computed(() => clampRoundForOverlay(gameRoom.value?.round))
 
 const personalHasVotedThisRound = computed(() => {
   const pid = personalPlayerId.value
@@ -461,7 +426,8 @@ const showIdleWaitingCue = computed(
 
 const { slotNumFromId, soloCardViewModel, globalMosaicCardViewModels } = useOverlayCardViewModels({
   gameId,
-  gameRoom,
+  nominationsRoomSlice,
+  handsMap,
   votes,
   roomRound,
   singlePlayer,

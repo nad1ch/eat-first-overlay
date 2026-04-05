@@ -13,7 +13,7 @@ import { useMosaicPlayerOrder } from '../composables/useMosaicPlayerOrder.js'
 import { useLiveKitTileMap } from '../composables/useLiveKitTileMap.js'
 import { useOverlayMosaicOrder } from '../composables/useOverlayMosaicOrder.js'
 import VoiceVideoGrid from './VoiceVideoGrid.vue'
-import ParticipantTile from './ParticipantTile.vue'
+import LiveKitParticipantTile from './LiveKitParticipantTile.vue'
 import OverlayPlayerCard from './OverlayPlayerCard.vue'
 import { getLiveKitSubscribeQualityMode, liveKitConfigured } from '../config/livekit.js'
 import { discordLikeGridDims } from '../utils/discordLikeGrid.js'
@@ -378,12 +378,12 @@ const zoomStatusLine = computed(() => {
             <span class="lobby-mosaic-drag-handle__grip" aria-hidden="true">⋮⋮</span>
           </span>
           <div class="lobby-zoom__cell-under">
-            <ParticipantTile
-              v-if="liveKitTileForPlayer(p)"
+            <LiveKitParticipantTile
+              :player="p"
+              :get-tile="liveKitTileForPlayer"
+              :get-volume="liveKitVolumeForPlayer"
               layer
               mosaic-mode
-              :tile="liveKitTileForPlayer(p)"
-              :volume="liveKitVolumeForPlayer(p)"
               @update:volume="setLiveKitVolumeForPlayer(p, $event)"
             />
           </div>

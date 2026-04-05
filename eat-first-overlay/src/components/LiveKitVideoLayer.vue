@@ -3,7 +3,8 @@
  * Повноекранний / сітковий шар відео LiveKit (OBS-friendly).
  * camGridOnly: без рамки «дошки» — тільки великі плитки камер (глобальний /overlay).
  */
-import ParticipantTile from './ParticipantTile.vue'
+import { computed } from 'vue'
+import LiveKitParticipantTile from './LiveKitParticipantTile.vue'
 
 const props = defineProps({
   /** 'grid' — сітка слотів; 'solo' — одне відео на весь кадр */
@@ -22,6 +23,11 @@ const emit = defineEmits(['volumeChange'])
 function onVolume(player, v) {
   emit('volumeChange', { player, volume: v })
 }
+
+const soloReady = computed(() => {
+  const sp = props.soloPlayer
+  return Boolean(sp && props.getTile(sp))
+})
 </script>
 
 <template>
@@ -42,11 +48,11 @@ function onVolume(player, v) {
       >
         <div class="grid lkvl__grid-fill" :class="{ 'grid--cinema': cinema }">
           <div v-for="p in players" :key="p.id" class="lkvl__cell lkvl__cell--fill">
-            <ParticipantTile
-              v-if="getTile(p)"
+            <LiveKitParticipantTile
+              :player="p"
+              :get-tile="getTile"
+              :get-volume="getVolume"
               layer
-              :tile="getTile(p)"
-              :volume="getVolume(p)"
               @update:volume="onVolume(p, $event)"
             />
           </div>
@@ -55,11 +61,11 @@ function onVolume(player, v) {
       <div v-else class="board-frame" :class="{ 'board-frame--cinema': cinema }">
         <div class="grid" :class="{ 'grid--cinema': cinema }">
           <div v-for="p in players" :key="p.id" class="lkvl__cell">
-            <ParticipantTile
-              v-if="getTile(p)"
+            <LiveKitParticipantTile
+              :player="p"
+              :get-tile="getTile"
+              :get-volume="getVolume"
               layer
-              :tile="getTile(p)"
-              :volume="getVolume(p)"
               @update:volume="onVolume(p, $event)"
             />
           </div>
@@ -67,12 +73,13 @@ function onVolume(player, v) {
       </div>
     </template>
     <template v-else>
-      <div v-if="soloPlayer && getTile(soloPlayer)" class="lkvl__solo-inner">
-        <ParticipantTile
+      <div v-if="soloReady" class="lkvl__solo-inner">
+        <LiveKitParticipantTile
+          :player="soloPlayer"
+          :get-tile="getTile"
+          :get-volume="getVolume"
           layer
           solo-fill
-          :tile="getTile(soloPlayer)"
-          :volume="getVolume(soloPlayer)"
           @update:volume="onVolume(soloPlayer, $event)"
         />
       </div>
