@@ -233,13 +233,13 @@ onBeforeUnmount(() => {
 })
 
 function close() {
+  emit('complete', { saveDismiss: saveDismiss.value })
+  if (saveDismiss.value) emit('dismiss-save')
   emit('update:open', false)
 }
 
 function finish() {
-  emit('complete', { saveDismiss: saveDismiss.value })
-  if (saveDismiss.value) emit('dismiss-save')
-  emit('update:open', false)
+  close()
 }
 
 function next() {
