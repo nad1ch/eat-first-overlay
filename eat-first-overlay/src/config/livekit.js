@@ -7,11 +7,15 @@ export function getLiveKitServerUrl() {
   return String(import.meta.env.VITE_LIVEKIT_URL ?? '').trim()
 }
 
-/** URL для POST JSON { roomName, identity, name, canPublish } → { token }. Dev: /__livekit/token */
+/**
+ * URL для POST JSON { roomName, identity, name, canPublish } → { token }.
+ * Dev (Vite): /__livekit/token (middleware). Прод / preview (Vercel): /api/livekit-token.
+ */
 export function getLiveKitTokenUrl() {
   const u = String(import.meta.env.VITE_LIVEKIT_TOKEN_URL ?? '').trim()
   if (u) return u
-  return '/__livekit/token'
+  if (import.meta.env.DEV) return '/__livekit/token'
+  return '/api/livekit-token'
 }
 
 /**

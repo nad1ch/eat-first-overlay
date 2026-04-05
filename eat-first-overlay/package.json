@@ -10,6 +10,8 @@
     "brand:png": "node scripts/optimize-brand-png.mjs"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "firebase": "^12.11.0",
     "livekit-client": "^2.18.1",
     "livekit-server-sdk": "^2.15.0",

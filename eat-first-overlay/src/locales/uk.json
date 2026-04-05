@@ -526,7 +526,7 @@
       "statusDisconnected": "LiveKit · відʼєднано",
       "statusIdle": "LiveKit · очікування",
       "statusError": "LiveKit · помилка: {msg}",
-      "notConfiguredHint": "Додай VITE_LIVEKIT_URL (і в dev — LIVEKIT_API_KEY / SECRET, див. .env.example).",
+      "notConfiguredHint": "Додай VITE_LIVEKIT_URL і LIVEKIT_API_KEY / SECRET (.env.local локально; на Vercel — і для Preview, див. .env.example).",
       "waitingHint": "Підключення після синхрону з Firestore. Якщо зависло — перевір game id і мережу.",
       "hintControls": "Відео/голос на картках; мік і камера — тут.",
       "spectatorHint": "Режим глядача: додай ?player=p1 (свій слот), щоб увімкнути камеру й мік.",

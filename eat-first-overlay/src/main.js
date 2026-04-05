@@ -1,4 +1,8 @@
 import { createApp } from 'vue'
+
+/** Діагностика: після deploy у DevTools → Console має бути wss://…, не undefined/порожній рядок. */
+console.log('LIVEKIT_URL:', import.meta.env.VITE_LIVEKIT_URL)
+
 import './styles/theme.css'
 import './styles/motion.css'
 import './style.css'

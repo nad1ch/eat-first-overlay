@@ -17,6 +17,8 @@ import {
   isOnboardingDismissed,
   resolveOnboardingTourKeyFromRoute,
 } from './utils/onboardingStorage.js'
+import { Analytics } from '@vercel/analytics/vue'
+import { SpeedInsights } from '@vercel/speed-insights/vue'
 
 const localeMenuOptions = LOCALE_OPTIONS.map((o) => ({ value: o.code, label: o.label }))
 
@@ -135,6 +137,9 @@ function onOnboardingDismissSave() {
       :tour-key="onboardingTourKey"
       @dismiss-save="onOnboardingDismissSave"
     />
+
+    <Analytics />
+    <SpeedInsights />
   </div>
 </template>
 

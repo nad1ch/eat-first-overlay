@@ -70,7 +70,6 @@ export function useMosaicPlayerOrder(gameIdRef, defaultOrderedPlayers) {
       manualIds.value = next
       save()
     },
-    { deep: true },
   )
 
   const playersDisplayOrdered = computed(() => {

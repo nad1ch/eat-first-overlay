@@ -541,7 +541,7 @@
       "statusDisconnected": "LiveKit · getrennt",
       "statusIdle": "LiveKit · bereit",
       "statusError": "LiveKit · Fehler: {msg}",
-      "notConfiguredHint": "VITE_LIVEKIT_URL setzen (in Dev zusätzlich LIVEKIT_API_KEY / SECRET — siehe .env.example).",
+      "notConfiguredHint": "VITE_LIVEKIT_URL und LIVEKIT_API_KEY / SECRET setzen (lokal .env.local; auf Vercel auch Preview — siehe .env.example).",
       "waitingHint": "Verbindung nach Firestore-Sync. Hängt es — Game-ID und Netzwerk prüfen.",
       "hintControls": "Video/Audio auf den Karten; Mikro und Kamera hier.",
       "spectatorHint": "Zuschauer: ?player=p1 (dein Slot) anhängen, um Kamera und Mikro zu aktivieren.",

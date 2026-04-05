@@ -3,19 +3,21 @@
  * «Зум-галерея» на лобі: міні-копія персонального HUD + камера (як глобальний /overlay).
  * Без публікації з цього клієнта (окремий identity lobby-*).
  */
-import { computed, onMounted, onUnmounted, provide, ref, watchEffect } from 'vue'
+import { computed, onMounted, onUnmounted, provide, ref, toRef, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { VideoQuality } from 'livekit-client'
 import { useLiveKitRoom } from '../composables/useLiveKitRoom.js'
 import { useMediaTracks } from '../composables/useMediaTracks.js'
 import { useMosaicPlayerOrder } from '../composables/useMosaicPlayerOrder.js'
+import { useLiveKitTileMap } from '../composables/useLiveKitTileMap.js'
+import { useOverlayMosaicOrder } from '../composables/useOverlayMosaicOrder.js'
 import VoiceVideoGrid from './VoiceVideoGrid.vue'
 import ParticipantTile from './ParticipantTile.vue'
 import OverlayPlayerCard from './OverlayPlayerCard.vue'
 import { getLiveKitSubscribeQualityMode, liveKitConfigured } from '../config/livekit.js'
 import { discordLikeGridDims } from '../utils/discordLikeGrid.js'
-import { normalizePlayerSlotId, playerSlotOrderIndex } from '../utils/playerSlot.js'
+import { normalizePlayerSlotId } from '../utils/playerSlot.js'
 import { getOrCreateDeviceId } from '../utils/deviceId.js'
 import { nominationsFromRoom } from '../services/gameService.js'
 import { millisFromFirestore } from '../utils/firestoreTime.js'
@@ -122,7 +124,7 @@ const { room: lkRoom, connectionState: lkConnectionState, error: lkRoomError } =
   canPublish: liveKitCanPublish,
 })
 
-const { tiles: lkTiles } = useMediaTracks(lkRoom, {
+const { tiles: lkTiles, tileMapRef: lkTileMap } = useMediaTracks(lkRoom, {
   spotlightSlot: activeSpotlightId,
   speakerSlot: speakerForTimerId,
   includeLocal: liveKitCanPublish,
@@ -135,11 +137,14 @@ const { tiles: lkTiles } = useMediaTracks(lkRoom, {
 
 provide('liveKitOverlayRoom', lkRoom)
 
-function liveKitTileForPlayer(player) {
-  if (!liveKitConfigured() || !player || player.eliminated === true) return null
-  const id = normalizePlayerSlotId(player.id)
-  return lkTiles.value.find((t) => t.identity === id) ?? null
-}
+const { speakingIdentities, liveKitTileForPlayer } = useLiveKitTileMap(lkTiles, lkTileMap)
+
+const playersRef = toRef(props, 'players')
+
+const { defaultOrderedPlayers: defaultOrderedPlayersForLobbyMosaic } = useOverlayMosaicOrder(
+  playersRef,
+  speakingIdentities,
+)
 
 function liveKitVolumeForPlayer(player) {
   const id = normalizePlayerSlotId(player.id)
@@ -152,20 +157,6 @@ function setLiveKitVolumeForPlayer(player, v) {
   lkVolumeByIdentity.value = { ...lkVolumeByIdentity.value, [id]: v }
 }
 
-const playersOrderedForLobbyMosaic = computed(() => {
-  const list = [...props.players]
-  const speaking = new Set(lkTiles.value.filter((t) => t.isSpeaking).map((t) => t.identity))
-  list.sort((a, b) => {
-    const ida = normalizePlayerSlotId(a.id)
-    const idb = normalizePlayerSlotId(b.id)
-    const sa = speaking.has(ida) ? 0 : 1
-    const sb = speaking.has(idb) ? 0 : 1
-    if (sa !== sb) return sa - sb
-    return playerSlotOrderIndex(a.id) - playerSlotOrderIndex(b.id)
-  })
-  return list
-})
-
 const {
   playersDisplayOrdered: playersDisplayOrderedForLobbyMosaic,
   mosaicDragSourceId: lobbyMosaicDragSourceId,
@@ -175,7 +166,7 @@ const {
   onMosaicDragOver: onLobbyMosaicDragOver,
   onMosaicDragEnterPlayer: onLobbyMosaicDragEnterPlayer,
   onMosaicDrop: onLobbyMosaicDrop,
-} = useMosaicPlayerOrder(gameIdRef, playersOrderedForLobbyMosaic)
+} = useMosaicPlayerOrder(gameIdRef, defaultOrderedPlayersForLobbyMosaic)
 
 const lobbyMosaicEl = ref(null)
 const lobbyMosaicSize = ref({
