@@ -42,7 +42,7 @@
           },
           {
             "title": "Хто ти на ефірі",
-            "text": "Гравець обирає слот нижче; ведучий заходить на пульт окремо (кнопка тут лише підказує вхід). OBS — через посилання в своєму слоті.",
+            "text": "Гравець обирає слот нижче; ведучий заходить на пульт окремо. OBS: глобальна сітка — кнопка «OBS · оверлей», персональна — у своєму слоті.",
             "target": "join-roles"
           },
           {
@@ -137,9 +137,9 @@
     "ctaHost": "Я ведучий",
     "ctaHostSub": "Пульт шоу · таймер · фази (ключ доступу)",
     "ctaObs": "OBS · оверлей",
-    "ctaObsSub": "Глобальна сітка або джерело для сцени",
+    "ctaObsSub": "Відкрити глобальну сітку для Browser Source (усі слоти)",
     "ctaObsComingSoon": "Незабаром",
-    "ctaObsSoonHint": "Окремий вхід з лобі тимчасово вимкнено. Використай кнопку OBS оверлею у своєму слоті після його вибору.",
+    "ctaObsSoonHint": "Персональний оверлей — з кнопки «OBS оверлей» у своєму слоті.",
     "obsTitle": "OBS · швидкий старт",
     "obs1": "Джерело: браузер у OBS (Browser / Browser Source).",
     "obs2": "Встав посилання з кнопки «OBS оверлей» у своєму слоті або глобальне — залежно від сцени.",
@@ -169,7 +169,12 @@
     "nameModalTitle": "Ім’я за столом",
     "nameModalPlaceholder": "Як показувати на екрані",
     "nameModalContinue": "Продовжити",
-    "nameModalCancel": "Скасувати"
+    "nameModalCancel": "Скасувати",
+    "zoomTitle": "Кімната як у Zoom",
+    "zoomHint": "Камери гравців (якщо увімкнено з їх оверлею) і ті самі картки, що на глобальному OBS. Тут лише перегляд — свою вебку публікуй з персонального /overlay.",
+    "zoomWaiting": "Підтягуємо гравців…",
+    "zoomNoPlayers": "У цій кімнаті ще немає гравців у Firestore.",
+    "zoomLiveKitName": "Лобі"
   },
   "admin": {
     "eyebrow": "Ведучий",
@@ -315,6 +320,7 @@
     "voteRecorded": "Голос зараховано",
     "alreadyVoted": "Ти вже голосував у цьому раунді",
     "voteSendFail": "Не вдалося надіслати голос",
+    "voteNotLinked": "Потрібно знову зайти з лобі (немає зв’язку акаунта зі слотом)",
     "nomRemoved": "Номінацію знято",
     "nomAdded": "Номінація",
     "speakerSet": "{slot}",
@@ -511,7 +517,25 @@
     "phaseBanner": "Фаза: {phase} · Раунд {round} · У кімнаті: {n}",
     "tokenMismatchTitle": "Посилання недійсне",
     "tokenMismatchHint": "Відкрий лобі й оверлей зі свого слоту (у OBS — посилання без токена).",
-    "tokenMismatchCta": "Лобі"
+    "tokenMismatchCta": "Лобі",
+    "mosaicDragHandle": "Тягни, щоб поміняти місцями з іншою камерою",
+    "liveKit": {
+      "statusNotConfigured": "LiveKit · не налаштовано",
+      "statusWaitingGame": "LiveKit · чекаємо дані гри…",
+      "statusConnecting": "LiveKit · підключення…",
+      "statusConnected": "LiveKit · підключено",
+      "statusDisconnected": "LiveKit · відʼєднано",
+      "statusIdle": "LiveKit · очікування",
+      "statusError": "LiveKit · помилка: {msg}",
+      "notConfiguredHint": "Додай VITE_LIVEKIT_URL і LIVEKIT_API_KEY / SECRET (.env.local локально; на Vercel — і для Preview, див. .env.example).",
+      "waitingHint": "Підключення після синхрону з Firestore. Якщо зависло — перевір game id і мережу.",
+      "hintControls": "Відео/голос на картках; мік і камера — тут.",
+      "spectatorHint": "Режим глядача: додай ?player=p1 (свій слот), щоб увімкнути камеру й мік.",
+      "eliminatedNoPublish": "Вибув — камера й мік вимкнені.",
+      "enableSound": "Увімкнути звук",
+      "enableSoundHint": "Браузер без кліку не відтворює чужий голос. Натисни кнопку або спочатку Mic/Cam.",
+      "debugSummary": "LiveKit debug (dev)"
+    }
   },
   "overlayCard": {
     "eliminated": "ВИБУВ",

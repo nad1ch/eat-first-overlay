@@ -5,7 +5,6 @@ import { fieldConfig } from '../characterState'
 import { formatGenderDisplay } from '../utils/genderDisplay.js'
 import { saveVote } from '../services/gameService'
 import { playVoteSubmitSound } from '../utils/voteUiSound.js'
-
 const HUD_LEFT = ['profession', 'health', 'phobia']
 const HUD_RIGHT = ['luggage', 'fact', 'quirk']
 
@@ -46,6 +45,8 @@ const props = defineProps({
   idleWaiting: { type: Boolean, default: false },
   /** Глобальна сітка: >3 рук у грі — не показувати ✋ на картці */
   suppressHandBadge: { type: Boolean, default: false },
+  /** Міні-клітинка глобального оверлею: той самий solo-HUD, але від container (cqw/cqh) */
+  mosaicTile: { type: Boolean, default: false },
 })
 
 const { t, locale } = useI18n()
@@ -519,6 +520,7 @@ async function submitVote(choice) {
     v-else
     class="hud-root hud-root--solo"
     :class="{
+      'hud-root--mosaic': mosaicTile,
       'hud-root--eliminated': isEliminated(player),
       'hud-root--spotlight': isSpotlight && !isEliminated(player),
       'hud-root--speaker': isTimerTarget && !isEliminated(player),
@@ -715,7 +717,8 @@ async function submitVote(choice) {
   position: relative;
   padding: 0;
   border-radius: 14px;
-  background: rgba(12, 8, 28, 0.92);
+  /* Трохи прозоріше — вебка з шару LiveKit проглядає під карткою */
+  background: rgba(12, 8, 28, 0.78);
   border: 1px solid rgba(168, 85, 247, 0.28);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
   overflow: visible;
@@ -1596,6 +1599,81 @@ async function submitVote(choice) {
     --hud-stat-font: clamp(1.26rem, 1.26vw, 1.8rem);
     --hud-side-max: min(40vw, 38rem);
   }
+}
+
+/* Глобальна мозаїка: компактніший HUD, більше місця під відео по центру */
+.hud-root--solo.hud-root--mosaic {
+  --hud-edge: clamp(0.28rem, min(1.4cqw, 1.9cqh), 0.85rem);
+  --hud-side-max: min(30cqw, clamp(3.2rem, 30cqmin, 10.5rem));
+  --hud-top-max: min(36cqw, clamp(3rem, 26cqmin, 9.5rem));
+  --hud-pad-side: clamp(0.32rem, min(1.6cqw, 2cqh), 0.62rem);
+  --hud-pad-top: clamp(0.3rem, min(1.4cqw, 1.9cqh), 0.58rem);
+  --hud-stat-gap: clamp(0.22rem, min(1.2cqw, 1.5cqh), 0.45rem);
+  --hud-stat-pad-y: clamp(0.26rem, min(1.6cqw, 2cqh), 0.52rem);
+  --hud-stat-pad-x: clamp(0.28rem, min(1.8cqw, 2.2cqh), 0.55rem);
+  --hud-stat-font: clamp(0.36rem, min(2.1cqw, 2.3cqh), 0.62rem);
+  --hud-name: clamp(0.48rem, min(2.5cqw, 2.7cqh), 0.78rem);
+  --hud-sub: clamp(0.34rem, min(1.65cqw, 1.9cqh), 0.52rem);
+  --hud-slot: clamp(0.78rem, min(4.2cqw, 4.8cqh), 1.55rem);
+  --hud-timer-ring: clamp(1.65rem, min(7cqw, 8cqh), 3.6rem);
+  --hud-timer-fs: clamp(0.36rem, min(1.75cqw, 1.95cqh), 0.55rem);
+  --hud-br: clamp(4px, 1.2cqmin, 9px);
+}
+
+.hud-root--solo.hud-root--mosaic .vote-strip--solo {
+  position: absolute;
+  left: 50%;
+  bottom: max(0.35rem, 1cqh);
+  transform: translateX(-50%);
+  min-width: min(92cqw, 11rem);
+}
+
+.hud-root--solo.hud-root--mosaic .nominee-solo-float {
+  position: absolute;
+  top: max(0.35rem, 0.9cqh);
+  right: max(0.35rem, 0.9cqw);
+  max-width: min(72cqw, 9.5rem);
+}
+
+.hud-root--solo.hud-root--mosaic .idle-wait-cue {
+  position: absolute;
+  left: 50%;
+  bottom: max(1.75rem, 7cqh);
+  transform: translateX(-50%);
+}
+
+.hud-root--solo.hud-root--mosaic.hud-root--vote-target-ambient:not(.hud-root--eliminated)::after {
+  position: absolute;
+}
+
+.hud-root--solo.hud-root--mosaic .ac-chip {
+  bottom: var(--hud-edge);
+  max-width: min(82cqw, 7.5rem);
+  padding: clamp(0.12rem, 1cqh, 0.22rem) clamp(0.22rem, 1.6cqw, 0.38rem);
+  gap: clamp(0.1rem, 0.9cqw, 0.2rem);
+}
+
+.hud-root--solo.hud-root--mosaic .ac-chip-ico {
+  font-size: clamp(0.42rem, 2cqh, 0.58rem);
+}
+
+.hud-root--solo.hud-root--mosaic .ac-chip-t {
+  font-size: clamp(0.38rem, 1.85cqh, 0.54rem);
+}
+
+.hud-root--solo.hud-root--mosaic .hand-wait-hud {
+  margin-bottom: clamp(0.08rem, 0.65cqh, 0.18rem);
+  padding: clamp(0.08rem, 0.65cqh, 0.15rem) clamp(0.18rem, 1.3cqw, 0.3rem);
+  gap: clamp(0.08rem, 0.85cqw, 0.16rem);
+}
+
+.hud-root--solo.hud-root--mosaic .hand-wait-hud__ico {
+  font-size: clamp(0.48rem, 1.95cqh, 0.65rem);
+}
+
+.hud-root--solo.hud-root--mosaic .hand-wait-hud__txt {
+  font-size: clamp(0.32rem, 1.45cqh, 0.46rem);
+  letter-spacing: 0.1em;
 }
 
 /* Spotlight без спікера: окремий стиль — рамка + м’який glow, без пульсу */

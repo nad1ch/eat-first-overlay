@@ -11,3 +11,11 @@ export function normalizePlayerSlotId(raw) {
   if (digits) return `p${digits[1]}`
   return lower
 }
+
+/** Число для сортування слотів p1…p10 (Discord-подібний стабільний порядок). */
+export function playerSlotOrderIndex(raw) {
+  const id = normalizePlayerSlotId(raw)
+  const m = String(id).match(/^p(\d+)$/i)
+  if (m) return parseInt(m[1], 10)
+  return 999
+}

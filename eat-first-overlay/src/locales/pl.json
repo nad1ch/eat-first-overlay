@@ -137,9 +137,9 @@
     "ctaHost": "Jestem prowadzącym",
     "ctaHostSub": "Pulpit show · timer · fazy (klucz dostępu)",
     "ctaObs": "OBS · overlay",
-    "ctaObsSub": "Globalna siatka lub źródło przeglądarki",
+    "ctaObsSub": "Otwórz globalną siatkę w Browser Source (wszystkie sloty)",
     "ctaObsComingSoon": "Wkrótce",
-    "ctaObsSoonHint": "Wejście z lobby tymczasowo wyłączone — użyj przycisku OBS overlay przy slocie po wyborze.",
+    "ctaObsSoonHint": "Osobisty overlay — przycisk „OBS overlay” przy slocie po wyborze.",
     "obsTitle": "OBS · szybki start",
     "obs1": "Source: Browser (or Browser Source).",
     "obs2": "Wklej URL z przycisku „OBS overlay” przy slocie lub globalny.",
@@ -169,7 +169,12 @@
     "nameModalTitle": "Ім’я за столом",
     "nameModalPlaceholder": "Як показувати на екрані",
     "nameModalContinue": "Продовжити",
-    "nameModalCancel": "Скасувати"
+    "nameModalCancel": "Скасувати",
+    "zoomTitle": "Pokój jak w Zoomie",
+    "zoomHint": "Kamery graczy (gdy włączone z ich overlay) i te same karty co globalny OBS. Tu tylko podgląd — publikuj kamerę z osobistego /overlay.",
+    "zoomWaiting": "Ładujemy graczy…",
+    "zoomNoPlayers": "Brak graczy w tej rozgrywce.",
+    "zoomLiveKitName": "Lobby"
   },
   "admin": {
     "eyebrow": "Prowadzący",
@@ -330,6 +335,7 @@
     "voteRecorded": "Głos zapisany",
     "alreadyVoted": "Już głosowałeś w tej rundzie",
     "voteSendFail": "Nie udało się wysłać głosu",
+    "voteNotLinked": "Wejdź ponownie z lobby (konto nie jest powiązane ze slotem)",
     "nomRemoved": "Nominacja usunięta",
     "nomAdded": "Nominacja",
     "speakerSet": "{slot}",
@@ -526,7 +532,25 @@
     "phaseBanner": "Faza: {phase} · Runda {round} · W pokoju: {n}",
     "tokenMismatchTitle": "Посилання недійсне",
     "tokenMismatchHint": "Відкрий лобі й оверлей зі свого слоту (у OBS — посилання без токена).",
-    "tokenMismatchCta": "Лобі"
+    "tokenMismatchCta": "Лобі",
+    "mosaicDragHandle": "Przeciągnij, zamień kafel z inną kamerą",
+    "liveKit": {
+      "statusNotConfigured": "LiveKit · nie skonfigurowano",
+      "statusWaitingGame": "LiveKit · czekam na dane gry…",
+      "statusConnecting": "LiveKit · łączenie…",
+      "statusConnected": "LiveKit · połączono",
+      "statusDisconnected": "LiveKit · rozłączono",
+      "statusIdle": "LiveKit · bezczynny",
+      "statusError": "LiveKit · błąd: {msg}",
+      "notConfiguredHint": "Ustaw VITE_LIVEKIT_URL i LIVEKIT_API_KEY / SECRET (lokalnie .env.local; na Vercel także Preview — patrz .env.example).",
+      "waitingHint": "Połączenie po synchronizacji Firestore. Jeśli wisi — sprawdź game id i sieć.",
+      "hintControls": "Wideo/audio na kartach graczy; mik i kamera tutaj.",
+      "spectatorHint": "Widz: dodaj ?player=p1 (swój slot), by włączyć kamerę i mikrofon.",
+      "eliminatedNoPublish": "Eliminacja — kamera i mikrofon wyłączone.",
+      "enableSound": "Włącz dźwięk",
+      "enableSoundHint": "Przeglądarka blokuje audio innych bez interakcji. Kliknij lub najpierw Mikro/Kamera.",
+      "debugSummary": "LiveKit debug (dev)"
+    }
   },
   "overlayCard": {
     "eliminated": "OUT",

@@ -1,4 +1,10 @@
 import { createApp } from 'vue'
+
+/** Діагностика: після deploy у DevTools → Console має бути wss://…, не undefined/порожній рядок. */
+console.log('LIVEKIT_URL:', import.meta.env.VITE_LIVEKIT_URL)
+/** Повний snapshot Vite env (у бандл потрапляють лише `VITE_*` та MODE тощо). Для перевірки, що URL реально зібраний. */
+console.log('import.meta.env:', import.meta.env)
+
 import './styles/theme.css'
 import './styles/motion.css'
 import './style.css'
@@ -20,6 +26,8 @@ if (typeof window !== 'undefined') {
 }
 import { initAnalytics, trackTechnicalEvent } from './analytics/bootstrap.js'
 import { ensureMetaDescription } from './constants/seo.js'
+import { callableApiEnabled } from './services/callableApi.js'
+import { ensureAnonymousAuth } from './services/authBootstrap.js'
 
 ensureMetaDescription()
 initAnalytics()
@@ -46,4 +54,18 @@ app.use(router)
 if (typeof document !== 'undefined') {
   document.documentElement.setAttribute('lang', i18n.global.locale.value)
 }
-app.mount('#app')
+
+;(async () => {
+  if (callableApiEnabled()) {
+    await ensureAnonymousAuth().catch((e) => {
+      const code = e && typeof e === 'object' && 'code' in e ? String(e.code) : ''
+      console.warn(
+        '[auth] Anonymous sign-in не вдався (потрібно для Cloud Functions). ' +
+          'У Firebase Console: Authentication → почати/увімкнути провайдер Anonymous. ' +
+          'Якщо Functions не використовуєш — прибери VITE_FUNCTIONS_REGION з env.',
+        code || e,
+      )
+    })
+  }
+  app.mount('#app')
+})()

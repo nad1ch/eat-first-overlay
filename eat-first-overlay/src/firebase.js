@@ -1,4 +1,5 @@
 import { getApp, getApps, initializeApp } from 'firebase/app'
+import { getAuth } from 'firebase/auth'
 import {
   initializeFirestore,
   memoryLocalCache,
@@ -16,7 +17,10 @@ export const firebaseConfig = {
 }
 
 /** Під час Vite HMR модуль перезавантажується — Firebase лишає один app / один Firestore за життєвий цикл вкладки. */
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig)
+export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig)
+
+/** Потрібно для Callable + linkPlayerSlot / submitVote (anonymous за замовчуванням). */
+export const auth = getAuth(app)
 
 /**
  * У production: IndexedDB + кілька вкладок (реальний офлайн).
