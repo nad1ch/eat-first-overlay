@@ -491,6 +491,7 @@
     "yourChar": "Twoja postać",
     "profileOverlay": "Profil (overlay)",
     "demographicsOnOverlay": "Вік і стать на оверлеї",
+    "playerPanelRevealHint": "Przyciski otwarte/zamknięte dotyczą tylko transmisji (overlay). Tutaj zawsze widzisz swoją kartę.",
     "profile": "Profil",
     "reroll": "Przelosuj",
     "rerollField": "Przelosuj pole",

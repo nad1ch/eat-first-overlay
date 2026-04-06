@@ -491,6 +491,7 @@
     "yourChar": "Your character",
     "profileOverlay": "Profile (overlay)",
     "demographicsOnOverlay": "Вік і стать на оверлеї",
+    "playerPanelRevealHint": "Open/Closed only controls the broadcast overlay. Here you always see your full sheet.",
     "profile": "Profile",
     "reroll": "Reroll",
     "rerollField": "Reroll field",
